@@ -1,5 +1,6 @@
-연구진행 기록
+#Daily Research
 
 Jan.2020.
 
-1.15.WED
+#1.15. WED.
+
