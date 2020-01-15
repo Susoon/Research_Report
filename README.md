@@ -40,7 +40,7 @@ Jan.2020.
 ## 2.3 단점
 * Intel사의 system software다보니 사용가능한 lan card가 한정적임
 * application이 network packet을 처리하다보니 application이 해야할 일이 많아짐
- * packet header를 보고 packet 판별부터 동작까지 다 구현해야함
+    * network packet 처리를 한다는 것은 packet header를 보고 packet 판별부터 동작까지 다 구현하는 것을 말함
 
 
 
