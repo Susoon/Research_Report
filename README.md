@@ -26,3 +26,4 @@ intializer part
 * 실질적으로 thread를 열어서 tx_handler와 rx_handler들을 실행시켜줌
 * main 함수 격의 함수
 
+---
