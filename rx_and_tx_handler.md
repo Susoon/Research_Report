@@ -1,8 +1,5 @@
-# Daily Research
+#rx_handler & tx_handler
 
-Jan.2020.
-
-# 1.15. WED.
 # 1. rx_handler.cu 함수 해석 완료
 ## 1.1 total file
 * 이름은 rx_handler로 되어있지만 실질적으로 rx와 tx 모두를 관리함
@@ -27,21 +24,3 @@ Jan.2020.
 * 실질적으로 thread를 열어서 tx_handler와 rx_handler들을 실행시켜줌
 * main 함수 격의 함수
 
-# 2. DPDK 간략한 내용
-## 2.1 특징
-* Intel Architecture 기반의 packet 처리 최적화 system software
-* kernel 대신에 network packet을 처리하는 application을 제공하고 전용 CPU core을 할당해서 network card의 packet을 kernel을 거치지않고 직접 처리
-
-## 2.2 장점
-* packet 처리에 고성능을 보임
-* 고가의 장비를 따로 구비할 필요가 없음
-* CPU가 지장받지 않고 작업을 수행할 수 있음 (app에 전용 CPU core가 할당되므로)
-
-## 2.3 단점
-* Intel사의 system software다보니 사용가능한 lan card가 한정적임
-* application이 network packet을 처리하다보니 application이 해야할 일이 많아짐
-    * network packet 처리를 한다는 것은 packet header를 보고 packet 판별부터 동작까지 다 구현하는 것을 말함
-
-
-
----
