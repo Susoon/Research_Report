@@ -7,7 +7,7 @@
 
 ## 1.2 장점
 * packet 처리에 고성능을 보임
-* 고가의 장비를 따로 구비할 필요가 없음
+* 고가의 장비를 따로 구비할 필요가 없음 (KNI가 기존 장비로도 가능하게 해줌)
 * CPU가 지장받지 않고 작업을 수행할 수 있음 (app에 전용 CPU core가 할당되므로)
 
 ## 1.3 단점
@@ -21,7 +21,6 @@
 * Lockless Queue를 구현하여 shared data 접근시의 bottle neck을 해결
 * huge page를 이용하여 TLB miss를 줄임
 * optimized poll mode driver를 통해 physical NIC과 virtual NIC driver을 최적화시킴
-    * interrupt 기반이었던 기존 kernel 기반 network 처리는 kernel을 방해하여 overhead 발생
 * pre-fetching과 cache line사이즈로 정렬하여 CPU가 data를 기다리는 것을 최소화시킴
 * CPU core isolation을 사용하여 thread switching overhead를 해결
 * KNI를 사용하여 host kernel networking stack의 성능을 개선
@@ -90,7 +89,21 @@
 ## 1.8 Kernel NIC Interface(KNI) 
 * user space에서 application이 kernel networking stack과 packet을 교환하게 해줌
     * kernel이 packet을 처리하지 않으니 stack에서 꺼내와서 packet을 만질 수 있게 해줌
-* 
+* kernel에서 ethernet을 통해서 packet이 나와서 각 core로 넘어감
+* 그 후 core에서 처리된 packet들이 지정된 port로 나감
+* port를 통해 들어온 packet들은 core에서 처리되고 ethernet을 통해 kernel로 감
+* 이러한 과정들을 진행하게 해주는 interface를 KNI라고 함 
 
+## 1.9 종합
+* DPDK는 KNI라는 interface를 구성해서 kernel에서 packet을 받아와서 core에 할당, 처리를 가능하게 해줌
+* kernel을 거치지 않고 packet을 처리할 수 있게 해줌
+* kernel을 거치지 않기 때문에 packet을 처리하는 기능을 구현해야하고 이와 관련된 최적화를 제공해줌
+* interrupt 기반이었던 packet 처리방식을 polling을 통해 진행
+* core간의 synch문제를 최적화된 lockless queue를 사용해여 해결
+* CPU core isolation을 통해 thread switch overhead를 줄여줌
+* 메모리 관리부터 core간의 synch, overhead, batch packet 처리 등 packet 처리에 최적화된 "환경"을 제공해줌 
 
 ---
+
+# 2.DPDK를 사용한 ICMP 처리 application 구현
+
