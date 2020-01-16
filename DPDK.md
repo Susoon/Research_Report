@@ -60,5 +60,10 @@
     * 그럼 기존 spinlock이나 mutex, semaphore과의 성능차이는? -> 확인 필요
     * 여러개의 lockless queue는 bulk enqueue/dequeue를 아예 못하는건가? -> 확인 필요
 
- 
+## 1.6 optimized poll mode driver
+
+## 1.7 CPU core isolation
+
+## 1.8 Kernel NIC Interface(KNI) 
+
 ---
