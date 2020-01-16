@@ -21,6 +21,7 @@
 * Lockless Queue를 구현하여 shared data 접근시의 bottle neck을 해결
 * huge page를 이용하여 TLB miss를 줄임
 * optimized poll mode driver를 통해 physical NIC과 virtual NIC driver을 최적화시킴
+    * interrupt 기반이었던 기존 kernel 기반 network 처리는 kernel을 방해하여 overhead 발생
 * pre-fetching과 cache line사이즈로 정렬하여 CPU가 data를 기다리는 것을 최소화시킴
 * CPU core isolation을 사용하여 thread switching overhead를 해결
 * KNI를 사용하여 host kernel networking stack의 성능을 개선
@@ -61,9 +62,35 @@
     * 여러개의 lockless queue는 bulk enqueue/dequeue를 아예 못하는건가? -> 확인 필요
 
 ## 1.6 optimized poll mode driver
+* interrupt 기반 packet 처리는 interrupt가 발생할때마다 interrupt를 걸게 되므로 비효율적
+* 이를 보완하기 위해서 polling을 사용 + 최적화
+* run-to-completion
+    * PMD를 실행하는 CPU core가 network packet까지 한번에 처리
+    * 특정 port의 rx descriptor ring이 이 PMD를 실행한다는 뜻
+    * packet을 한번에 하나씩 처리
+* pipeline
+    * PMD를 실행하는 CPU core가 있고 실제 packet의 처리는 다른 CPU core에서
+    * 하나의 core가 하나 이상의 port의 rx descriptor ring을 polling (PMD core)
+    * ring 따라서 다른 core로 이동 후 그 core에서 packet처리 (pakcet 처리 core)
+* lock contention을 막으려면 pipeline을 많이 써야함
+* 사용자가 DPDK를 사용할때 PMD를 잘 골라서 최적화를 시켜야한다는 건가?
 
 ## 1.7 CPU core isolation
+* linux scheduler의 thread switching overhead 문제를 해결해준 solution
+* software thread를 hardware thread로 mapping하는 기법
+* core affinity와 관련있어보임
+    * cpu affinity는 cpu 간에 task 이동을 막는 정도를 말함
+    * isolation이니 이동을 막겠다는 의미
+    * 이거랑 software thread를 hardware thread로 mapping하는게 어떤 연관성이 있지?
+        * mapping한다는 게 hardware thread에 software thread가 적절하게 배분한다는 뜻인듯
+* software thread를 hardware thread로 mapping해서 affinity를 강하게 줘서 isolation을 만듬
+* 이를 통해 thread switching이 줄어들어 overhead가 적어짐
+
 
 ## 1.8 Kernel NIC Interface(KNI) 
+* user space에서 application이 kernel networking stack과 packet을 교환하게 해줌
+    * kernel이 packet을 처리하지 않으니 stack에서 꺼내와서 packet을 만질 수 있게 해줌
+* 
+
 
 ---
