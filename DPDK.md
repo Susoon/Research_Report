@@ -49,6 +49,8 @@
     * redo part란 비교 후 prod_next를 움직이는 단계로 돌아가는 것을 말함
 * data 저장이 끝나면 prod_tail을 앞으로 한칸 움직이고 끝냄
 * 위는 enqueue의 경우만 나타냈는데 dequeue의 경우 cons_head와 cons_next로 똑같은 과정을 진행
+* swap은 어디에...?
+    * prod_head를 왔다갔다 하는 부분을 swap이라고 하는건가? -> swap이 아닌 거 같은데 -> 확인 필요
 
 ### 1.5.2 Lockless Queue 추가 내용
 * 결국 lock이 발생할 수도 있음
