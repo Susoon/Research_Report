@@ -126,5 +126,48 @@
     * 이것이 bandwidth에 영향을 줌
     * channel이면 data가 왔다갔다 할 수 있어야 하므로 memory bank 2개가 1개의 channel을 이룸
 
+## 2.2 dpdk의 기본 handling
+* I2p_create()
+    * network 암호화를 위해서 I2p를 만들어줘야함
+* rte_eal_init
+    * EAL을 intialize해줘야 library와 application에서 abstraction이 가능함
+* rte_eth_dev_count_total()
+    * ethernet을 사용할 device의 수를 count해야함(i.e. port 수 count)
+* rte_eth_dev_configure
+    * port 설정해줘야함
+* rte_lcore_to_socket_id
+    * 해당 id의 lcore에 연결된 physical socket의 id를 찾아와야함
+* rte_pktmbuf_pool_create
+    * packet buffer를 만들 memory pool을 만들어야함
+* rte_eth_rx_queue_setup
+    * rx_queue를 setting해줘야함
+* rte_eth_tx_queue_setup
+    * tx_queue도 setting해줘야함
+        * 현재 dpdk.c에는 tx는 없는듯
+* rte_eth_macaddr_get
+    * 사용할 ethernet의 MAC address를 받아옴
+* rte_eal_remote_launch
+    * 현재 lcore의 slave core에도 하고자 하는 기능을 실행시킴
+        * slave core는 어떤거지?
+* rte_eth_dev_start
+    * 설정을 다 마친 device(port)를 실행시킴
+* rte_eth_dev_stop
+    * device(port)를 멈춤
+* rte_eth_dev_close
+    * device(port)를 끝냄
+* rte_eal_wait_lcore
+    * EAL에게 멈추라고 신호를 보냄
+        * i.e. EAL에 묶여있는 모든 core에게 대기신호를 보냄
+* rte_eth_rx_burst
+    * rx descriptor에 넣을 rte_mbuf NIC에서 받은 정보로 초기화시킴
+    * 초기화 시킨 rte_mbuf를 rx_pkts array에 넣어줌
+    * 새로 쓸 rte_mbuf를 intialize time에 만들어줌
+    * NIC에서 packet정보를 받아서 buffer에 담아서 rx_packet 형태로 만들어줌
+* rte_eth_tx_burst
+    * transmit ring에서 사용할 수 있는 descriptor를 가져옴
+    * 그 descriptor를 비움
+    * 보내야할 rte_mbuf에서 info를 가져와서 descriptor를 초기화시킴
+    * 보낼 packet을 descriptor에 담아서 tx_packet을 만듬
+
 
 ---
