@@ -63,11 +63,11 @@
 ## 1.6 optimized poll mode driver
 * interrupt 기반 packet 처리는 interrupt가 발생할때마다 interrupt를 걸게 되므로 비효율적
 * 이를 보완하기 위해서 polling을 사용 + 최적화
-* run-to-completion
+* run-to-completion(asynchronized)
     * PMD를 실행하는 CPU core가 network packet까지 한번에 처리
     * 특정 port의 rx descriptor ring이 이 PMD를 실행한다는 뜻
     * packet을 한번에 하나씩 처리
-* pipeline
+* pipeline(synchronized)
     * PMD를 실행하는 CPU core가 있고 실제 packet의 처리는 다른 CPU core에서
     * 하나의 core가 하나 이상의 port의 rx descriptor ring을 polling (PMD core)
     * ring 따라서 다른 core로 이동 후 그 core에서 packet처리 (pakcet 처리 core)
@@ -115,3 +115,16 @@
 
 # 2.DPDK를 사용한 ICMP 처리 application 구현
 
+## 2.1 dpdk EAL option
+* -c <core mask>
+    * 16진법 수인 <core mask>부분을 2진법으로 나타냈을때 1인부분의 core를 실행시킴
+        * e.g.(1a = 0001 1010 -> core 1, 3, 4 실행)
+* -n <memory channel>
+    * memory channel의 수를 정함
+    * memory channel이란 memory와 CPU의 cache 간의 data 통로
+    * dmidecode -t 17 | grep -c 'Size:'로 memory bank의 수를 알 수 있음
+    * 이것이 bandwidth에 영향을 줌
+    * channel이면 data가 왔다갔다 할 수 있어야 하므로 memory bank 2개가 1개의 channel을 이룸
+
+
+---
