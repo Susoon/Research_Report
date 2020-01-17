@@ -103,6 +103,14 @@
 * CPU core isolation을 통해 thread switch overhead를 줄여줌
 * 메모리 관리부터 core간의 synch, overhead, batch packet 처리 등 packet 처리에 최적화된 "환경"을 제공해줌 
 
+## 1.10 기타
+
+### 1.10.1 I2P
+* application이 익명으로 안전하게 서로에게 message를 보낼 수 있게 해줌
+* 암호화를 통해서 서로에 대한 정보를 감춘 상태에서 보내는 방식
+* 누구에게서 나와서 어떠한 정보를 담고 있으며 어디로 가는지가 모두 암호화 돼있음
+ * dpdk에서 이걸 쓰는 이유는?
+
 ---
 
 # 2.DPDK를 사용한 ICMP 처리 application 구현
