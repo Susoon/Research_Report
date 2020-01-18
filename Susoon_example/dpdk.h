@@ -6,13 +6,15 @@
 #include <sys/time.h>
 
 #include <rte_memory.h>
-#include <rte_launch.h>
+#include <rte_common.h>
 #include <rte_eal.h>
 #include <rte_lcore.h>
 #include <rte_debug.h>
 #include <rte_per_lcore.h>
 #include <rte_mbuf.h>
+#include <rte_launch.h>
 #include <rte_ethdev.h>
+#include <rte_ether.h>
 #include "l2p.h"
 
 #define NUM_MBUFS_DEFAULT 8192
@@ -26,8 +28,13 @@
 
 l2p_t *l2p;
 
-#if 1
-static struct rte_eth_conf default_port_conf = { 
+extern "C"{
+
+#if 0
+static struct rte_eth_conf default_port_conf = {
+#if 1 //setup for rest fields
+	.link_speeds = 0,
+#endif 
 #if 0// RTE_VERSION <= RTE_VERSION_NUM(18, 5, 0, 0)  
 	.rxmode = {                                    
 		.mq_mode = ETH_MQ_RX_RSS,                    
@@ -47,17 +54,76 @@ static struct rte_eth_conf default_port_conf = {
 		.mq_mode = ETH_MQ_TX_NONE,                   
 	},                                             
 #else                                            
-	.rxmode = {                                    
-		.split_hdr_size = 0,                         
+	.rxmode = {       
+#if 0
+		.mq_mode = 1,
+		.split_hdr_size = 0,      
+		.max_lro_pkt_size = 100,
+#endif
+		.split_hdr_size = 0,
+#if 0
+		.offloads = 0,
+		.reserved_64s = NULL,
+		.reserved_ptrs = NULL
+#endif
 #if 0//RTE_VERSION < RTE_VERSION_NUM(18, 11, 0, 0)  
 		.offloads = DEV_RX_OFFLOAD_CRC_STRIP,        
 #endif                                           
-	},                                             
+	},                        
 	.txmode = {                                    
-		.mq_mode = ETH_MQ_TX_NONE,                   
-	},                                             
-#endif                                           
+		.mq_mode = ETH_MQ_TX_NONE,         
+#if 0
+		.offloads = 0,
+		.pvid = 0,
+		//.reserved_64s = NULL,
+		//.reserved_ptrs = NULL
+#endif
+	},        
+#endif                       
+	.lpbk_mode = 0,
+#if 0 //setup rest fields
+	.rx_adv_conf = {
+		.rss_conf = {
+			.rss_key = NULL,
+			.rss_key_len = 0,
+			.rss_hf = 0
+		},
+		.vmdq_dcb_conf = {
+			.enable_default_pool = 0,
+			.default_pool = 0,
+			.nb_pool_maps = 0,
+//			.pool_map = NULL,
+//			.dcb_tc = NULL
+		},
+/*		.dcv_rx_conf = {
+			.nb_tcs = 1,
+//			.dcb_tc = NULL
+		},
+*/		.vmdq_rx_conf = {
+			.nb_queue_pools = 1,
+			.enable_default_pool = 0,
+			.default_pool = 0,
+			.enable_loop_back = 0,
+			.nb_pool_maps = 0,
+			.rx_mode = 0,
+//			.pool_map = NULL,
+		}
+	},
+	.tx_adv_conf = {
+		//.vmdq_tx_conf = 1
+	},
+	.dcb_capability_en = 0,
+	.fdir_conf = {
+		.mode = 1,
+		.pballoc = 1,
+		.status = 1,
+		.drop_queue = 0,
+
+	},
+	.intr_conf = {}
+#endif                    
 };      
+}
 #endif
 int launch_one_lcore(void *arg);
 static __inline__ void start_lcore(l2p_t *l2p, uint16_t lid)

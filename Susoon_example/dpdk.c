@@ -80,7 +80,7 @@ static void rx_loop(uint8_t lid)
 			}
 			printf("\n");
 #endif
-			gpucopy(rte_ctrlmbuf_data(buf[0]), buf[0]->pkt_len + ETHER_CRC_LEN); 
+//			gpucopy(rte_ctrlmbuf_data(buf[0]), buf[0]->pkt_len + RTE_ETHER_CRC_LEN); 
 		}
 
 		ret = rte_eth_tx_burst(0, 0, buf, nb_rx);
@@ -116,7 +116,7 @@ int main(int argc, char **argv)
 		rte_exit(EXIT_FAILURE, "Error with EAL initialization.\n");
 
 	/* Check if at least one port is available. */
-	if(rte_eth_dev_count_total() == 0)
+	if(rte_eth_dev_count() == 0)
 		rte_exit(EXIT_FAILURE, "Error: No port available.\n");
 
 	/* Configure the Ethernet device */
@@ -126,7 +126,7 @@ int main(int argc, char **argv)
 	 * (3) nb_tx_queue
 	 * (4) eth_conf (The pointer to the configuration data to be used)
 	 */
-	ret = rte_eth_dev_configure(0, 1, 1, &default_port_conf);
+	//ret = rte_eth_dev_configure(0, 1, 1, &default_port_conf);
 	if(ret < 0)
 		rte_exit(EXIT_FAILURE, "Cannot configure device: port %d.\n", 0);
 
@@ -213,6 +213,4 @@ int main(int argc, char **argv)
 
 	return 0;
 }
-
-
-
+}
