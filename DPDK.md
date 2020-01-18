@@ -188,6 +188,9 @@
 
 <center> compile error </center>
 ![Alt text](image/compile.JPG)
+
+
+
 * 하지만 현재 이런 error가 뜨면서 컴파일에 실패하고 있다.
 * 검색해보니 이건 CFLAG(compiler flag)를 잘못 줘서 이렇다고 한다.
 * 그래서 내가 준 CFLAG들은 다음과 같다.
@@ -202,14 +205,23 @@
 
 
 <center> structure fields </center>
+
+
 ![Alt text](image/structure_fields.JPG)
+
+
+
 ![Alt text](image/structure_fields2.JPG)
+
+
 
 * 위의 structure은 원래 많은 field를 가지고 있다.
 
 
 
 <center> original structure fields </center>
+
+
 ![Alt test](image/origin_fields1.JPG)
 * 위의 사진을 보면 structure를 field로 가지기도 한다.
 * 하지만 실제로 dpdk.c에서는 대부분의 field들이 초기화되지 않았다.
