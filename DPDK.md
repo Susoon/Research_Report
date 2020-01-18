@@ -169,5 +169,37 @@
     * 보내야할 rte_mbuf에서 info를 가져와서 descriptor를 초기화시킴
     * 보낼 packet을 descriptor에 담아서 tx_packet을 만듬
 
+## 2.3 현재 진행상황
+
+* 01/18 현재 진행상황이다.
+
+* ![Alt text](/image/dpdk_makefile.JPG)
+* ![Alt text](/image/dpdk_makefile2.JPG)
+* 현재 Makefile을 수정중이다.
+* fancy의 Makefile과 dpdk의 example들의 Makefile을 합쳐서 실행해보고 있다.
+* dpdk의 example의 Makefile을 통해 library가 안 불리는 문제는 해결되었다.
+
+* ![Alt text](/image/compile.JPG)
+* 하지만 현재 이런 error가 뜨면서 컴파일에 실패하고 있다.
+* 검색해보니 이건 CFLAG(compiler flag)를 잘못 줘서 이렇다고 한다.
+* 그래서 내가 준 CFLAG들은 다음과 같다.
+    * -03 : compile 속도 향상이라 compile의 성공 여부에는 영향을 미치지 않음.
+    * $(WERROR_FLAGS) : 이거는 뭔지 찾아봐야할 것 같음.
+    * -march=native : cpu만 사용해서 돌리는 program이라는 걸 알려주는 기능.
+        * fancy의 Makefile에 있어서 넣었는데 정확한 효과는 모르겠다
+    * -mssse3 : 위 사진의 error를 검색해보니 해당 header file은 이 flag가 필요하다고 함.
+        * 기능은 모름
+
+* 그외의 난관은 다음의 사진에 나온 structure이다.
+* ![Alt text](/image/structure_fields.JPG)
+* ![Alt text](/image/structure_fields2.JPG)
+* 위의 structure은 원래 많은 field를 가지고 있다.
+
+* ![Alt test](/image/origin_fields1.JPG)
+* 위의 사진을 보면 structure를 field로 가지기도 한다.
+* 하지만 실제로 dpdk.c에서는 대부분의 field들이 초기화되지 않았다.
+* 이 때문에 "sorry, unimplemented: non-trivial designated initializers not supported"라는 error가 떠서 현재는 주석처리를 해놓았다.
+* 초기화되지 않은 field들을 0이나 NULL로 초기화하려하였으나, structure나 pointer array도 있어 조금 더 code를 알아보고 초기화를 진행하거나, 초기화를 진행하지 않아도 되게끔 Makefile을 수정해야한다.
+
 
 ---
