@@ -174,14 +174,17 @@
 * 01/18 현재 진행상황이다.
 
 <center>Makefile</center>
-
 ![Alt text](image/dpdk_makefile.JPG)
 
 ![Alt text](image/dpdk_makefile2.JPG)
 
 * 현재 Makefile을 수정중이다.
+
 * fancy의 Makefile과 dpdk의 example들의 Makefile을 합쳐서 실행해보고 있다.
+
 * dpdk의 example의 Makefile을 통해 library가 안 불리는 문제는 해결되었다.
+
+  
 
 <center> compile error </center>
 ![Alt text](image/compile.JPG)
@@ -194,14 +197,17 @@
         * fancy의 Makefile에 있어서 넣었는데 정확한 효과는 모르겠다
     * -mssse3 : 위 사진의 error를 검색해보니 해당 header file은 이 flag가 필요하다고 함.
         * 기능은 모름
-
 * 그외의 난관은 다음의 사진에 나온 structure이다.
+
+
 
 <center> structure fields </center>
 ![Alt text](image/structure_fields.JPG)
 ![Alt text](image/structure_fields2.JPG)
 
 * 위의 structure은 원래 많은 field를 가지고 있다.
+
+
 
 <center> original structure fields </center>
 ![Alt test](image/origin_fields1.JPG)
