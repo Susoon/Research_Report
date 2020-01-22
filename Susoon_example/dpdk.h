@@ -80,8 +80,8 @@ static struct rte_eth_conf default_port_conf = {
 #endif
 	},        
 #endif                       
-	.lpbk_mode = 0,
 #if 0 //setup rest fields
+	.lpbk_mode = 0,
 	.rx_adv_conf = {
 		.rss_conf = {
 			.rss_key = NULL,
@@ -92,21 +92,21 @@ static struct rte_eth_conf default_port_conf = {
 			.enable_default_pool = 0,
 			.default_pool = 0,
 			.nb_pool_maps = 0,
-//			.pool_map = NULL,
-//			.dcb_tc = NULL
+			.pool_map = NULL,
+			.dcb_tc = NULL
 		},
-/*		.dcv_rx_conf = {
+		.dcv_rx_conf = {
 			.nb_tcs = 1,
-//			.dcb_tc = NULL
+			.dcb_tc = NULL
 		},
-*/		.vmdq_rx_conf = {
+		.vmdq_rx_conf = {
 			.nb_queue_pools = 1,
 			.enable_default_pool = 0,
 			.default_pool = 0,
 			.enable_loop_back = 0,
 			.nb_pool_maps = 0,
 			.rx_mode = 0,
-//			.pool_map = NULL,
+			.pool_map = NULL,
 		}
 	},
 	.tx_adv_conf = {

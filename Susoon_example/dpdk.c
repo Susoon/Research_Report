@@ -80,7 +80,7 @@ static void rx_loop(uint8_t lid)
 			}
 			printf("\n");
 #endif
-//			gpucopy(rte_ctrlmbuf_data(buf[0]), buf[0]->pkt_len + RTE_ETHER_CRC_LEN); 
+			//gpucopy(rte_ctrlmbuf_data(buf[0]), buf[0]->pkt_len + ETHER_CRC_LEN); 
 		}
 
 		ret = rte_eth_tx_burst(0, 0, buf, nb_rx);
@@ -116,7 +116,7 @@ int main(int argc, char **argv)
 		rte_exit(EXIT_FAILURE, "Error with EAL initialization.\n");
 
 	/* Check if at least one port is available. */
-	if(rte_eth_dev_count() == 0)
+	if(rte_eth_dev_count_total() == 0)
 		rte_exit(EXIT_FAILURE, "Error: No port available.\n");
 
 	/* Configure the Ethernet device */
@@ -127,6 +127,8 @@ int main(int argc, char **argv)
 	 * (4) eth_conf (The pointer to the configuration data to be used)
 	 */
 	//ret = rte_eth_dev_configure(0, 1, 1, &default_port_conf);
+	ret = 1;	
+
 	if(ret < 0)
 		rte_exit(EXIT_FAILURE, "Cannot configure device: port %d.\n", 0);
 
@@ -156,11 +158,11 @@ int main(int argc, char **argv)
 	*/
 	ret = rte_eth_rx_queue_setup(0, 0, RX_DESC_DEFAULT, sid, NULL, mbuf_pool);
 	if(ret)
-		rte_exit(EXIT_FAILURE, "Cannot init port %"PRIu8 "\n", 0);
+		rte_exit(EXIT_FAILURE, "RX : Cannot init port %"PRIu8 "\n", 0);
 
 	ret = rte_eth_tx_queue_setup(0, 0, RX_DESC_DEFAULT, sid, NULL);
 	if(ret)
-		rte_exit(EXIT_FAILURE, "Cannot init port %"PRIu8 "\n", 0);
+		rte_exit(EXIT_FAILURE, "TX : Cannot init port %"PRIu8 "\n", 0);
 
 
 
@@ -173,7 +175,7 @@ int main(int argc, char **argv)
 	rte_eth_dev_set_rx_queue_stats_mapping(0, 0, 1);
 
 	/* Display the port MAC address. */
-	struct ether_addr addr;
+	struct rte_ether_addr addr;
 	rte_eth_macaddr_get(0, &addr);
 	printf("\n[CKJUNG]  Port %u: MAC=%02" PRIx8 ":%02" PRIx8 ":%02" PRIx8":%02" PRIx8 ":%02" PRIx8 ":%02" PRIx8 ", RXdesc/queue=%d\n", 0, addr.addr_bytes[0], addr.addr_bytes[1], addr.addr_bytes[2],addr.addr_bytes[3], addr.addr_bytes[4], addr.addr_bytes[5],RX_DESC_DEFAULT);
 
@@ -213,4 +215,6 @@ int main(int argc, char **argv)
 
 	return 0;
 }
+
+
 }
