@@ -181,8 +181,24 @@
 * 나는 dpdk만 compile하는 거니 gcc로 해줘야 제대로 compile이 됨.
 
 <center>excution</center>
-
 ![Alt text](image/excute_success.JPG)
 
 
 * gcc로 컴파일하고 실행시키면 잘 실행되는 것을 확인할 수 있다.
+* 하지만 상대 server쪽에서 packet이 오지 않는다.
+* packet을 보내려고 임의의 단어를 보내면 오랜 시간이 지난 후에 다음과 같은 의미를 알 수 없는 단어가 나온다.
+
+  * 캡쳐를 하려고 다시 시도해봤더니 지금은 나오지 않는다.
+  * 6ㅁㅁㅁ~~ 형태의 깨진 단어가 나왔다.
+  * 아마 보안때문에 깨진 packet의 data가 아닐까 추측된다.
+
+![Alt text](image/excution_01.23.JPG)
+
+* server간의 연결이 되지 않는 거 같아서 상대 server에도 dpdk를 깔았다.
+* 하지만 "--cflags:Command not found"라는 error가 뜨면서 Makefile이 돌아가지 않았다.
+* 동일한 Makefile을 사용했는데 error가 뜨는 것을 통해 추측가능한 원인은 다음과 같다.
+  * 환경변수가 설정되지 않는 것이 있다.
+  * gcc compiler의 버젼이나 설정이 다르다.
+  * cflag를 위한 추가 설치가 필요하다.
+* dpdk도 19.11로 같고 gcc도 최근 것이라 사실상 다른 것은 server의 환경이라 추가 설치 혹인 환경변수의 재설정을 방향으로 잡고 수정중이다.
+
