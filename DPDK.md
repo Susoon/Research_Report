@@ -171,54 +171,18 @@
 
 ## 2.3 현재 진행상황
 
-* 01/22 현재 진행상황
+* 01/23 현재 진행상황
 
 <center>Makefile</center>
-![Alt text](image/01.22makefile.JPG)
+![Alt text](image/makefile_last.JPG)
 ![Alt text](image/Flags.JPG)
 
-* dpdk 홈페이지에서 flag를 불러와서 적용하니 compile이 되었다.
-  
+* fancy에서 찬규형이 compile할 땐 dpdk는 gcc로 compile해서 object file을 만든 뒤 g++로 linking해준다.
+* 나는 dpdk만 compile하는 거니 gcc로 해줘야 제대로 compile이 됨.
 
-<center> excution and error </center>
+<center>excution</center>
 
-
-![Alt text](image/excute.JPG)
-
-
-* port init이 실패했다고 error가 뜬다.
-* rx queue를 할당할 port가 안 생겨서 error가 뜨는 것이다.
-* rte_eth_dev_configure에서 default_port_conf를 넣을때 문제가 있어서 주석처리를 하고 ret = 1을 넣어놓았다.
-
-![Alt text](image/rte_eth_dev_configure.JPG)
-
-* 그 이유는 default_port_conf를 dpdk.h에서 주석처리를 해놓았기 때문이다.
-* default_port_conf를 주석처리를 한 이유는 지난번에 설명한 바와 같다.
-
-<center> structure fields </center>
+![Alt text](image/excute_success.JPG)
 
 
-![Alt text](image/structure_fields.JPG)
-
-
-
-![Alt text](image/structure_fields2.JPG)
-
-
-
-* 위의 structure은 원래 많은 field를 가지고 있다.
-
-
-<center> original structure fields </center>
-
-
-![Alt test](image/origin_fields1.JPG)
-* 위의 사진을 보면 structure를 field로 가지기도 한다.
-* 하지만 실제로 dpdk.c에서는 대부분의 field들이 초기화되지 않았다.
-* 이 때문에 "sorry, unimplemented: non-trivial designated initializers not supported"라는 error가 떠서 현재는 주석처리를 해놓았다.
-* 초기화되지 않은 field들을 0이나 NULL로 초기화하려하였으나, structure나 pointer array도 있어 조금 더 code를 알아보고 초기화를 진행하거나, 초기화를 진행하지 않아도 되게끔 Makefile을 수정해야한다.
-
-* 이 부분은 더 물어보고 코드를 고치든지 아니면 어디서 긁어오든지 하면 될 거 같다
-* 이 부분만 해결되면 test해보기위해 돌리는 것은 끝나고 이제 코드를 고치는 거만 하면 된다.
-
----
+* gcc로 컴파일하고 실행시키면 잘 실행되는 것을 확인할 수 있다.
