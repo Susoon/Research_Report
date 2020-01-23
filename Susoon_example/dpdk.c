@@ -126,8 +126,8 @@ int main(int argc, char **argv)
 	 * (3) nb_tx_queue
 	 * (4) eth_conf (The pointer to the configuration data to be used)
 	 */
-	//ret = rte_eth_dev_configure(0, 1, 1, &default_port_conf);
-	ret = 1;	
+	ret = rte_eth_dev_configure(0, 1, 1, &default_port_conf);
+	//ret = 1;	
 
 	if(ret < 0)
 		rte_exit(EXIT_FAILURE, "Cannot configure device: port %d.\n", 0);
@@ -216,5 +216,3 @@ int main(int argc, char **argv)
 	return 0;
 }
 
-
-}

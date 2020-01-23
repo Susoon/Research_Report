@@ -11,7 +11,7 @@ shared: build/$(APP)-shared
 static: build/$(APP)-static
 	ln -sf $(APP)-static build/$(APP)
 
-PKGCONF ?= pkg-config
+PKGCONF = pkg-config
 
 PC_FILE := $(shell $(PKGCONF) --path libdpdk 2>/dev/null)
 CFLAGS += -O3 $(shell $(PKGCONF) --cflags libdpdk)
@@ -19,10 +19,10 @@ LDFLAGS_SHARED = $(shell $(PKGCONF) --libs libdpdk)
 LDFLAGS_STATIC = -Wl,-Bstatic $(shell $(PKGCONF) --static --libs libdpdk)
 
 build/$(APP)-shared: $(SRCS-y) Makefile $(PC_FILE) | build
-	g++ $(CFLAGS) $(SRCS-y) -o $@ $(LDFLAGS) $(LDFLAGS_SHARED) 
+	gcc $(CFLAGS) $(SRCS-y) -o $@ $(LDFLAGS) $(LDFLAGS_SHARED) 
 
 build/$(APP)-static: $(SRCS-y) Makefile $(PC_FILE) | build
-	g++ $(CFLAGS) $(SRCS-y) -o $@ $(LDFLAGS) $(LDFLAGS_STATIC)
+	gcc $(CFLAGS) $(SRCS-y) -o $@ $(LDFLAGS) $(LDFLAGS_STATIC)
 
 build:
 	gc@mkdir -p $@
@@ -42,8 +42,6 @@ endif
 RTE_TARGET ?= $(notdir $(abspath $(dir $(firstword $(wildcard $(RTE_SDK)/*/.config)))))
 
 include $(RTE_SDK)/mk/rte.vars.mk
-
-PKGCONF = pkg-config
 
 CFLAGS += -O3 $(shell $(PKGCONF) --cflags libdpdk)
 LDFLAGS += $(shell $(PKGCONF) --libs libdpdk)
