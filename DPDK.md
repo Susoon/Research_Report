@@ -171,19 +171,19 @@
 
 ## 2.3 현재 진행상황
 
-* 01/28 현재 진행상황
+* 01/29 현재 진행상황
 
+<center>paket generator execution error </center>
 
+![Alt_text](image/iova_as_pa.JPG)
 
-<center>paket generator build error </center>
-
-![Alt_text](image/pktgen_meson_build.JPG)
-
-* compile을 마치고 meson build를 하려는데 header file 하나가 없다고 한다.  - 수정중
+* build까지 마치고 실행시켰더니 io virtual address를 physical address로 변환할 수 없다고하며 실행이 안됨
+* linux 설정을 바꿔줘야할 것 같음
 
 
 
 * ps) RTE_SDK를 환경변수로 지정을 해주고 bash.bashrc에도 저장을 했는데도 makefile이 인식을 못한다.
 * 그래서 필요한 file마다 찾아가서 저장을 해줬다.
+* source써서 실행하고 reboot까지 했지만 설정이 안됨
 * 원인은 알 수 없다....
 
