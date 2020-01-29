@@ -173,11 +173,19 @@
 
 * 01/29 현재 진행상황
 
-<center>paket generator execution error </center>
-![Alt_text](image/iova_as_pa.JPG)
+<center>dpdk-option</center>
 
-* build까지 마치고 실행시켰더니 io virtual address를 physical address로 변환할 수 없다고하며 실행이 안됨
-* pktgen-run.sh 파일을 수정해야함 - 수정중
+![Alt_text](image/dpdkoption.JPG)
+
+* 위와같이 option을 주니 해결됨
+  * 그런데 왜 0-6까지의 core는 master core가 안되고 7만 되는거지?
+
+
+<center>paket generator execution error </center>
+
+![Alt_text](image/pktgen-run_excute.JPG)
+
+* memory buffer pool을 만들 수 없다고 함 - 수정중
 
 
 
