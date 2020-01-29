@@ -174,11 +174,10 @@
 * 01/29 현재 진행상황
 
 <center>paket generator execution error </center>
-
 ![Alt_text](image/iova_as_pa.JPG)
 
 * build까지 마치고 실행시켰더니 io virtual address를 physical address로 변환할 수 없다고하며 실행이 안됨
-* linux 설정을 바꿔줘야할 것 같음
+* pktgen-run.sh 파일을 수정해야함 - 수정중
 
 
 
