@@ -180,12 +180,18 @@
 * 위와같이 option을 주니 해결됨
   * 그런데 왜 0-6까지의 core는 master core가 안되고 7만 되는거지?
 
+<center>sender</center>
 
-<center>paket generator execution error </center>
+![Alt_text](image/pktgen-sender.JPG)
 
-![Alt_text](image/pktgen-run_excute.JPG)
+<center>receiver </center>
 
-* memory buffer pool을 만들 수 없다고 함 - 수정중
+![Alt_text](image/receiver.JPG)
+
+* send와 receive에 성공함
+* 723894/13942616 (RX/TX)비율을 계산해보면 0.05정도 나옴
+  * 보내는 거에 비해 받는 수가 매우 적음
+  * 처리속도가 느려서 다 못 보내는 것 같음
 
 
 
