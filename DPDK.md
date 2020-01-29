@@ -174,24 +174,41 @@
 * 01/29 현재 진행상황
 
 <center>dpdk-option</center>
-
 ![Alt_text](image/dpdkoption.JPG)
 
 * 위와같이 option을 주니 해결됨
   * 그런데 왜 0-6까지의 core는 master core가 안되고 7만 되는거지?
 
-<center>sender</center>
+<center>10.0.0.4 -> 10.0.0.3 with dpdk.c</center>
 
-![Alt_text](image/pktgen-sender.JPG)
+![Alt_text](image/4to3send_dpdk.JPG)
 
-<center>receiver </center>
+* TX에 비해 RX가 반정도 나옴
+* 이 전에 test했을때 TX가 14정도 였는데 다시 1정도 줄어듬
 
-![Alt_text](image/receiver.JPG)
 
-* send와 receive에 성공함
-* 723894/13942616 (RX/TX)비율을 계산해보면 0.05정도 나옴
-  * 보내는 거에 비해 받는 수가 매우 적음
-  * 처리속도가 느려서 다 못 보내는 것 같음
+
+<center>10.0.0.4 -> 10.0.0.3 with pktgen</center>
+
+![Alt_text](image/4to3send_pktgen.JPG)
+
+* packet generator로 했을때는 다시 TX가 14정도 나오는 걸 확인할 수 있음
+
+<center>10.0.0.3 -> 10.0.0.4 with pktgen </center>	
+
+![Alt_text](image/3to4send_pktgen.JPG)
+
+* 0.3에서 0.4 방향으로 가는게 0.1정도 더 느림
+
+
+
+<center>header swap in dpdk.c</center>
+
+![Alt_text](image/dpdk_packet_swap.JPG)
+
+* dpdk.c에서 header swap은 정상적으로 일어나는 것을 확인할 수 있음
+  * 위 2줄을 비교해보면 after에서 2줄이 서로 바뀌어있음을 확인할 수 있다
+  * mac 주소가 바뀐 것
 
 
 
