@@ -180,7 +180,6 @@
   * 그런데 왜 0-6까지의 core는 master core가 안되고 7만 되는거지?
 
 <center>10.0.0.4 -> 10.0.0.3 with dpdk.c</center>
-
 ![Alt_text](image/4to3send_dpdk.JPG)
 
 * TX에 비해 RX가 반정도 나옴
@@ -189,13 +188,11 @@
 
 
 <center>10.0.0.4 -> 10.0.0.3 with pktgen</center>
-
 ![Alt_text](image/4to3send_pktgen.JPG)
 
 * packet generator로 했을때는 다시 TX가 14정도 나오는 걸 확인할 수 있음
 
 <center>10.0.0.3 -> 10.0.0.4 with pktgen </center>	
-
 ![Alt_text](image/3to4send_pktgen.JPG)
 
 * 0.3에서 0.4 방향으로 가는게 1정도 더 느림
@@ -203,16 +200,23 @@
 
 
 <center>header swap in dpdk.c</center>
-
 ![Alt_text](image/dpdk_packet_swap.JPG)
 
 * dpdk.c에서 header swap은 정상적으로 일어나는 것을 확인할 수 있음
   * 위 2줄을 비교해보면 after에서 2줄이 서로 바뀌어있음을 확인할 수 있다
   * mac 주소가 바뀐 것
 
+<center>RX pps of dpdk.c</center>
+
+![Alt_text](image/recv_total.JPG)
+
+* swap 후 send하는 과정을 빼고 pps만을 확인해보니 14Mpps정도 나옴 
+  * sender가 send하는 Mpps와 거의 일치함
+
 
 
 * ps) RTE_SDK를 환경변수로 지정을 해주고 bash.bashrc에도 저장을 했는데도 makefile이 인식을 못한다.
+
 * 그래서 필요한 file마다 찾아가서 저장을 해줬다.
 * source써서 실행하고 reboot까지 했지만 설정이 안됨
 * 원인은 알 수 없다....
