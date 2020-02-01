@@ -53,5 +53,4 @@ void Do_something(struct rte_mbuf * buf[]);
 /* persistent loop for taking data from gpu */
 static void read_loop(void);
 
-
-
+/*  */
