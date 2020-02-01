@@ -113,7 +113,7 @@
 
 ---
 
-# 2.DPDK를 사용한 ICMP 처리 application 구현
+# 2.DPDK를 사용한 Packet RX_TX test
 
 ## 2.1 dpdk EAL option
 * -c <core mask>
@@ -169,9 +169,7 @@
     * 보내야할 rte_mbuf에서 info를 가져와서 descriptor를 초기화시킴
     * 보낼 packet을 descriptor에 담아서 tx_packet을 만듬
 
-## 2.3 현재 진행상황
-
-* 01/29 현재 진행상황
+## 2.3 pkt_gen과 dpdk.c를 사용한 test
 
 <center>dpdk-option</center>
 ![Alt_text](image/dpdkoption.JPG)
@@ -207,7 +205,6 @@
   * mac 주소가 바뀐 것
 
 <center>RX pps of dpdk.c</center>
-
 ![Alt_text](image/recv_total.JPG)
 
 * swap 후 send하는 과정을 빼고 pps만을 확인해보니 14Mpps정도 나옴 
@@ -221,3 +218,17 @@
 * source써서 실행하고 reboot까지 했지만 설정이 안됨
 * 원인은 알 수 없다....
 
+
+
+# 3. TEST용 파일 programming
+
+## 3.1 code 개요
+
+* dpdk.c에서 gpu에 packet을 copy해서 저장해줌
+* 이를 gpu_handler에서 읽어들여와 data 처리를 진행함
+  * polling 하는 persistent loop를 만들어서 읽어들이게 할 예정
+  * data 처리는 어떠한 것을 할지는 정하지 못함
+    * 일단 Do_something이라는 빈 함수를 만들어서 호출하게 하고 추후에 바꿀 예정
+* gpu_handler에서 처리가 끝나면 dpdk.c에서 send를 해줌
+  * gpu_handler에서 처리가 끝나고 난 뒤에 dpdk.c가 send를 해줘야함
+    * synch문제를 생각해봐야함
