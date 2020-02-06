@@ -232,3 +232,30 @@
 * gpu_handler에서 처리가 끝나면 dpdk.c에서 send를 해줌
   * gpu_handler에서 처리가 끝나고 난 뒤에 dpdk.c가 send를 해줘야함
     * synch문제를 생각해봐야함
+
+## 3.2 code 세부 사항
+
+* 02/06 현재 진행상황
+* rx_handler 파일을 참고해서 파일을 만듬
+
+
+
+![Alt_text](image/my_handler.h_02.06.JPG)
+
+* my_handler.h 파일
+* 대부분의 함수를 지우고 packet을 read하기 위한 최소함수만 남김
+* 추후에 함수가 추가될 수도 있음
+
+
+
+![Alt_text](image/sh_pin_buffer_02.06.JPG)
+
+* my_handler.cu 내의 sh_pin_buffer 함수
+* pin buffer를 cudaHostAlloc함수를 사용하여 만듬
+
+
+
+![Alt_text](image/my_handler.cu_02.06.JPG)
+
+* my_handler.cu의 나머지 코드
+* gpu에 packet을 복사하고 화면에 print하고 memory를 setting해주는 함수만 남음
