@@ -1,7 +1,7 @@
 #include "dpdk.h"
 
 #define ONELINE 6
-#define DUMP 0
+#define DUMP 1
 #define SWAP 1
 static void rx_loop(uint8_t lid)
 {
@@ -39,13 +39,14 @@ static void rx_loop(uint8_t lid)
 			ptr = (rte_ctrlmbuf_data(buf[0]));
 #if DUMP
 			printf("pkt_dump: \n");
-			for(i = 0; i < buf[0]->pkt_len + RTE_ETHER_CRC_LEN; i++){
+			//for(i = 0; i < buf[0]->pkt_len + RTE_ETHER_CRC_LEN; i++){
+			for(i = 0; i < buf[0]->pkt_len; i++){
 				//printf("%02x ", (rte_ctrlmbuf_data(buf[0]))[i]);
 				if(i != 0 && i % ONELINE == 0)
 					printf("\n");
 				printf("%02x ", ptr[i]);
 			}
-			copy_to_gpu(rte_ctrlmbuf_data(buf[0]), buf[0]->pkt_len + ETHER_CRC_LEN); 
+			//copy_to_gpu(rte_ctrlmbuf_data(buf[0]), buf[0]->pkt_len + ETHER_CRC_LEN); 
 			printf("\n");
 
 #endif /* if DUMP */
@@ -81,7 +82,7 @@ static void rx_loop(uint8_t lid)
 			}
 			printf("\n");
 #endif
-			copy_to_gpu(rte_ctrlmbuf_data(buf[0]), buf[0]->pkt_len + RTE_ETHER_CRC_LEN); 
+			//copy_to_gpu(rte_ctrlmbuf_data(buf[0]), buf[0]->pkt_len + RTE_ETHER_CRC_LEN); 
 		}
 
 		ret = rte_eth_tx_burst(0, 0, buf, nb_rx);
