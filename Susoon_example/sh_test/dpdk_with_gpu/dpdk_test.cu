@@ -1,7 +1,7 @@
 #include "dpdk.h"
 
 #define ONELINE 6
-#define DUMP 0
+#define DUMP 1
 #define SWAP 1
 static void rx_loop(uint8_t lid)
 {
@@ -45,7 +45,7 @@ static void rx_loop(uint8_t lid)
 					printf("\n");
 				printf("%02x ", ptr[i]);
 			}
-			copy_to_gpu(rte_ctrlmbuf_data(buf[0]), buf[0]->pkt_len + ETHER_CRC_LEN); 
+			copy_to_gpu(rte_ctrlmbuf_data(buf[0]), buf[0]->pkt_len + RTE_ETHER_CRC_LEN); 
 			printf("\n");
 
 #endif /* if DUMP */
