@@ -33,7 +33,7 @@ static void rx_loop(uint8_t lid)
 		*/
 		nb_rx = rte_eth_rx_burst(0, 0, buf, DEFAULT_PKT_BURST);
 		if(nb_rx > 0){
-			//printf("nb_rx: %d\n", nb_rx);
+		//printf("nb_rx: %d\n", nb_rx);
 		// [TODO] Need to modify here.
 			recv_total += nb_rx;
 			ptr = (rte_ctrlmbuf_data(buf[0]));
@@ -45,7 +45,7 @@ static void rx_loop(uint8_t lid)
 					printf("\n");
 				printf("%02x ", ptr[i]);
 			}
-			//copy_to_gpu(rte_ctrlmbuf_data(buf[0]), buf[0]->pkt_len + ETHER_CRC_LEN); 
+			copy_to_gpu(rte_ctrlmbuf_data(buf[0]), buf[0]->pkt_len + ETHER_CRC_LEN); 
 			printf("\n");
 
 #endif /* if DUMP */
@@ -81,7 +81,7 @@ static void rx_loop(uint8_t lid)
 			}
 			printf("\n");
 #endif
-			//copy_to_gpu(rte_ctrlmbuf_data(buf[0]), buf[0]->pkt_len + RTE_ETHER_CRC_LEN); 
+			copy_to_gpu(rte_ctrlmbuf_data(buf[0]), buf[0]->pkt_len + RTE_ETHER_CRC_LEN); 
 		}
 
 		ret = rte_eth_tx_burst(0, 0, buf, nb_rx);
@@ -100,7 +100,7 @@ int launch_one_lcore(void *arg __rte_unused)
 	return 0;
 }
 
-int main(int argc, char **argv)
+int dpdk_handler(int argc, char **argv)
 {
 	int ret;
 	struct rte_mempool *mbuf_pool;
