@@ -23,7 +23,7 @@ LDFLAGS_SHARED = $(shell $(PKGCONF) --libs libdpdk)
 all: dpdk_gpu_test
 
 dpdk_gpu_test: $(OBJ_FILE)
-	g++ -o $@ $(OBJ_FILE) $(CUDA_LIBPATH) $(CUDA_INC) $(INC) $(CFLAGS) $(LDFLAGS) $(LDFLAGS_SHARED)
+	g++ -o $@ -pthread $(OBJ_FILE) $(CUDA_LIBPATH) $(CUDA_INC) $(INC) $(CFLAGS) $(LDFLAGS) $(LDFLAGS_SHARED) -lnuma -lcuda -lcudart -ldl
 	mv *.o $(LIB_DIR)
 
 sh_handler.o: $(SRC_DIR)/sh_handler.cu
