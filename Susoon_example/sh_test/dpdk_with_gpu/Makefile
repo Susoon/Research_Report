@@ -44,10 +44,6 @@ ifeq ($(RTE_SDK),)
 $(error "Please define RTE_SDK environment variable ")
 endif
 
-PC_FILE := $(shell $(PKGCONF) --path libdpdk 2>/dev/null)
-CFLAGS=-O3 $(shell $(PKGCONF) --cflags libdpdk)
-LDFLAGS_SHARED = $(shell $(PKGCONF) --libs libdpdk)
-
 # Default target, detect a build directory, by looking for a path with a .config
 RTE_TARGET ?= $(notdir $(abspath $(dir $(firstword $(wildcard $(RTE_SDK)/*/.config)))))
 
