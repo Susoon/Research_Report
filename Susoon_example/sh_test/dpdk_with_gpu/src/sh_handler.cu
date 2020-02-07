@@ -1,9 +1,11 @@
-#include "my_handler.h"
+#include "sh_handler.h"
 
 #define PKT_BUF_SIZE 4 * 1024 * 1024 //4MB
 #define PKT_SIZE 64
+#define ONELINE 6
 
-unsigned char* d_pkt_buffer;
+unsigned char * host_pkt_buf;
+__device__ unsigned char * dev_pkt_buf;
 
 static int idx;
 
@@ -20,10 +22,8 @@ int sh_pin_buffer(void)
 {
 	int ret = 0;
 	int retcode;
-	
-	struct rte_mbuf *buf[DEFAULT_PKT_BURST];
 
-	retcode = cudaHostAlloc(buf,sizeof(struct rte_mbuf *) * DEFAULT_PKT_BURST, cudaHostAllocDefault);
+	retcode = cudaHostAlloc(&host_pkt_buf,sizeof(unsigned char) * PKT_SIZE, cudaHostAllocDefault);
 	if(retcode == cudaErrorMemoryAllocation)
 	{
 		ret = errno;
@@ -33,12 +33,16 @@ int sh_pin_buffer(void)
     return ret;
 }
 
-__global__ void print_gpu(unsigned char* d_pkt_buf, int size)
+__global__ void print_gpu(unsigned char* d_pkt_buf)
 {
 	int i;
 	printf("[GPU]:\n");
-	for(i = 0; i < size; i++)
+	for(i = 0; i < PKT_SIZE; i++)
+	{
+		if(i != 0 && i % ONELINE == 0)
+			printf("\n");
 		printf("%02x ", d_pkt_buf[i]);
+	}
 	printf("\n");
 }
 
@@ -49,8 +53,8 @@ void copy_to_gpu(unsigned char* buf, int size)
 	unsigned char *d_pkt_buf;
 	cudaMalloc((void**)&d_pkt_buf, sizeof(unsigned char)*1500);
 	printf("____1__________copy_to_gpu____\n");
-	cudaMemcpy(d_pkt_buffer+(512*0x1000)+(0x1000*idx), buf, sizeof(unsigned char)*size, cudaMemcpyHostToDevice);
-	print_gpu<<<1,1>>>(d_pkt_buffer+(512*0x1000)+(0x1000*idx), sizeof(unsigned char)*size);
+	cudaMemcpy(dev_pkt_buf+(512*0x1000)+(0x1000*idx), buf, sizeof(unsigned char)*size, cudaMemcpyHostToDevice);
+	print_gpu<<<1,1>>>(dev_pkt_buf+(512*0x1000)+(0x1000*idx));
 	idx++;
 	if(idx == 512)
 		idx = 0;
@@ -63,10 +67,20 @@ void set_gpu_mem_for_dpdk(void)
 	size_t _pkt_buffer_size = PKT_BUF_SIZE;// 4MB, for rx,tx ring
 	size_t pkt_buffer_size = (_pkt_buffer_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
 	
-	ASSERTRT(cudaMalloc((void**)&d_pkt_buffer, pkt_buffer_size));
-	ASSERTRT(cudaMemset(d_pkt_buffer, 0, pkt_buffer_size));
+	ASSERTRT(cudaMalloc((void**)&dev_pkt_buf, pkt_buffer_size));
+	ASSERTRT(cudaMemset(dev_pkt_buf, 0, pkt_buffer_size));
 
 	START_GRN
 	printf("[Done]____GPU mem set for dpdk__\n");
 	END
 }
+
+__device__ void read_loop(void)
+{
+	while(1)
+	{
+		print_gpu<<<1,1>>>(dev_pkt_buf);
+	}
+
+}
+

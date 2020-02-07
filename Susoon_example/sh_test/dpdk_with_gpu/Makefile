@@ -1,44 +1,52 @@
+SRC_DIR := $(shell pwd)/src
+INC_DIR := $(shell pwd)/include
+LIB_DIR := $(shell pwd)/lib
+INC = -I$(shell pwd)/include
+
+
+CUDA ?= /usr/local/cuda-10.2
+CUDA_LIBPATH := -L$(CUDA)/lib64 -L$(CUDA)/lib -L/usr/lib/nvidia
+CUDA_INC := -I$(CUDA)/include
+
 include $(RTE_SDK)/mk/rte.vars.mk
 
-APP = dtest
-
-SRCS-y := dpdk.c
+OBJ_FILE := sh_handler.o dpdk.o main.o
 
 PKGCONF = pkg-config
 
 ifeq ($(shell pkg-config --exists libdpdk && echo 0),0)
 
-all: shared
-.PHONY: shared static
-shared: build/$(APP)-shared
-	ln -sf $(APP)-shared build/$(APP)
-static: build/$(APP)-static
-	ln -sf $(APP)-static build/$(APP)
-
 PC_FILE := $(shell $(PKGCONF) --path libdpdk 2>/dev/null)
 CFLAGS=-O3 $(shell $(PKGCONF) --cflags libdpdk)
 LDFLAGS_SHARED = $(shell $(PKGCONF) --libs libdpdk)
-LDFLAGS_STATIC = -Wl,-Bstatic $(shell $(PKGCONF) --static --libs libdpdk)
 
-build/$(APP)-shared: $(SRCS-y) Makefile $(PC_FILE) | build
-	gcc $(CFLAGS) $(SRCS-y) -o $@ $(LDFLAGS) $(LDFLAGS_SHARED)
+all: dpdk_gpu_test
 
-build/$(APP)-static: $(SRCS-y) Makefile $(PC_FILE) | build
-	gcc $(CFLAGS) $(SRCS-y) -o $@ $(LDFLAGS) $(LDFLAGS_STATIC)
+dpdk_gpu_test: $(OBJ_FILE)
+	g++ -o $@ $(OBJ_FILE) $(CUDA_LIBPATH) $(CUDA_INC) $(INC) $(CFLAGS) $(LDFLAGS) $(LDFLAGS_SHARED)
+	mv *.o $(LIB_DIR)
 
-build:
-	@mkdir -p $@
+sh_handler.o: $(SRC_DIR)/sh_handler.cu
+	nvcc $(CUDA_LIBPATH) $(CUDA_INC) --gpu-architecture=sm_60 --device-c $(SRC_DIR)/sh_handler.cu $(INC)
 
-.PHONY: clean
+dpdk.o: $(SRC_DIR)/dpdk.c
+	gcc $(CUDA_LIBPATH) $(CUDA_INC) $(INC) $(CFLAGS) -c $(SRC_DIR)/dpdk.c -o $@ $(LDFLAGS) $(LDFLAGS_SHARED)
+
+main.o: main.c
+	gcc $(CUDA_LIBPATH) $(CUDA_INC) $(INC) $(CFLAGS) -c main.c -o $@ $(LDFLAGS) $(LDFLAGS_SHARED)
+
 clean:
-	rm -f build/$(APP) build/$(APP)-static build/$(APP)-shared
-	    test -d build && rmdir -p build || true
+	rm $(LIB_DIR)/*.o *.o dpdk_gpu_test 
 
 else
 
 ifeq ($(RTE_SDK),)
 $(error "Please define RTE_SDK environment variable ")
 endif
+
+PC_FILE := $(shell $(PKGCONF) --path libdpdk 2>/dev/null)
+CFLAGS=-O3 $(shell $(PKGCONF) --cflags libdpdk)
+LDFLAGS_SHARED = $(shell $(PKGCONF) --libs libdpdk)
 
 # Default target, detect a build directory, by looking for a path with a .config
 RTE_TARGET ?= $(notdir $(abspath $(dir $(firstword $(wildcard $(RTE_SDK)/*/.config)))))

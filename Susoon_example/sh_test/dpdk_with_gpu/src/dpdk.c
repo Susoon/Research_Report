@@ -100,7 +100,7 @@ int launch_one_lcore(void *arg __rte_unused)
 	return 0;
 }
 
-int dpdk_handler(int argc, char **argv)
+void dpdk_handler(int argc, char **argv)
 {
 	int ret;
 	struct rte_mempool *mbuf_pool;
@@ -212,7 +212,5 @@ int dpdk_handler(int argc, char **argv)
 		//rte_delay_us_sleep(100 * 1000);
 		rte_eth_dev_close(i);
 	}
-
-	return 0;
 }
 

@@ -200,7 +200,7 @@ ck_dpdk_t ck_dpdk;
 void rte_timer_setup(void);
 static void * _timer_thread(void*);
 
-int dpdk_handler(int argc, char **argv);
+void dpdk_handler(int argc, char **argv);
 //void* dpdk_handler(void *nothing);
 int launch_one_lcore(void *arg __rte_unused);
 static void rx_loop(uint8_t lid);
