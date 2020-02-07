@@ -240,12 +240,46 @@
 ## 3.3 compile 진행 사항
 
 * 02/07 현재 진행상황
-
 * Makefile 수정했고 complie 시도중
 
-<center> 02/07 link error </center>
+### 3.4 compile warning and error
+
+<center> sh_handler.cu compile warning </center>
+
+![Alt_text](image/02.07_sh_handler.cu_warning.JPG)
+
+* sh_handler.cu 파일을 컴파일할 때 뜬 warning이다
+* gpu 내의 buffer로 활용하기 위해서 전역변수로 설정해둔 dev_pkt_buf 배열이 host function에서는 읽을 수 없다는 경고
+  * gpu에 memory를 setting해주고 data를 copy할 때 host가 사용하는 함수에 그냥 넣어버림....
+  * 수정 필요
+
+
+
+<center> dpdk.c compile warning </center>
+
+![Alt_text](image/02.07_dpdk.c_warning.JPG)
+
+* dpdk.c 파일을 compile할 때 뜬 warning이다
+* dpdk.c에서 sh_handler.cu에 있는 copy_to_gpu 함수를 불러오지 못하고 있다
+  * 내가 만든 파일끼리의 linking이 되지 않았다는 증거
+
+
+
+<center> main.c compile warning </center>
+
+![Alt_text](image/02.07_main.c_warning.JPG)
+
+* main.c 파일을 compile할 때 뜬 warning이다
+* 이 warning 역시 sh_handler.cu의 함수를 불러오지 못하면서 나온 warning이다
+  * dpdk.c의 함수는 정상적으로 불러올 수 있음을 보여준다
+  * sh_handler.cu가 cuda 파일이면서 linking에 실패한 유일한 파일임을 통해 cuda compile에 문제가 있다고 추측할 수 있다
+
+<center> dpdk_gpu_test compile error </center>
 
 ![Alt_text](image/02.07_compile_error2_link_error.JPG)
 
-* 마지막 error인 "__cudaRegisterLinkedBinary..."의 undefined reference를 제외하고는 모두 내가 만든 함수 관련 error이다.
-  * 내가 만든 함수들끼리 link는 다 된줄 알았는데 아니었다...
+* 위의 warning들을 통해 sh_handler.cu 파일의 cuda compile에 문제가 있음을 유추할 수 있다.
+* sh_handler.o 파일은 정상적으로 생성되었음을 통해 다음의 가정을 할 수 있다
+  *  compile은 linking이 가능하도록 되었으나 이를 다른 파일들과 link해줄때 cuda와 일반 c를 연결해주는 library나 command를 추가해주지 않아 문제가 발생했다
+  * compile을 할 때 cuda와 일반 C를 연결해주는 library나 command를 추가해주지 않아 object file 자체가 linking이 불가능하도록 만들어져 linking에 실패했다
+* 이 두 가정을 토대로 수정할 예정
