@@ -235,27 +235,17 @@
 
 ## 3.2 code 세부 사항
 
-* 02/06 현재 진행상황
-* rx_handler 파일을 참고해서 파일을 만듬
+* 02/07 현재 진행상황
+* Susun_example/sh_test/dpdk_with_gpu에 gpu관리하는 source 파일까지 추가함
+* Makefile 수정했고 complie 시도중
 
+<center> 02/07 compile error </center>
 
+![Alt_text](image/02.07_compile_error.JPG)
 
-![Alt_text](image/my_handler.h_02.06.JPG)
-
-* my_handler.h 파일
-* 대부분의 함수를 지우고 packet을 read하기 위한 최소함수만 남김
-* 추후에 함수가 추가될 수도 있음
-
-
-
-![Alt_text](image/sh_pin_buffer_02.06.JPG)
-
-* my_handler.cu 내의 sh_pin_buffer 함수
-* pin buffer를 cudaHostAlloc함수를 사용하여 만듬
-
-
-
-![Alt_text](image/my_handler.cu_02.06.JPG)
-
-* my_handler.cu의 나머지 코드
-* gpu에 packet을 복사하고 화면에 print하고 memory를 setting해주는 함수만 남음
+* dpdk.c를 처음 compile할때 떴었던 undefined reference error가 떴다.
+  * 이 전에는 library path 환경변수가 제대로 설정되어 있지 않아 compile되지 않았다.
+  * cuda와 dpdk library path를 재설정하는 중
+* 이 전에 뜬 error들은 link와 makefile 관련된 error였던 것으로 추정된다.(캡쳐본 확보 못함...)
+  * header file과 source file에 선언된 내용이 다르거나 makefile내의 오타로 인한 error였음
+  * 내가 만든 파일끼리는 link가 된 걸로 봐도 무방할 것 같음
