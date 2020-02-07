@@ -1,18 +1,5 @@
-#if 0
-
-#include "my_handler.h"
-#include "gdnio.h"
-#include "packet_man.h"
-#include "common.hpp"
-#include "mydrv/mydrv.h"
-#include "pkts.h"
-
-#endif
-
 #include <stdio.h>
 #include <stdlib.h>
-//#include <fstream>
-//#include <sstream>
 #include <memory.h>
 #include <cuda_runtime_api.h>
 #include <cuda.h>
