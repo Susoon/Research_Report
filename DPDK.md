@@ -235,17 +235,17 @@
 
 ## 3.2 code 세부 사항
 
-* 02/07 현재 진행상황
 * Susun_example/sh_test/dpdk_with_gpu에 gpu관리하는 source 파일까지 추가함
+
+## 3.3 compile 진행 사항
+
+* 02/07 현재 진행상황
+
 * Makefile 수정했고 complie 시도중
 
-<center> 02/07 compile error </center>
+<center> 02/07 link error </center>
 
-![Alt_text](image/02.07_compile_error.JPG)
+![Alt_text](image/02.07_compile_error2_link_error.JPG)
 
-* dpdk.c를 처음 compile할때 떴었던 undefined reference error가 떴다.
-  * 이 전에는 library path 환경변수가 제대로 설정되어 있지 않아 compile되지 않았다.
-  * cuda와 dpdk library path를 재설정하는 중
-* 이 전에 뜬 error들은 link와 makefile 관련된 error였던 것으로 추정된다.(캡쳐본 확보 못함...)
-  * header file과 source file에 선언된 내용이 다르거나 makefile내의 오타로 인한 error였음
-  * 내가 만든 파일끼리는 link가 된 걸로 봐도 무방할 것 같음
+* 마지막 error인 "__cudaRegisterLinkedBinary..."의 undefined reference를 제외하고는 모두 내가 만든 함수 관련 error이다.
+  * 내가 만든 함수들끼리 link는 다 된줄 알았는데 아니었다...
