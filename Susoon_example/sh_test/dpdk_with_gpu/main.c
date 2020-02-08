@@ -1,5 +1,4 @@
 #include "dpdk.h"
-#include "sh_handler.h"
 
 int main(int argc, char ** argv)
 {

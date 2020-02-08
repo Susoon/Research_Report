@@ -10,7 +10,7 @@ CUDA_INC := -I$(CUDA)/include
 
 include $(RTE_SDK)/mk/rte.vars.mk
 
-OBJ_FILE := sh_handler.o dpdk.o main.o
+OBJ_FILE := main.o sh_handler.o dpdk.o
 
 PKGCONF = pkg-config
 
@@ -22,7 +22,7 @@ LDFLAGS_SHARED = $(shell $(PKGCONF) --libs libdpdk)
 
 all: dpdk_gpu_test
 
-dpdk_gpu_test: $(OBJ_FILE)
+dpdk_gpu_test: sh_handler.o dpdk.o main.o
 	g++ -o $@ -pthread $(OBJ_FILE) $(CUDA_LIBPATH) $(CUDA_INC) $(INC) $(CFLAGS) $(LDFLAGS) $(LDFLAGS_SHARED) -lnuma -lcuda -lcudart -ldl
 	mv *.o $(LIB_DIR)
 

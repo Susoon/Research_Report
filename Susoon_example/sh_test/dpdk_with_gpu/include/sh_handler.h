@@ -1,3 +1,6 @@
+#ifndef __SH_HANDLER_H_
+#define __SH_HANDLER_H_
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <memory.h>
@@ -13,14 +16,14 @@
 #include <errno.h>
 #include <asm/types.h>
 
-#define ASSERT(x)				\
-	do					\
-	{					\
-		if (!(x))			\
-		{				\
+#define ASSERT(x)													\
+	do														\
+	{														\
+		if (!(x))												\
+		{													\
 			fprintf(stdout, "\033[1;31mAssertion \"%s\" failed at %s:%d\033[0m\n", #x, __FILE__, __LINE__); \
-			/*exit(EXIT_FAILURE);*/	\
-		}				\
+			/*exit(EXIT_FAILURE);*/										\
+		}													\
 	} while (0)
 
 #define ASSERTRT(stmt)					\
@@ -44,3 +47,7 @@
 int sh_pin_buffer(void);
 __global__ void print_gpu(unsigned char* d_pkt_buf);
 __device__ void read_loop(void);
+void copy_to_pinned_buffer(unsigned char * d_pkt_buf, int size);
+__global__ void print_pinned_buffer(unsigned char * d_pkt_buf);
+
+#endif
