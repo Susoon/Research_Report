@@ -239,10 +239,12 @@
 
 ## 3.3 compile 진행 사항
 
-* 02/07 현재 진행상황
+* 02/08 현재 진행상황
 * Makefile 수정했고 complie 시도중
 
-### 3.4 compile warning and error
+
+
+## 3.4 compile warning and error
 
 <center> sh_handler.cu compile warning </center>
 ![Alt_text](image/02.07_sh_handler.cu_warning.JPG)
@@ -253,7 +255,6 @@
 * 다음과 같이 코드를 수정하여 해결
 
 <center> solution of sh_handler.cu warning </center>
-
 ![Alt_text](image/02.08_sh_handler.cu_vars.JPG)
 
 ![Alt_text](image/02.08_sh_handler.cu_copy_to_pinned_buffer.JPG)
@@ -271,12 +272,13 @@
 
 
 <center> dpdk.c compile warning </center>
-
 ![Alt_text](image/02.07_dpdk.c_warning.JPG)
 
 * dpdk.c 파일을 compile할 때 뜬 warning이다
 * dpdk.c에서 sh_handler.cu에 있는 copy_to_gpu 함수를 불러오지 못하고 있다
   * 내가 만든 파일끼리의 linking이 되지 않았다는 증거
+* 해결함
+  * extern void copy_to_gpu(~~~); 를 dpdk.c에 추가해주니 해결됨
 
 
 
@@ -287,12 +289,15 @@
 * 이 warning 역시 sh_handler.cu의 함수를 불러오지 못하면서 나온 warning이다
   * dpdk.c의 함수는 정상적으로 불러올 수 있음을 보여준다
   * sh_handler.cu가 cuda 파일이면서 linking에 실패한 유일한 파일임을 통해 cuda compile에 문제가 있다고 추측할 수 있다
+  
+* 해결함
+  * extern void set_gpu_mem_for_dpdk(~~~); 를 main.c에 추가해주니 해결됨
 
 <center> dpdk_gpu_test compile error </center>
-![Alt_text](image/02.07_compile_error2_link_error.JPG)
+![Alt_text](image/02.08_compile_error.JPG)
 
-* 위의 warning들을 통해 sh_handler.cu 파일의 cuda compile에 문제가 있음을 유추할 수 있다.
-* sh_handler.o 파일은 정상적으로 생성되었음을 통해 다음의 가정을 할 수 있다
-  *  compile은 linking이 가능하도록 되었으나 이를 다른 파일들과 link해줄때 cuda와 일반 c를 연결해주는 library나 command를 추가해주지 않아 문제가 발생했다
-  * compile을 할 때 cuda와 일반 C를 연결해주는 library나 command를 추가해주지 않아 object file 자체가 linking이 불가능하도록 만들어져 linking에 실패했다
-* 이 두 가정을 토대로 수정할 예정
+* warning들은 다 제거했지만 compile error는 linking과 관련된 error가 발생
+* error 내용을 보면 main.c와 sh_handler.o가 함수를 불러오지 못해 발생한 것을 알 수 있음
+  * 각 파일들을 compile할 때는 warning도 뜨지 않았는 데 왜 error가 발생하는지 모르겠음
+  * main.c의 경우 read_loop은 \_\_global\_\_ 함수여서 extern을 안해줬는데 undefined reference error가 뜸
+    * 하지만 extern을 해줘도 뜸
