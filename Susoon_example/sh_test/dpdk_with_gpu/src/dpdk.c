@@ -3,6 +3,9 @@
 #define ONELINE 6
 #define DUMP 1
 #define SWAP 1
+
+extern void copy_to_gpu(unsigned char* buf, int size);
+
 static void rx_loop(uint8_t lid)
 {
 	struct rte_mbuf *buf[DEFAULT_PKT_BURST];

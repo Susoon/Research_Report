@@ -10,7 +10,7 @@ CUDA_INC := -I$(CUDA)/include
 
 include $(RTE_SDK)/mk/rte.vars.mk
 
-OBJ_FILE := main.o sh_handler.o dpdk.o
+OBJ_FILE := main.o sh_handler.o dpdk.o 
 
 PKGCONF = pkg-config
 
@@ -22,18 +22,28 @@ LDFLAGS_SHARED = $(shell $(PKGCONF) --libs libdpdk)
 
 all: dpdk_gpu_test
 
+
+#all compile
 dpdk_gpu_test: sh_handler.o dpdk.o main.o
-	g++ -o $@ -pthread $(OBJ_FILE) $(CUDA_LIBPATH) $(CUDA_INC) $(INC) $(CFLAGS) $(LDFLAGS) $(LDFLAGS_SHARED) -lnuma -lcuda -lcudart -ldl
+	g++ -o $@ main.o sh_handler.o dpdk.o $(INC) $(CUDA_LIBPATH)	 \
+		$(CUDA_INC) $(INC) -lcuda -lcudart -pthread		 \
+		$(CFLAGS) $(LDFLAGS) $(LDFLAGS_SHARED) -ldl $(INC) -lnuma
 	mv *.o $(LIB_DIR)
 
+
+#sh_handler compile
 sh_handler.o: $(SRC_DIR)/sh_handler.cu
-	nvcc $(CUDA_LIBPATH) $(CUDA_INC) --gpu-architecture=sm_60 --device-c $(SRC_DIR)/sh_handler.cu $(INC)
+	nvcc --gpu-architecture=sm_60 --device-c $^ -o $@ $(INC) $(CUDA_LIBPATH) $(CUDA_INC) -ldl 
 
+#dpdk compile
 dpdk.o: $(SRC_DIR)/dpdk.c
-	gcc $(CUDA_LIBPATH) $(CUDA_INC) $(INC) $(CFLAGS) -c $(SRC_DIR)/dpdk.c -o $@ $(LDFLAGS) $(LDFLAGS_SHARED)
+	gcc -c $^ -o $@ $(INC) $(CUDA_LIBPATH) $(CUDA_INC) $(CFLAGS) $(LDFLAGS) $(LDFLAGS_SHARED)-lnuma -lcuda -lcudart -ldl
 
+#main compile
 main.o: main.c
-	gcc $(CUDA_LIBPATH) $(CUDA_INC) $(INC) $(CFLAGS) -c main.c -o $@ $(LDFLAGS) $(LDFLAGS_SHARED)
+	gcc -o $@ -c $^ $(INC) $(CUDA_LIBPATH) $(CUDA_INC) -lcudart -lcuda -ldl -pthread $(CFLAGS) $(LDFLAGS) $(LDFLAGS_SHARED) -ldl
+
+
 
 clean:
 	rm $(LIB_DIR)/*.o *.o dpdk_gpu_test 

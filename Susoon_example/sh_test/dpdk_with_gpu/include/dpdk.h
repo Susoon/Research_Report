@@ -16,7 +16,7 @@
 #include <rte_ethdev.h>
 #include <rte_ether.h>
 #include "l2p.h"
-#include "sh_handler.h"
+//#include "sh_handler.h"
 
 #define NUM_MBUFS_DEFAULT 8192
 #define MBUF_CACHE_SIZE 256
@@ -28,11 +28,7 @@
 
 l2p_t *l2p;
 
-#if 1
 static struct rte_eth_conf default_port_conf = {
-#if 0 //setup for rest fields
-link_speeds : 0,
-#endif 
 #if 0// RTE_VERSION <= RTE_VERSION_NUM(18, 5, 0, 0)  
 	.rxmode = {                                    
 		.mq_mode = ETH_MQ_RX_RSS,                    
@@ -53,122 +49,17 @@ link_speeds : 0,
 	},                                             
 #else                                            
 rxmode : {       
-#if 0
-		.mq_mode = ETH_MQ_RX_NONE,
-		.split_hdr_size = 0,      
-		.max_lro_pkt_size = 100,
-#endif
 		split_hdr_size : 0,
-#if 0
-		.offloads = 0,
-		.reserved_64s = {0, 0},
-		.reserved_ptrs = {NULL, NULL}
-#endif
 #if 0//RTE_VERSION < RTE_VERSION_NUM(18, 11, 0, 0)  
 		.offloads = DEV_RX_OFFLOAD_CRC_STRIP,        
 #endif                                           
 	},                        
 txmode : {                                    
 mq_mode : ETH_MQ_TX_NONE,      
-#if 0
-		.offloads = 0,
-		.pvid = 0,
-		.reserved_64s = {0, 0},
-		.reserved_ptrs = {NULL, NULL}
-#endif
 	}, 
 #endif                       
-#if 0 //setup rest fields
-	.lpbk_mode = 0,
-	.rx_adv_conf = {
-		.rss_conf = {
-			.rss_key = NULL,
-			.rss_key_len = 0,
-			.rss_hf = 0
-		},
-		.vmdq_dcb_conf = {
-			.enable_default_pool = 8,
-			.default_pool = 0,
-			.nb_pool_maps = 0,
-			.pool_map = {
-#if 0
-				{
-					.vlan_id = 0,
-					.pools = 0
-				}
-#endif
-			},
-			.dcb_tc = { 0 }
-		},
-		.dcb_rx_conf = {
-			.nb_tcs = ETH_8_TCS,
-			.dcb_tc = { 0 }
-		},
-		.vmdq_rx_conf = {
-			.nb_queue_pools = ETH_8_POOLS,
-			.enable_default_pool = 0,
-			.default_pool = 0,
-			.enable_loop_back = 0,
-			.nb_pool_maps = 0,
-			.rx_mode = 0,
-			.pool_map = { },
-		}
-	},
-	.tx_adv_conf = {
-		.vmdq_dcb_tx_conf = {
-			.nb_queue_pools = ETH_8_POOLS,
-			.dcb_tc = { 0 }
-		},
-#if 0
-		.dcb_tx_conf = {
-			.nb_tcs = ETH_8_TCS,
-			.dcb_tc = { 0 }
-		},
-		.vmdq_tx_conf = {
-			.nb_queue_pools = ETH_8_POOLS
-		}
-#endif
-	},
-	.dcb_capability_en = 0,
-	.fdir_conf = {
-		.mode = 0,
-		.pballoc = 2,
-		.status = 0,
-		.drop_queue = 0,
-		.mask = {
-			.vlan_tci_mask = 0,
-			.ipv4_mask = {
-				.src_ip = 0,
-				.dst_ip = 0,
-				.tos = 0,
-				.ttl = 0,
-				.proto = 0
-			},
-			.ipv6_mask = {
-				.src_ip = { 0 },
-				.dst_ip = { 0 },
-				.tc = 0,
-				.proto = 0,
-				.hop_limits = 0
-			},
-			.src_port_mask = 0,
-			.dst_port_mask = 0,
-			.mac_addr_byte_mask = 0,
-			.tunnel_id_mask = 0,
-			.tunnel_type_mask = 0
-		},
-		.flex_conf = {
-			.nb_payloads = 0,
-			.nb_flexmasks = 0,
-			.flex_set = { 0 },
-			.flex_mask = { 0 }
-		}
-	}
-	//.intr_conf
-
-#endif                    
 };  
-#endif
+
 int launch_one_lcore(void *arg);
 static __inline__ void start_lcore(l2p_t *l2p, uint16_t lid)
 {

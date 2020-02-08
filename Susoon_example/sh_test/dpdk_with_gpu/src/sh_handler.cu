@@ -21,6 +21,7 @@ __device__ uint8_t tmp_pkt[60] = {\
 */
 
 /* Suhwan pinning buffer 02/06 */
+extern "C"
 int sh_pin_buffer(void)
 {
 	int ret = 0;
@@ -79,6 +80,7 @@ void set_gpu_mem_for_dpdk(void)
 
 #else
 
+extern "C"
 void copy_to_pinned_buffer(unsigned char * d_pkt_buf, int size)
 {
 	printf("___1___________copy_to_pinned_buffer___\n");
@@ -86,7 +88,7 @@ void copy_to_pinned_buffer(unsigned char * d_pkt_buf, int size)
 	printf("___2___________copy_to_pinned_buffer___\n");
 }
 
-extern "C"
+extern "C" 
 void copy_to_gpu(unsigned char* buf, int size)
 {
 	unsigned char * d_pkt_buf;
@@ -98,7 +100,7 @@ void copy_to_gpu(unsigned char* buf, int size)
 	printf("____2__________copy_to_gpu____\n");
 }
 
-extern "C"
+extern "C" 
 void set_gpu_mem_for_dpdk(void)
 {
 	size_t pkt_buffer_size = TOTAL_PKT_SIZE;

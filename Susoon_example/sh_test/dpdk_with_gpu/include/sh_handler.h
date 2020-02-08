@@ -44,10 +44,8 @@
 #define END printf("\033[0m"); 
 
 
-int sh_pin_buffer(void);
 __global__ void print_gpu(unsigned char* d_pkt_buf);
 __device__ void read_loop(void);
-void copy_to_pinned_buffer(unsigned char * d_pkt_buf, int size);
 __global__ void print_pinned_buffer(unsigned char * d_pkt_buf);
 
 #endif
