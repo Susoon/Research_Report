@@ -255,6 +255,7 @@
 * 다음과 같이 코드를 수정하여 해결
 
 <center> solution of sh_handler.cu warning </center>
+
 ![Alt_text](image/02.08_sh_handler.cu_vars.JPG)
 
 ![Alt_text](image/02.08_sh_handler.cu_copy_to_pinned_buffer.JPG)
