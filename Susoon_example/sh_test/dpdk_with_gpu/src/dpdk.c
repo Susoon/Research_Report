@@ -109,7 +109,6 @@ void dpdk_handler(int argc, char **argv)
 	struct rte_mempool *mbuf_pool;
 	uint32_t sid; // Socket id
 	int i;
-		printf("test\n");
 
 	if((l2p = l2p_create()) == NULL)
 		printf("Unable to create l2p\n");
