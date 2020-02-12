@@ -247,6 +247,8 @@
 ## 3.4 compile warning and error
 
 <center> sh_handler.cu compile warning </center>
+
+
 ![Alt_text](image/02.07_sh_handler.cu_warning.JPG)
 
 * sh_handler.cu 파일을 컴파일할 때 뜬 warning이다
@@ -254,7 +256,10 @@
   * gpu에 memory를 setting해주고 data를 copy할 때 host가 사용하는 함수에 그냥 넣어버림....
 * 다음과 같이 코드를 수정하여 해결
 
+
+
 <center> solution of sh_handler.cu warning </center>
+
 
 ![Alt_text](image/02.08_sh_handler.cu_vars.JPG)
 
@@ -273,6 +278,8 @@
 
 
 <center> dpdk.c compile warning </center>
+
+
 ![Alt_text](image/02.07_dpdk.c_warning.JPG)
 
 * dpdk.c 파일을 compile할 때 뜬 warning이다
@@ -284,6 +291,8 @@
 
 
 <center> main.c compile warning </center>
+
+
 ![Alt_text](image/02.07_main.c_warning.JPG)
 
 * main.c 파일을 compile할 때 뜬 warning이다
@@ -294,11 +303,26 @@
 * 해결함
   * extern void set_gpu_mem_for_dpdk(~~~); 를 main.c에 추가해주니 해결됨
 
+
+
 <center> dpdk_gpu_test compile error </center>
+
+
 ![Alt_text](image/02.08_compile_error.JPG)
 
 * warning들은 다 제거했지만 compile error는 linking과 관련된 error가 발생
+
 * error 내용을 보면 main.c와 sh_handler.o가 함수를 불러오지 못해 발생한 것을 알 수 있음
-  * 각 파일들을 compile할 때는 warning도 뜨지 않았는 데 왜 error가 발생하는지 모르겠음
-  * main.c의 경우 read_loop은 \_\_global\_\_ 함수여서 extern을 안해줬는데 undefined reference error가 뜸
-    * 하지만 extern을 해줘도 뜸
+  
+  * 이부분은 extern으로 해결
+  
+  
+
+* 02/12 현재상황
+* root계정에서 suhwan 계정으로 옮겨서 컴파일을 시도 중
+* pkg-config의 경로와 library의 경로가 잘못 설정되어 컴파일이 안되는 듯함
+* 실제 path를 확인해보면 제대로 설정되어있음
+* root계정에선 각 object file이 compile되지만 하나의 파일로 linking하는 데에서 에러가 발생
+* suhwan계정에선 main.o를 제외한 파일들이 compile되지 않음...
+  * suhwan 계정에서 불러오는 libdpdk.pc와 root 계정에서 불러오는 libdpdk.pc가 달라서 생기는 문제인 걸로 추정됨
+  * 하지만 어디서 불러오는지는 찾을 수 없음...
