@@ -16,7 +16,6 @@
 #include <rte_ethdev.h>
 #include <rte_ether.h>
 #include "l2p.h"
-//#include "sh_handler.h"
 
 #define NUM_MBUFS_DEFAULT 8192
 #define MBUF_CACHE_SIZE 256
@@ -93,7 +92,6 @@ void rte_timer_setup(void);
 static void * _timer_thread(void*);
 
 void dpdk_handler(int argc, char **argv);
-//void* dpdk_handler(void *nothing);
 int launch_one_lcore(void *arg __rte_unused);
 static void rx_loop(uint8_t lid);
 static void * _timer_thread(void *nothing);

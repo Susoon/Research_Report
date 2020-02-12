@@ -1,8 +1,11 @@
 #include "dpdk.h"
 
 #define ONELINE 6
-#define DUMP 1
+#define DUMP 0
 #define SWAP 1
+
+//extern void copy_to_gpu(unsigned char* buf, int size);
+
 static void rx_loop(uint8_t lid)
 {
 	struct rte_mbuf *buf[DEFAULT_PKT_BURST];
@@ -33,20 +36,18 @@ static void rx_loop(uint8_t lid)
 		*/
 		nb_rx = rte_eth_rx_burst(0, 0, buf, DEFAULT_PKT_BURST);
 		if(nb_rx > 0){
-			//printf("nb_rx: %d\n", nb_rx);
+		//printf("nb_rx: %d\n", nb_rx);
 		// [TODO] Need to modify here.
 			recv_total += nb_rx;
 			ptr = (rte_ctrlmbuf_data(buf[0]));
 #if DUMP
 			printf("pkt_dump: \n");
-			//for(i = 0; i < buf[0]->pkt_len + RTE_ETHER_CRC_LEN; i++){
-			for(i = 0; i < buf[0]->pkt_len; i++){
+			for(i = 0; i < buf[0]->pkt_len + ETHER_CRC_LEN; i++){
 				//printf("%02x ", (rte_ctrlmbuf_data(buf[0]))[i]);
 				if(i != 0 && i % ONELINE == 0)
 					printf("\n");
 				printf("%02x ", ptr[i]);
 			}
-			//copy_to_gpu(rte_ctrlmbuf_data(buf[0]), buf[0]->pkt_len + ETHER_CRC_LEN); 
 			printf("\n");
 
 #endif /* if DUMP */
@@ -74,7 +75,7 @@ static void rx_loop(uint8_t lid)
 
 #if DUMP
 			printf("\n[After] pkt_dump: \n");
-			for(i = 0; i < buf[0]->pkt_len + RTE_ETHER_CRC_LEN; i++){
+			for(i = 0; i < buf[0]->pkt_len + ETHER_CRC_LEN; i++){
 				//printf("%02x ", (rte_ctrlmbuf_data(buf[0]))[i]);
 				if(i != 0 && i % ONELINE == 0)
 					printf("\n");
@@ -82,7 +83,7 @@ static void rx_loop(uint8_t lid)
 			}
 			printf("\n");
 #endif
-			//copy_to_gpu(rte_ctrlmbuf_data(buf[0]), buf[0]->pkt_len + RTE_ETHER_CRC_LEN); 
+			//copy_to_gpu(rte_ctrlmbuf_data(buf[0]), buf[0]->pkt_len + ETHER_CRC_LEN); 
 		}
 
 		ret = rte_eth_tx_burst(0, 0, buf, nb_rx);
@@ -107,8 +108,6 @@ int main(int argc, char **argv)
 	struct rte_mempool *mbuf_pool;
 	uint32_t sid; // Socket id
 	int i;
-		printf("test\n");
-
 	if((l2p = l2p_create()) == NULL)
 		printf("Unable to create l2p\n");
 
@@ -119,8 +118,8 @@ int main(int argc, char **argv)
 		rte_exit(EXIT_FAILURE, "Error with EAL initialization.\n");
 
 	/* Check if at least one port is available. */
-	if(rte_eth_dev_count_total() == 0)
-		rte_exit(EXIT_FAILURE, "Error: No port available.\n");
+  if(rte_eth_dev_count() == 0)
+	 	rte_exit(EXIT_FAILURE, "Error: No port available.\n");
 	/* Configure the Ethernet device */
 	/* Params,
 	 * (1) port id
@@ -176,7 +175,7 @@ int main(int argc, char **argv)
 	rte_eth_dev_set_rx_queue_stats_mapping(0, 0, 1);
 
 	/* Display the port MAC address. */
-	struct rte_ether_addr addr;
+	struct ether_addr addr;
 	rte_eth_macaddr_get(0, &addr);
 	printf("\n[CKJUNG]  Port %u: MAC=%02" PRIx8 ":%02" PRIx8 ":%02" PRIx8":%02" PRIx8 ":%02" PRIx8 ":%02" PRIx8 ", RXdesc/queue=%d\n", 0, addr.addr_bytes[0], addr.addr_bytes[1], addr.addr_bytes[2],addr.addr_bytes[3], addr.addr_bytes[4], addr.addr_bytes[5],RX_DESC_DEFAULT);
 
@@ -214,6 +213,6 @@ int main(int argc, char **argv)
 		rte_eth_dev_close(i);
 	}
 
-	return 0;
+  return 0;
 }
 

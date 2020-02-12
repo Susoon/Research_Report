@@ -45,7 +45,7 @@
 
 
 __global__ void print_gpu(unsigned char* d_pkt_buf);
-__device__ void read_loop(void);
-__global__ void print_pinned_buffer(unsigned char * d_pkt_buf);
+__global__ void print_pinned_buffer(unsigned char* d_pkt_buf);
+__global__ void read_loop(unsigned char* d_pkt_buf);
 
 #endif

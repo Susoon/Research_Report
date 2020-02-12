@@ -1,5 +1,3 @@
-include $(RTE_SDK)/mk/rte.vars.mk
-
 APP = dtest
 
 SRCS-y := dpdk.c
@@ -21,8 +19,7 @@ LDFLAGS_SHARED = $(shell $(PKGCONF) --libs libdpdk)
 LDFLAGS_STATIC = -Wl,-Bstatic $(shell $(PKGCONF) --static --libs libdpdk)
 
 build/$(APP)-shared: $(SRCS-y) Makefile $(PC_FILE) | build
-	gcc $(CFLAGS) $(SRCS-y) -o $@ $(LDFLAGS) $(LDFLAGS_SHARED)
-
+	gcc $(CFLAGS) $(SRCS-y) -o $@ $(LDFLAGS) $(LDFLAGS_SHARED) -ldl -pthread -lnuma
 build/$(APP)-static: $(SRCS-y) Makefile $(PC_FILE) | build
 	gcc $(CFLAGS) $(SRCS-y) -o $@ $(LDFLAGS) $(LDFLAGS_STATIC)
 
@@ -45,6 +42,7 @@ RTE_TARGET ?= $(notdir $(abspath $(dir $(firstword $(wildcard $(RTE_SDK)/*/.conf
 
 
 include $(RTE_SDK)/mk/rte.app.mk
+include $(RTE_SDK)/mk/rte.vars.mk
 
 include $(RTE_SDK)/mk/rte.subdir.mk
 
