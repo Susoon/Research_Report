@@ -19,7 +19,6 @@ __device__ uint8_t tmp_pkt[60] = {\
 
 /* Suhwan pinning buffer 02/06 */
 
-extern "C"
 int sh_pin_buffer(void)
 {
 	int ret = 0;
@@ -40,7 +39,6 @@ __global__ void print_gpu(unsigned char* d_pkt_buf)
 	int i;
 	printf("[GPU]:\n");
 	for(i = 0; i < TOTAL_PKT_SIZE; i++)
-	for(i = 0; i < 0; i++)
 	{
 		if(i != 0 && i % ONELINE == 0)
 			printf("\n");
@@ -49,7 +47,6 @@ __global__ void print_gpu(unsigned char* d_pkt_buf)
 	printf("\n");
 }
 
-extern "C"
 void copy_to_pinned_buffer(unsigned char * d_pkt_buf, int size)
 {
 	printf("___1___________copy_to_pinned_buffer___\n");
@@ -65,23 +62,27 @@ void copy_to_gpu(unsigned char* buf, int size)
 	printf("____1__________copy_to_gpu____\n");
 	cudaMemcpy(d_pkt_buf, buf, sizeof(unsigned char)*size, cudaMemcpyHostToDevice);
 	print_gpu<<<1,1>>>(d_pkt_buf);
+  copy_to_pinned_buffer(d_pkt_buf, size);
 	printf("____2__________copy_to_gpu____\n");
 }
 
-extern "C" 
+#if 0
 void set_gpu_mem_for_dpdk(void)
 {
 	size_t pkt_buffer_size = TOTAL_PKT_SIZE;
+  unsigned char * d_pkt_buf;
+	ASSERTRT(cudaMalloc((void**)&d_pkt_buf, pkt_buffer_size));
+  ASSERTRT(cudaMemset(d_pkt_buf, 0, pkt_buffer_size));
 
-	ASSERTRT(cudaMalloc((void**)&pinned_pkt_buf, pkt_buffer_size));
-  ASSERTRT(cudaMemset(pinned_pkt_buf, 0, pkt_buffer_size));
-
+  pinned_pkt_buf = d_pkt_buf;
+  printf("pinned_pkt_buf = %p\n", pinned_pkt_buf);
 	START_GRN
 	printf("[Done]____GPU mem set for dpdk____\n");
 	END
 }
+#endif
 
-__global__ void print_pinned_buffer(unsigned char* d_pkt_buf)
+__device__ void print_pinned_buffer(unsigned char* d_pkt_buf)
 {
 	int i;
 	printf("[Pinned Buffer]:\n");
@@ -96,9 +97,9 @@ __global__ void print_pinned_buffer(unsigned char* d_pkt_buf)
 
 __global__ void read_loop(unsigned char* d_pkt_buf)
 {
-	while(2)
+	while(1)
 	{
-		print_pinned_buffer<<<1,1>>>(d_pkt_buf);
+		print_pinned_buffer(d_pkt_buf);
 	}
 
 }
@@ -107,7 +108,7 @@ extern "C"
 void read_handler(void)
 {
 
-  set_gpu_mem_for_dpdk();
-
+  //set_gpu_mem_for_dpdk();
+  sh_pin_buffer();
   read_loop<<<1,1>>>(pinned_pkt_buf);
 }

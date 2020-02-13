@@ -43,9 +43,7 @@
 #define START_BLU printf("\033[1;34m");
 #define END printf("\033[0m"); 
 
-
-__global__ void print_gpu(unsigned char* d_pkt_buf);
-__global__ void print_pinned_buffer(unsigned char* d_pkt_buf);
-__global__ void read_loop(unsigned char* d_pkt_buf);
+__device__ void print_pinned_buffer(unsigned char* d_pkt_buf);
+//__global__ void read_loop(unsigned char* d_pkt_buf);
 
 #endif
