@@ -16,6 +16,7 @@
 #include <rte_ethdev.h>
 #include <rte_ether.h>
 #include "l2p.h"
+#include "sh_handler.h"
 
 #define NUM_MBUFS_DEFAULT 8192
 #define MBUF_CACHE_SIZE 256

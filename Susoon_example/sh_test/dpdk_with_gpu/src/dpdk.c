@@ -4,8 +4,6 @@
 #define DUMP 0
 #define SWAP 1
 
-extern void copy_to_gpu(unsigned char* buf, int size);
-
 static void rx_loop(uint8_t lid)
 {
 	struct rte_mbuf *buf[DEFAULT_PKT_BURST];
@@ -83,7 +81,7 @@ static void rx_loop(uint8_t lid)
 			}
 			printf("\n");
 #endif
-			copy_to_gpu(rte_ctrlmbuf_data(buf[0]), buf[0]->pkt_len + ETHER_CRC_LEN); 
+			//copy_to_gpu(rte_ctrlmbuf_data(buf[0]), buf[0]->pkt_len + ETHER_CRC_LEN); 
 		}
 
 		ret = rte_eth_tx_burst(0, 0, buf, nb_rx);
@@ -118,7 +116,7 @@ void dpdk_handler(int argc, char **argv)
 		rte_exit(EXIT_FAILURE, "Error with EAL initialization.\n");
 
 	/* Check if at least one port is available. */
-  if(rte_eth_dev_count() == 0)
+  if(rte_eth_dev_count_total() == 0)
 	 	rte_exit(EXIT_FAILURE, "Error: No port available.\n");
 	/* Configure the Ethernet device */
 	/* Params,
