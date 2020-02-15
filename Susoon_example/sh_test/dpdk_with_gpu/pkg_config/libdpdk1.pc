@@ -1,4 +1,4 @@
-prefix=/home/suhwan/work/dpdk-stable-18.11.2
+prefix=/home/susoon/work/dpdk-stable-18.11.2
 libdir=${prefix}/lib
 includedir=${prefix}/x86_64-native-linuxapp-gcc/include
 
