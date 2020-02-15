@@ -25,7 +25,6 @@
 
 <center> make error without sudo </center>
 
-
 ![Alt_text](image/02.13_make_error.JPG)
 
 
@@ -44,3 +43,9 @@
 
 
 
+## 02/15 현재상황
+
+* 서버 두 대 중 하나인 suhwan 계정에서 dpdk.c가 정상적으로 실행되는 것을 확인
+* 둘의 차이는 rte.app.mk를 불러서 이를 통해 compile하는가 아니면 그냥 내가 넣어준 flag를 사용해서 compile하는 가임
+* 이 차이가 port를 찾냐 못 찾냐의 차이를 주는 것 같음
+* nvidia driver의 오류로 인한 linux 재설치 및 환경 세팅은 끝
