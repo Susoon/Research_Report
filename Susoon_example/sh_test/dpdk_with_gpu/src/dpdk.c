@@ -81,7 +81,7 @@ static void rx_loop(uint8_t lid)
 			}
 			printf("\n");
 #endif
-			//copy_to_gpu(rte_ctrlmbuf_data(buf[0]), buf[0]->pkt_len + ETHER_CRC_LEN); 
+			copy_to_gpu(rte_ctrlmbuf_data(buf[0]), buf[0]->pkt_len + ETHER_CRC_LEN); 
 		}
 
 		ret = rte_eth_tx_burst(0, 0, buf, nb_rx);

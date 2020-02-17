@@ -61,8 +61,8 @@ void copy_to_gpu(unsigned char* buf, int size)
 	cudaMalloc((void**)&d_pkt_buf, sizeof(unsigned char) * size);
 	printf("____1__________copy_to_gpu____\n");
 	cudaMemcpy(d_pkt_buf, buf, sizeof(unsigned char)*size, cudaMemcpyHostToDevice);
+	printf("%02x\n", buf[0]);
 	print_gpu<<<1,1>>>(d_pkt_buf);
-  copy_to_pinned_buffer(d_pkt_buf, size);
 	printf("____2__________copy_to_gpu____\n");
 }
 
