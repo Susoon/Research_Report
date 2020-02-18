@@ -3,6 +3,13 @@
 #define ONELINE 6
 #define DUMP 0
 #define SWAP 1
+#define ONE_SEC (1000 * 1000 * 1000)
+
+uint64_t monotonic_time() {
+	struct timespec timespec;
+	clock_gettime(CLOCK_MONOTONIC, &timespec);
+	return timespec.tv_sec * 1000 * 1000 * 1000 + timespec.tv_nsec;
+}
 
 static void rx_loop(uint8_t lid)
 {
@@ -15,6 +22,9 @@ static void rx_loop(uint8_t lid)
 	unsigned char* tmp_mac;
 	unsigned char* tmp_ip;
 	unsigned char* tmp_port;
+	
+	uint64_t start;
+	uint64_t end;
 
 	tmp_mac = (unsigned char*)malloc(6);
 	tmp_ip = (unsigned char*)malloc(4);
@@ -23,6 +33,8 @@ static void rx_loop(uint8_t lid)
 
 
 	start_lcore(l2p, lid);
+	
+	start = monotonic_time();
 
 	while(lcore_is_running(l2p, lid)){
 
@@ -38,6 +50,13 @@ static void rx_loop(uint8_t lid)
 		// [TODO] Need to modify here.
 			recv_total += nb_rx;
 			ptr = (rte_ctrlmbuf_data(buf[0]));
+			end = monotonic_time();
+			if(end - start >= ONE_SEC)
+			{	
+				printf("recv_total = %ld\n", recv_total);
+				start = monotonic_time();
+				recv_total = 0;
+			}
 #if DUMP
 			printf("pkt_dump: \n");
 			for(i = 0; i < buf[0]->pkt_len + ETHER_CRC_LEN; i++){

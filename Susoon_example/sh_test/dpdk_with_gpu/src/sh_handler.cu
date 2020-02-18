@@ -1,6 +1,6 @@
 #include "sh_handler.h"
 
-#define DPDK_RING_SIZE 4 * 1024 * 1024 //4MB
+#define DPDK_RING_SIZE 2 * 1024 * 1024 //2MB
 #define PKT_SIZE 64
 #define RTE_ETH_CRC_LEN 4
 #define TOTAL_PKT_SIZE (PKT_SIZE + RTE_ETH_CRC_LEN)
@@ -8,6 +8,7 @@
 #define ONELINE 6
 
 unsigned char * pinned_pkt_buf;
+static int idx;
 
 /*
 __device__ uint8_t tmp_pkt[60] = {\
@@ -18,6 +19,18 @@ __device__ uint8_t tmp_pkt[60] = {\
 */
 
 /* Suhwan pinning buffer 02/06 */
+
+void Dump_fct(unsigned char * buf, int size)
+{
+	printf("%dth pkt_dump: \n", idx);
+	for(int i = 0; i < TOTAL_PKT_SIZE; i++){
+		if(i != 0 && i % ONELINE == 0)
+			printf("\n");
+		printf("%02x ", buf[i]);
+		}
+	printf("\n");
+}
+
 
 int sh_pin_buffer(void)
 {
@@ -54,6 +67,7 @@ void copy_to_pinned_buffer(unsigned char * d_pkt_buf, int size)
 	printf("___2___________copy_to_pinned_buffer___\n");
 }
 
+#if 0
 extern "C" 
 void copy_to_gpu(unsigned char* buf, int size)
 {
@@ -65,22 +79,35 @@ void copy_to_gpu(unsigned char* buf, int size)
 	//printf("____2__________copy_to_gpu____\n");
 	cudaFree(d_pkt_buf);
 }
+#endif
 
-#if 0
+extern "C" 
+void copy_to_gpu(unsigned char* buf, int size)
+{
+	//printf("____1__________copy_to_gpu____\n");
+	cudaMemcpy(pinned_pkt_buf + (idx * 0x1000), buf, sizeof(unsigned char)*size, cudaMemcpyHostToDevice);
+	//Dump_fct(buf, size);	
+	print_gpu<<<1,1>>>(pinned_pkt_buf + (idx * 0x1000));
+	idx++;
+	if(idx == 512)
+		idx = 0;
+	//printf("____2__________copy_to_gpu____\n");
+}
+
+extern "C"
 void set_gpu_mem_for_dpdk(void)
 {
-	size_t pkt_buffer_size = TOTAL_PKT_SIZE;
-  unsigned char * d_pkt_buf;
-	ASSERTRT(cudaMalloc((void**)&d_pkt_buf, pkt_buffer_size));
-  ASSERTRT(cudaMemset(d_pkt_buf, 0, pkt_buffer_size));
+	size_t pkt_buffer_size = DPDK_RING_SIZE;
+	idx = 0;
+	ASSERTRT(cudaMalloc((void**)&pinned_pkt_buf, pkt_buffer_size));
+  	ASSERTRT(cudaMemset(pinned_pkt_buf, 0, pkt_buffer_size));
 
-  pinned_pkt_buf = d_pkt_buf;
-  printf("pinned_pkt_buf = %p\n", pinned_pkt_buf);
+	//pinned_pkt_buf = d_pkt_buf;
+	//printf("pinned_pkt_buf = %p\n", pinned_pkt_buf);
 	START_GRN
 	printf("[Done]____GPU mem set for dpdk____\n");
 	END
 }
-#endif
 
 __device__ void print_pinned_buffer(unsigned char* d_pkt_buf)
 {
