@@ -111,7 +111,7 @@ main.o: main.c
 
 
 clean:
-	rm $(LIB_DIR)/*.o *.o dpdk_gpu_test 
+	rm $(LIB_DIR)/*.o dpdk_gpu_test 
 
 else
 
