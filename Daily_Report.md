@@ -9,6 +9,8 @@
 ![Alt_text](image/02.18_dpdk_gpu_test_nvidia_smi.JPG)
 
 * 하지만 여전히 화면에 출력은 안됨
+* \+ cudaFree를 안해줘서 memory 사용량이 계속 늘어서 cudaFree를 써서 memory 누수를 막아줌
+  * 현재는 22MB만 사용
 
 
 
