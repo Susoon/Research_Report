@@ -37,6 +37,9 @@
   * 수정 gpu 함수 호출 안해도 3Mpps정도임
   * cudaMalloc과 cudaMemcpy까지 호출 안하고 test해보니 6Mpps가 나옴
   * print_gpu는 실행이 안되는 듯 하고, cudaMalloc과 cudaMemcpy는 호출을 하면 속도가 떨어지는 것을보니 실행이 되는 듯함
+* print_gpu는 실행이 안됨
+* dpdk는 정상적으로 packet을 받아들이고 있고, copy_to_gpu가 gpu에 cudaMalloc으로 buffer 자리를 파주고 있지만 print_gpu만 실행이 안됨
+* \_\_global\_\_함수만 실행이  안 되는 것으로 추측됨
 
 
 
