@@ -33,7 +33,8 @@
 * 원래 rx가 6~7Mpps정도였으나 현재는 3Mpps정도를 보임
 * 함수 호출과 출력으로 인한 overhead로 인해서 속도가 감소한 거 같음 
   * 수정 gpu 함수 호출 안해도 3Mpps정도임
-  * 원인 파악 필요
+  * cudaMalloc과 cudaMemcpy까지 호출 안하고 test해보니 6Mpps가 나옴
+  * print_gpu는 실행이 안되는 듯 하고, cudaMalloc과 cudaMemcpy는 호출을 하면 속도가 떨어지는 것을보니 실행이 되는 듯함
 
 
 
