@@ -63,6 +63,7 @@ void copy_to_gpu(unsigned char* buf, int size)
 	cudaMemcpy(d_pkt_buf, buf, sizeof(unsigned char)*size, cudaMemcpyHostToDevice);
 	print_gpu<<<1,1>>>(d_pkt_buf);
 	//printf("____2__________copy_to_gpu____\n");
+	cudaFree(d_pkt_buf);
 }
 
 #if 0
