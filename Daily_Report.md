@@ -6,7 +6,6 @@
 * 아래의 사진을 보면 gpu 상에서 dpdk_gpu_test라는 내가 만든 파일이 실행중임
 
 <center> gpu proccess </center>
-
 ![Alt_text](image/02.18_dpdk_gpu_test_nvidia_smi.JPG)
 
 * 하지만 여전히 화면에 출력은 안됨
@@ -15,7 +14,6 @@
 
 
 <center> dpdk excution </center>
-
 ![Alt_text](image/02.18_dpdk_excution.JPG)
 
 * gpu 함수를 통한 print를 제외한 다른 printf는 주석처리 한 상태
@@ -28,13 +26,14 @@
 
 
 <center> rx and tx rate with call gpu function </center>
-
 ![Alt_text](image/02.18_dpdk_tx_rx_rate.JPG)
 
 
 
 * 원래 rx가 6~7Mpps정도였으나 현재는 3Mpps정도를 보임
 * 함수 호출과 출력으로 인한 overhead로 인해서 속도가 감소한 거 같음 
+  * 수정 gpu 함수 호출 안해도 3Mpps정도임
+  * 원인 파악 필요
 
 
 
@@ -91,7 +90,6 @@
 
 
 <center> make error without sudo </center>
-
 ![Alt_text](image/02.13_make_error.JPG)
 
 
