@@ -2,15 +2,19 @@
 
 ## 02/19 현재상황
 
-* 여러 테스트를 진행해봄
+* test가 가능한 상태로 완성
+* 64byte의 packet 기준으로 512개(총 32kB)가 들어갈 수 있게 batch의 size를 정해주면 최대 속도(13.8Mpps)가 나옴
+* 1514byte의 packet 기준으로 448개(총 662kB 정도)가 들어갈 수 있게 batch의 size를 정해주면 최대 속도(0.8Mpps)가 나옴
 
+
+
+* 여러 테스트를 진행해봄
 * 첫번째, print_gpu가 실행되지 않은 이유를 d_pkt_buf라는 shared memory에 계속 packet을 copy해 넣어서 print_gpu가 scheduler에게 밀려 실행되지 않은 것으로 추정하고 pinned_pkt_buf라는 전역변수에 2MB를 할당해 ring처럼 index에 따라 다른 자리에 packet을 copy해 넣어줘 shared memory 문제를 해결하려고 해봄
   * 하지만 여전히 실행되지 않음
 
 
 
 <center> ring code </center>
-
 
 
 ![Alt_text](image/02.19_ring_code.JPG)
@@ -22,8 +26,12 @@
   * copy해 넣은 부분을 다시 0으로 만들어서 다음 index의 test때 확인 가능하도록 해줌 
   * 잘 실행 됨
 
-<center> ring check code test </center>
 
+
+* \+ 문제 해결 
+  * compile할때 sm의 버젼을 30으로 주니 정상적으로 실행됨
+
+<center> ring check code test </center>
 
 
 ![Alt_text](image/02.19_handler_ring_test.JPG)
@@ -31,7 +39,6 @@
 * 위의 결과물의 의미는 298번째에 packet이 잘 copy되어서 초록색으로 a0가 출력됨
 
 <center> ring check code </center>
-
 
 
 ![Alt_text](image/02.19_ring_check_code.JPG)
@@ -45,7 +52,6 @@
 <center> rx and tx rate </center>
 
 
-
 ![Alt_text](image/02.19_rx_and_tx_rate.JPG)
 
 * 이유는 알 수 없으나 지난번 test때에 비해 1Mpps정도 오름
@@ -53,7 +59,6 @@
 
 
 <center> rx rate without sending </center>
-
 
 
 ![Alt_text](image/02.19_rx_rate_without_swap.JPG)
@@ -66,7 +71,6 @@
 <center> tx rate without cuda function </center>
 
 
-
 ![Alt_text](image/02.19_rx_and_tx_rate_without_cuda_fct.JPG)
 
 * cuda function을 주석처리했을 때 tx rate
@@ -74,7 +78,6 @@
 
 
 <center> rx rate without cuda function </center>
-
 
 
 ![Alt_text](image/02.19_rx_rate_without_cuda_fct.JPG)
@@ -86,7 +89,6 @@
 
 
 <center> rx rate without send and cuda function </center>
-
 
 
 ![Alt_text](image/02.19_rx_rate_without_swap_and_cuda_fct.JPG)
