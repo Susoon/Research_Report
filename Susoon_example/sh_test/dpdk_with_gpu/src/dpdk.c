@@ -103,7 +103,9 @@ static void rx_loop(uint8_t lid)
 			copy_to_gpu(rte_ctrlmbuf_data(buf[0]), buf[0]->pkt_len + ETHER_CRC_LEN); 
 		}
 
+#if SWAP
 		ret = rte_eth_tx_burst(0, 0, buf, nb_rx);
+#endif
 
 		for(i = 0; i < nb_rx; i++)
 			rte_pktmbuf_free(buf[i]);
