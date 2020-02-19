@@ -1,0 +1,20 @@
+CUDA ?= /usr/local/cuda-10.2
+CUDA_LIBPATH := -L$(CUDA)/lib64 -L$(CUDA)/lib -L/usr/lib64/nvidia -L/usr/lib/nvidia
+CUDA_INC := -I$(CUDA)/include 
+
+SMV = 35
+
+all: check
+
+check: thand.o test.o
+	g++ -o $@ -m64 -pthread $^ $(CUDA_LIBPATH) $(CUDA_INC) -L/usr/local/cuda/lib64 -lcudart -lcuda
+
+thand.o: thand.cu
+	nvcc --gpu-architecture=sm_$(SMV) -c $^
+
+test.o: test.c
+	gcc -o $@ -c $^ $(CUDA_LIBPATH) $(CUDA_INC)
+# -lcudart -lcuda -lcudadevrt -ldl -pthread 
+
+clean:
+	rm *.o check

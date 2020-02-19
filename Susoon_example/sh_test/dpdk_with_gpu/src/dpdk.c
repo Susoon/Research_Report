@@ -2,14 +2,9 @@
 
 #define ONELINE 6
 #define DUMP 0
-#define SWAP 1
-#define ONE_SEC (1000 * 1000 * 1000)
+#define SWAP 0
 
-uint64_t monotonic_time() {
-	struct timespec timespec;
-	clock_gettime(CLOCK_MONOTONIC, &timespec);
-	return timespec.tv_sec * 1000 * 1000 * 1000 + timespec.tv_nsec;
-}
+#define CPU_TIME 0
 
 static void rx_loop(uint8_t lid)
 {
@@ -22,14 +17,18 @@ static void rx_loop(uint8_t lid)
 	unsigned char* tmp_mac;
 	unsigned char* tmp_ip;
 	unsigned char* tmp_port;
-	
+
+	unsigned char* batch_buf;
+	unsigned int b_idx = 0;	
+
 	uint64_t start;
 	uint64_t end;
 
 	tmp_mac = (unsigned char*)malloc(6);
 	tmp_ip = (unsigned char*)malloc(4);
 	tmp_port = (unsigned char*)malloc(2);
-
+	
+	batch_buf = (unsigned char*)malloc(sizeof(unsigned char) * BATCH_SIZE);
 
 
 	start_lcore(l2p, lid);
@@ -48,8 +47,9 @@ static void rx_loop(uint8_t lid)
 		if(nb_rx > 0){
 		//printf("nb_rx: %d\n", nb_rx);
 		// [TODO] Need to modify here.
-			recv_total += nb_rx;
 			ptr = (rte_ctrlmbuf_data(buf[0]));
+#if CPU_TIME
+			recv_total += nb_rx;
 			end = monotonic_time();
 			if(end - start >= ONE_SEC)
 			{	
@@ -57,7 +57,13 @@ static void rx_loop(uint8_t lid)
 				start = monotonic_time();
 				recv_total = 0;
 			}
+#endif
+			memcpy(batch_buf + (b_idx * PKT_SIZE), ptr, sizeof(unsigned char) * PKT_SIZE);
+			b_idx++;
+			if(b_idx == BATCH_NUM)
+				b_idx = 0;
 #if DUMP
+			START_GRN
 			printf("pkt_dump: \n");
 			for(i = 0; i < buf[0]->pkt_len + ETHER_CRC_LEN; i++){
 				//printf("%02x ", (rte_ctrlmbuf_data(buf[0]))[i]);
@@ -65,7 +71,8 @@ static void rx_loop(uint8_t lid)
 					printf("\n");
 				printf("%02x ", ptr[i]);
 			}
-			printf("\n");
+			printf("\n\n");
+			END
 
 #endif /* if DUMP */
 
@@ -90,7 +97,9 @@ static void rx_loop(uint8_t lid)
 			}
 #endif /* if SWAP */
 
+			copy_to_gpu(batch_buf, nb_rx); 
 #if DUMP
+			START_YLW
 			printf("\n[After] pkt_dump: \n");
 			for(i = 0; i < buf[0]->pkt_len + ETHER_CRC_LEN; i++){
 				//printf("%02x ", (rte_ctrlmbuf_data(buf[0]))[i]);
@@ -98,9 +107,9 @@ static void rx_loop(uint8_t lid)
 					printf("\n");
 				printf("%02x ", ptr[i]);
 			}
-			printf("\n");
+			printf("\n\n");
+			END
 #endif
-			copy_to_gpu(rte_ctrlmbuf_data(buf[0]), buf[0]->pkt_len + ETHER_CRC_LEN); 
 		}
 
 #if SWAP

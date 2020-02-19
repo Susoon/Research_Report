@@ -3,7 +3,6 @@
 
 #include <stdio.h>
 #include <unistd.h>
-#include <time.h>
 #include <sys/time.h>
 
 #include <rte_memory.h>
