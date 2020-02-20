@@ -1,5 +1,52 @@
 # Daily Report for DPDK
 
+## 02/20 현재상황
+
+* gpu에서 시간을 재면서 packet 수를 check한 게 아니라서 다시 코드를 짬
+
+
+
+<center> gpu monitoring loop </center>
+
+
+
+![Alt_text](image/02.20_gpu_monitoring_loop.JPG)
+
+* gpu에서 packet buffer를 polling 하는 loop
+* 원래 의도는 copy_to_gpu를 통해 dpdk.c가 flag를 true로 바꿔주면 packet이 들어왔다는 신호로 인식하고 packet을 manipulate하면서 rx_pkt_cnt를 count해주려했음
+
+
+
+<center> getter for rx packet count and tx packet buffer </center>
+
+
+
+![Alt_text](image/02.20_getter_fct.JPG)
+
+* dpdk.c 에서 위의 함수를 1초마다 불러서 gpu_monitoring_loop가 rx_pkt_cnt와 tx_pkt_buf를 채워주면 그 값을 가져가고 0으로 초기화해주는 역할을 하는 함수
+
+
+
+* 현재 위의 두 함수 모두 제 기능을 못하는 상태
+  * 원인 1)
+    *  gpu_monitoring_loop가 무한루프임
+    * 이 때문에 copy_to_gpu나 get_rx_cnt, get_tx_buf 같은 gpu의 resource를 필요로 하는 함수들이 무한루프에 밀려 기능을 못함(cudaErrorLaunchTimeout을 리턴함)
+    * 그래서 gpu memory에 packet이 올라가지 않으니 gpu_monitoring_loop도 일을 안함
+    * 위의 내용들이 반복됨
+  * 원인 2)
+    * dpdk.c에서 tx_pkt_buf를 받아 tx_buf라는 rte_mbuf 구조체 포인터 배열에 copy해 넣고 이를 transmitt함
+    * 그 이유는 rx와 tx packet 모두 하나의 변수에 저장되면 rx가 batch를 하는 동안 tx가 packet을 덮어씌워버림
+    * 이 때문에 또 다른 변수를 선언하여 copy하는 것을 택함
+    * 이때 rte_mbuf 구조체에 tx_pkt_buf를 copy해 넣어야하는데 구조체의 field를 대략적으로라도 알아야함
+
+* 위의 원인들때문에 현재 test가 불가함
+* rte_mbuf는 구조체의 field만 보면 간단히 해결 가능 할 듯
+* persistent loop를 고쳐야함
+
+
+
+
+
 ## 02/19 현재상황
 
 * test가 가능한 상태로 완성
@@ -15,7 +62,6 @@
 
 
 <center> ring code </center>
-
 
 ![Alt_text](image/02.19_ring_code.JPG)
 
@@ -33,13 +79,11 @@
 
 <center> ring check code test </center>
 
-
 ![Alt_text](image/02.19_handler_ring_test.JPG)
 
 * 위의 결과물의 의미는 298번째에 packet이 잘 copy되어서 초록색으로 a0가 출력됨
 
 <center> ring check code </center>
-
 
 ![Alt_text](image/02.19_ring_check_code.JPG)
 
@@ -51,7 +95,6 @@
 
 <center> rx and tx rate </center>
 
-
 ![Alt_text](image/02.19_rx_and_tx_rate.JPG)
 
 * 이유는 알 수 없으나 지난번 test때에 비해 1Mpps정도 오름
@@ -59,7 +102,6 @@
 
 
 <center> rx rate without sending </center>
-
 
 ![Alt_text](image/02.19_rx_rate_without_swap.JPG)
 
@@ -70,7 +112,6 @@
 
 <center> tx rate without cuda function </center>
 
-
 ![Alt_text](image/02.19_rx_and_tx_rate_without_cuda_fct.JPG)
 
 * cuda function을 주석처리했을 때 tx rate
@@ -78,7 +119,6 @@
 
 
 <center> rx rate without cuda function </center>
-
 
 ![Alt_text](image/02.19_rx_rate_without_cuda_fct.JPG)
 
@@ -89,7 +129,6 @@
 
 
 <center> rx rate without send and cuda function </center>
-
 
 ![Alt_text](image/02.19_rx_rate_without_swap_and_cuda_fct.JPG)
 
