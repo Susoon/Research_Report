@@ -3,22 +3,24 @@
 #define ONELINE 6
 #define DUMP 0
 #define SWAP 0
-
-#define CPU_TIME 0
+#define SEND 0
 
 static void rx_loop(uint8_t lid)
 {
 	struct rte_mbuf *buf[DEFAULT_PKT_BURST];
+	struct rte_mbuf *tx_buf[BATCH_SIZE];
 	uint16_t nb_rx;
 	int ret;
 	unsigned int i, j;
 	uint64_t recv_total = 0;
 	unsigned char* ptr;
+	unsigned char* tx_ptr;
 	unsigned char* tmp_mac;
 	unsigned char* tmp_ip;
 	unsigned char* tmp_port;
 
-	unsigned char* batch_buf;
+	unsigned char* rx_batch_buf;
+	unsigned char* tx_batch_buf;
 	unsigned int b_idx = 0;	
 
 	uint64_t start;
@@ -28,7 +30,8 @@ static void rx_loop(uint8_t lid)
 	tmp_ip = (unsigned char*)malloc(4);
 	tmp_port = (unsigned char*)malloc(2);
 	
-	batch_buf = (unsigned char*)malloc(sizeof(unsigned char) * BATCH_SIZE);
+	rx_batch_buf = (unsigned char*)malloc(sizeof(unsigned char) * BATCH_SIZE);
+	tx_batch_buf = (unsigned char*)malloc(sizeof(unsigned char) * BATCH_SIZE);
 
 
 	start_lcore(l2p, lid);
@@ -45,23 +48,26 @@ static void rx_loop(uint8_t lid)
 		*/
 		nb_rx = rte_eth_rx_burst(0, 0, buf, DEFAULT_PKT_BURST);
 		if(nb_rx > 0){
-		//printf("nb_rx: %d\n", nb_rx);
+			//printf("nb_rx: %d\n", nb_rx);
 		// [TODO] Need to modify here.
 			ptr = (rte_ctrlmbuf_data(buf[0]));
-#if CPU_TIME
-			recv_total += nb_rx;
+
+			memcpy(rx_batch_buf + (b_idx * PKT_SIZE), ptr, sizeof(unsigned char) * PKT_SIZE);
+			b_idx += nb_rx;
+			if(b_idx >= BATCH_NUM - D_NUM_64)
+			{
+				copy_to_gpu(rx_batch_buf, b_idx); 
+				b_idx = 0;
+			}
+			//recv_total += nb_rx;
 			end = monotonic_time();
 			if(end - start >= ONE_SEC)
-			{	
+			{
+				recv_total = get_rx_cnt();
 				printf("recv_total = %ld\n", recv_total);
 				start = monotonic_time();
 				recv_total = 0;
 			}
-#endif
-			memcpy(batch_buf + (b_idx * PKT_SIZE), ptr, sizeof(unsigned char) * PKT_SIZE);
-			b_idx++;
-			if(b_idx == BATCH_NUM)
-				b_idx = 0;
 #if DUMP
 			START_GRN
 			printf("pkt_dump: \n");
@@ -97,7 +103,6 @@ static void rx_loop(uint8_t lid)
 			}
 #endif /* if SWAP */
 
-			copy_to_gpu(batch_buf, nb_rx); 
 #if DUMP
 			START_YLW
 			printf("\n[After] pkt_dump: \n");
@@ -112,8 +117,10 @@ static void rx_loop(uint8_t lid)
 #endif
 		}
 
-#if SWAP
-		ret = rte_eth_tx_burst(0, 0, buf, nb_rx);
+#if SEND
+		get_tx_buf(tx_batch_buf);
+		memcpy(tx_batch_buf, (rte_ctrlmbuf_data(tx_buf[0])), BATCH_SIZE);
+		ret = rte_eth_tx_burst(0, 0, tx_buf, nb_rx);
 #endif
 
 		for(i = 0; i < nb_rx; i++)
