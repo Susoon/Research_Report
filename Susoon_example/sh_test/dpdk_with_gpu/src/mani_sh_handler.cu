@@ -5,7 +5,7 @@
 #define TOTAL_PKT_SIZE (PKT_SIZE + RTE_ETH_CRC_LEN)
 #define ONELINE 6
 
-#define MANI 0
+#define MANI 1
 
 unsigned char * pinned_pkt_buf;
 unsigned char * tmp;

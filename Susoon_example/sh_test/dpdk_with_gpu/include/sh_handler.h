@@ -12,6 +12,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
+#include <sys/time.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <asm/types.h>
@@ -44,9 +45,10 @@
 #define START_BLU printf("\033[1;34m");
 #define END printf("\033[0m"); 
 
-#define PKT_SIZE 1514
-#define BATCH_SIZE (1514 * 450)
+#define PKT_SIZE 64
+#define BATCH_SIZE (64 * 512)
 #define BATCH_NUM (BATCH_SIZE / PKT_SIZE)
+#define D_NUM_64 32
 
 #define ONE_SEC 1000 * 1000 * 1000
 
