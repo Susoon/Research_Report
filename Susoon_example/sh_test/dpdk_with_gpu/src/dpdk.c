@@ -24,7 +24,7 @@ static void rx_loop(uint8_t lid)
 	unsigned int b_idx = 0;	
 
 	uint64_t start;
-	uint64_t end;
+	uint64_t end = 0;
 
 	tmp_mac = (unsigned char*)malloc(6);
 	tmp_ip = (unsigned char*)malloc(4);
@@ -52,12 +52,13 @@ static void rx_loop(uint8_t lid)
 		// [TODO] Need to modify here.
 			ptr = (rte_ctrlmbuf_data(buf[0]));
 
-			memcpy(rx_batch_buf + (b_idx * PKT_SIZE), ptr, sizeof(unsigned char) * PKT_SIZE);
+			memcpy(rx_batch_buf + (b_idx * PKT_SIZE), ptr, sizeof(unsigned char) * (PKT_SIZE * nb_rx));
 			b_idx += nb_rx;
 			if(b_idx >= BATCH_NUM - D_NUM_64)
 			{
 				copy_to_gpu(rx_batch_buf, b_idx); 
 				b_idx = 0;
+				memset(rx_batch_buf, 0, BATCH_SIZE);
 			}
 			//recv_total += nb_rx;
 			end = monotonic_time();
