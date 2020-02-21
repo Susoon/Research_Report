@@ -1,5 +1,28 @@
 # Daily Report for DPDK
 
+## 02/21 현재상황
+
+* gpu에서 gpu_monitoring_loop을 돌리면 다른 gpu코드가 작동을 못함
+* synch 문제인 거 같음
+
+
+
+<center> gpu monitoring loop </center>
+
+![Alt_text](image/02.21_gpu_monitoring_loop.JPG)
+
+* code를 위의 사진처럼 수정함
+* #if 0으로 수정해 놓은 부분은 loop를 뺐을때 작동을 어떻게 하는지 보기 위함
+* 찬규형의 monitoring loop을 참고함
+* 두번째 #if 0 밑에 if(rx_pkt_buf[mem_index] != 0)부분이 packet buffer의 변화를 확인하는 부분
+* 각 thread가 buffer에서 맡은 부분을 확인하고 밑의 atomicAdd로 packet 수를 count함
+* 이를 dpdk.c가 받아감
+* dpdk.c에서 thread를 하나 따로 파서 이를 확인하는 loop를 돌게 해야할 거 같음
+
+
+
+
+
 ## 02/20 현재상황
 
 * gpu에서 시간을 재면서 packet 수를 check한 게 아니라서 다시 코드를 짬
@@ -7,7 +30,6 @@
 
 
 <center> gpu monitoring loop </center>
-
 
 
 ![Alt_text](image/02.20_gpu_monitoring_loop.JPG)
@@ -18,7 +40,6 @@
 
 
 <center> getter for rx packet count and tx packet buffer </center>
-
 
 
 ![Alt_text](image/02.20_getter_fct.JPG)
@@ -62,7 +83,6 @@
 
 
 <center> ring code </center>
-
 ![Alt_text](image/02.19_ring_code.JPG)
 
 
@@ -78,13 +98,11 @@
   * compile할때 sm의 버젼을 30으로 주니 정상적으로 실행됨
 
 <center> ring check code test </center>
-
 ![Alt_text](image/02.19_handler_ring_test.JPG)
 
 * 위의 결과물의 의미는 298번째에 packet이 잘 copy되어서 초록색으로 a0가 출력됨
 
 <center> ring check code </center>
-
 ![Alt_text](image/02.19_ring_check_code.JPG)
 
 
@@ -94,7 +112,6 @@
 
 
 <center> rx and tx rate </center>
-
 ![Alt_text](image/02.19_rx_and_tx_rate.JPG)
 
 * 이유는 알 수 없으나 지난번 test때에 비해 1Mpps정도 오름
@@ -102,7 +119,6 @@
 
 
 <center> rx rate without sending </center>
-
 ![Alt_text](image/02.19_rx_rate_without_swap.JPG)
 
 * swap과 send  없이 실행해도 같은 Mpps를 보임
@@ -111,7 +127,6 @@
 
 
 <center> tx rate without cuda function </center>
-
 ![Alt_text](image/02.19_rx_and_tx_rate_without_cuda_fct.JPG)
 
 * cuda function을 주석처리했을 때 tx rate
@@ -119,7 +134,6 @@
 
 
 <center> rx rate without cuda function </center>
-
 ![Alt_text](image/02.19_rx_rate_without_cuda_fct.JPG)
 
 * recv_total로 직접 rx rate만 확인해보니 12.8Mpps로 보낸 packet수와 얼추 비슷함
@@ -129,7 +143,6 @@
 
 
 <center> rx rate without send and cuda function </center>
-
 ![Alt_text](image/02.19_rx_rate_without_swap_and_cuda_fct.JPG)
 
 * send와 cuda function을 모두 뺀 상태의 rx rate
