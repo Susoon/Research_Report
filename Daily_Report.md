@@ -1,5 +1,49 @@
 # Daily Report for DPDK
 
+## 02/22 현재상황
+
+* 여전히 gpu_monitoring_loop 때문에 다른 gpu코드가 작동을 못함
+* 그래서 test를 위한 코드를 따로 짜서 확인해봄
+
+
+
+<center> thand.cu file </center>
+
+
+
+![Alt_text](image/02.22_thand.JPG)
+
+![Alt_text](image/02.22_thand2.JPG)
+
+* thand.cu 파일의 코드 전문
+* dpdk나 다른 기능을 빼고 gpu에서의 infinite loop와 loop내의 atomicAdd를 통한 값 변화, cpu에서 이 변한 값을 가져와 출력하는 infinite loop만 넣은 상태
+* pthread로 multithread를 돌려봤지만 제대로 실행되지  않음
+
+
+
+<center> execution </center>
+
+![Alt_text](image/02.22_test_gpu_infinite_loop_test.JPG)
+
+* 이런 형태로 count 값이 전혀 전달받지 못함
+* cpu에서 값을 받지 못해 계속 0만 출력
+* synch문제로 cudaMemcpy가 실행되지 않는 듯함
+
+
+
+<center> dpdk_gpu_test execution </center>
+
+![Alt_test](image/02.22_gpu_infinite_loop_test.JPG)
+
+* dpdk_gpu_test 파일을 실행시켜 나온 결과
+* 5번째까지는 packet을 gpu에 넣기 전이라 0으로 memcpy되지만 6번째에 84180992라는 값은 이전까지 count된 rx packet 수가 그 전까지 cpu에게 전달이 안 되다가 한번에 전달되어 출력된 수로 추측됨
+* 이 말은 저때까지는 copy_to_gpu 내의 memcpy와 get_rx_cnt의 memcpy가 제대로 실행이 되며 gpu_monitoring_loop내의 loop도 제대로 실행이 되었다는 뜻
+* 그 이후로는 30초 정도 멈춰있다가 cudaMemcpyLaunchTimeout이 발생
+* gpu에 과부하가 걸리는 건지 잘 모르겠음
+* packet 전송 속도를 0.001%로 해서 초당 200개 미만의 packet을 보내면 조금 더 오랫동안(20~30번 정도?) packet을 count하다가 같은 증상을 보임
+
+
+
 ## 02/21 현재상황
 
 * gpu에서 gpu_monitoring_loop을 돌리면 다른 gpu코드가 작동을 못함
@@ -8,7 +52,6 @@
 
 
 <center> gpu monitoring loop </center>
-
 ![Alt_text](image/02.21_gpu_monitoring_loop.JPG)
 
 * code를 위의 사진처럼 수정함
@@ -31,7 +74,6 @@
 
 <center> gpu monitoring loop </center>
 
-
 ![Alt_text](image/02.20_gpu_monitoring_loop.JPG)
 
 * gpu에서 packet buffer를 polling 하는 loop
@@ -40,7 +82,6 @@
 
 
 <center> getter for rx packet count and tx packet buffer </center>
-
 
 ![Alt_text](image/02.20_getter_fct.JPG)
 
