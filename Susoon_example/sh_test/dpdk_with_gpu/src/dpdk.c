@@ -4,6 +4,31 @@
 #define DUMP 0
 #define SWAP 0
 #define SEND 0
+#define RX_LOOP_CNT 0
+#define PTHREAD_CNT 1
+
+void *cpu_monitoring_loop(void *data)
+{
+	uint64_t start;
+	uint64_t end;
+
+	int rx_pkt_cnt = 1;
+	int prev_cnt = 0;
+
+	start = monotonic_time();
+	
+	while(1)
+	{
+		end = monotonic_time();
+		if(end - start >= ONE_SEC) // && prev_cnt != rx_pkt_cnt)
+		{
+			rx_pkt_cnt = get_rx_cnt();
+			prev_cnt = rx_pkt_cnt;
+			printf("rx_pkt_cnt = %d\n", rx_pkt_cnt);
+			start = end;
+		}
+	}
+}
 
 static void rx_loop(uint8_t lid)
 {
@@ -62,6 +87,7 @@ static void rx_loop(uint8_t lid)
 			}
 			//recv_total += nb_rx;
 			end = monotonic_time();
+#if RX_LOOP_CNT
 			if(end - start >= ONE_SEC)
 			{
 				recv_total = get_rx_cnt();
@@ -69,6 +95,8 @@ static void rx_loop(uint8_t lid)
 				start = monotonic_time();
 				recv_total = 0;
 			}
+#endif
+
 #if DUMP
 			START_GRN
 			printf("pkt_dump: \n");
@@ -144,6 +172,12 @@ void dpdk_handler(int argc, char **argv)
 	struct rte_mempool *mbuf_pool;
 	uint32_t sid; // Socket id
 	int i;
+
+	pthread_t thread;
+	int thread_id;
+	
+	thread_id = pthread_create(&thread, NULL, cpu_monitoring_loop, NULL); 
+
 	if((l2p = l2p_create()) == NULL)
 		printf("Unable to create l2p\n");
 

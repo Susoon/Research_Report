@@ -21,11 +21,11 @@ void check_error(cudaError_t err)
 	if(err == cudaSuccess)
 	{
 		count++;
-		printf("%dth success!!!!\n", count);
+//		printf("%dth success!!!!\n", count);
 	}
 	else
 	{
-		printf("%s!!!!!!\n", cudaGetErrorName(err));
+//		printf("%s!!!!!!\n", cudaGetErrorName(err));
 	}
 }
 
@@ -85,7 +85,7 @@ uint64_t monotonic_time() {
 extern "C"
 void copy_to_gpu(unsigned char* buf, int size)
 {
-	printf("rx_pkt_buf copy\n");
+	//printf("rx_pkt_buf copy\n");
 	check_error(cudaMemcpy(rx_pkt_buf + (idx * BATCH_SIZE), buf, sizeof(unsigned char)* PKT_SIZE * size, cudaMemcpyHostToDevice));
 
 //	printf("size copy\n");
@@ -129,14 +129,15 @@ void set_gpu_mem_for_dpdk(void)
 extern "C"
 int get_rx_cnt(void)
 {
-	int rx_cur_pkt = 7777;
-//	printf("rx_cur_pkt copy\n");
+	int rx_cur_pkt = tx_idx;
+	printf("rx_cur_pkt copy\n");
 	printf("Before memcpy, rx_cur_pkt = %d\n", rx_cur_pkt);
-	check_error(cudaMemcpy(&rx_cur_pkt, rx_pkt_cnt, sizeof(int), cudaMemcpyDeviceToHost));
+	ASSERTRT(cudaMemcpy(&rx_cur_pkt, rx_pkt_cnt, sizeof(int), cudaMemcpyDeviceToHost));
 	printf("After memcpy, rx_cur_pkt = %d\n", rx_cur_pkt);
 
 //	printf("rx_pkt_cnt memset\n");
 	check_error(cudaMemset(rx_pkt_cnt, 0, sizeof(int)));	
+	tx_idx++;
 
 	return rx_cur_pkt;
 }
@@ -155,17 +156,12 @@ void get_tx_buf(unsigned char* tx_buf)
 
 __global__ void gpu_monitoring_loop(unsigned char * rx_pkt_buf, unsigned char * tx_pkt_buf, int * rx_pkt_cnt, int * batch_size)
 {
-	int i = 0;
 	int mem_index = BATCH_SIZE * threadIdx.x;
 
 	__syncthreads();
-	if(threadIdx.x == 0)
-		printf("hello in GPU\n");
-#if 0
+#if 1
 	while(true)
 	{
-	if(threadIdx.x == 0)
-		printf("hello in GPU\n");
 #if 0
 		__syncthreads();
 		if(rx_pkt_buf[mem_index] != 0)
@@ -176,6 +172,7 @@ __global__ void gpu_monitoring_loop(unsigned char * rx_pkt_buf, unsigned char * 
 			__syncthreads();
 			atomicAdd(rx_pkt_cnt, BATCH_SIZE);
 
+			//printf("in the loop rx_pkt_cnt = %d\n", *rx_pkt_cnt);
 			//mani_pkt_gpu(rx_pkt_buf + (i * PKT_SIZE));
 			//memset(rx_pkt_buf + (i * PKT_SIZE), 0, PKT_SIZE); 		
 					
@@ -189,11 +186,7 @@ __global__ void gpu_monitoring_loop(unsigned char * rx_pkt_buf, unsigned char * 
 extern "C"
 void gpu_monitor(void)
 {
-	printf("GPU_Monitoring_________________________________!!!!!!\n");
 	cudaStream_t stream;
-	cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
-	//gpu_monitoring_loop<<<1, RING_BATCH_NUM, 0, stream>>>(rx_pkt_buf, tx_pkt_buf, rx_pkt_cnt, batch_size);
-	gpu_monitoring_loop<<<1, RING_BATCH_NUM>>>(rx_pkt_buf, tx_pkt_buf, rx_pkt_cnt, batch_size);
-	cudaDeviceSynchronize();
-	cudaStreamDestroy(stream);
+	ASSERTRT(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
+	gpu_monitoring_loop<<<1, RING_BATCH_NUM, 0, stream>>>(rx_pkt_buf, tx_pkt_buf, rx_pkt_cnt, batch_size);
 }

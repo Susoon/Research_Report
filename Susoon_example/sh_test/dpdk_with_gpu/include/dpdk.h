@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/time.h>
+#include <pthread.h>
 
 #include <rte_memory.h>
 #include <rte_common.h>

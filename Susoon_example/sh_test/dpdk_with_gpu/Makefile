@@ -86,7 +86,8 @@ dpdk_gpu_test: sh_handler.o dpdk.o main.o
 
 #sh_handler compile
 sh_handler.o: $(SRC_DIR)/sh_handler.cu
-	nvcc --gpu-architecture=sm_$(SMV) -c $^ $(INC) 
+	nvcc -arch=compute_$(SMV) -c $^ $(INC) 
+	#nvcc --gpu-architecture=sm_$(SMV) -c $^ $(INC) 
 
 #dpdk compile
 $(APP): $(SRC_DIR)/dpdk.c
