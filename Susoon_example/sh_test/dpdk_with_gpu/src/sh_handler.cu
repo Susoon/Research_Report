@@ -171,7 +171,7 @@ __global__ void gpu_monitor(unsigned char * rx_pkt_buf, unsigned char * tx_pkt_b
 		rx_pkt_buf[mem_index] = 0;
 
 		__syncthreads();
-		atomicAdd(rx_pkt_cnt, BATCH_SIZE);
+		atomicAdd(rx_pkt_cnt, *batch_size);
 
 		//printf("in the loop rx_pkt_cnt = %d\n", *rx_pkt_cnt);
 		//mani_pkt_gpu(rx_pkt_buf + (i * PKT_SIZE));
@@ -190,6 +190,8 @@ void gpu_monitor_loop(void)
 	while(true)
 	{
 		gpu_monitor<<<1, RING_BATCH_NUM, 0, stream>>>(rx_pkt_buf, tx_pkt_buf, rx_pkt_cnt, batch_size);
+		cudaDeviceSynchronize();
+
 	}
 }
 
