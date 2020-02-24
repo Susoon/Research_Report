@@ -14,23 +14,36 @@ void *cpu_monitoring_loop(void *data)
 	uint64_t end;
 
 	int rx_pkt_cnt = 1;
-	int prev_cnt = 0;
 
 	start = monotonic_time();
 	
 	while(1)
 	{
 		end = monotonic_time();
-		if(end - start >= ONE_SEC) // && prev_cnt != rx_pkt_cnt)
+		if(end - start >= ONE_SEC)
 		{
 			rx_pkt_cnt = get_rx_cnt();
-			prev_cnt = rx_pkt_cnt;
 			printf("rx_pkt_cnt = %d\n", rx_pkt_cnt);
 			start = end;
 		}
 	}
 }
 #endif
+
+static void print_pkt(unsigned char * ptr)
+{
+		START_GRN
+		printf("batch_ pkt_dump: \n");
+		for(int i = 0; i < BATCH_SIZE; i++){
+			if(i != 0 && i % ONELINE == 0)
+				printf("\n");
+			if(i != 0 && i % PKT_SIZE == 0)
+				printf("\n\n");
+			printf("%02x ", ptr[i]);
+		}
+		printf("\n\n");
+		END
+}
 
 static void rx_loop(uint8_t lid)
 {
@@ -50,8 +63,8 @@ static void rx_loop(uint8_t lid)
 	unsigned char* tx_batch_buf;
 	unsigned int b_idx = 0;	
 
-	uint64_t start;
-	uint64_t end = 0;
+	int start;
+	int end = 0;
 
 	tmp_mac = (unsigned char*)malloc(6);
 	tmp_ip = (unsigned char*)malloc(4);
@@ -83,6 +96,7 @@ static void rx_loop(uint8_t lid)
 			b_idx += nb_rx;
 			if(b_idx >= BATCH_NUM)
 			{
+				//print_pkt(rx_batch_buf);
 				copy_to_gpu(rx_batch_buf, b_idx); 
 				b_idx = 0;
 				memset(rx_batch_buf, 0, BATCH_SIZE);
@@ -90,11 +104,12 @@ static void rx_loop(uint8_t lid)
 			//recv_total += nb_rx;
 			end = monotonic_time();
 #if RX_LOOP_CNT
-			if(end - start >= ONE_SEC)
+				//printf("Before If end = %u, start = %u, end - start = %u\n", end, start, end - start);
+			if(end - start > ONE_SEC)
 			{
 				recv_total = get_rx_cnt();
 				printf("recv_total = %ld\n", recv_total);
-				start = monotonic_time();
+				start = end;
 				recv_total = 0;
 			}
 #endif
