@@ -1,11 +1,12 @@
 #include "sh_handler.h"
 
-#define RING_BATCH_NUM 8
+#define RING_BATCH_NUM 512
 #define DPDK_RING_SIZE (BATCH_SIZE * RING_BATCH_NUM)
 #define RTE_ETH_CRC_LEN 5
 #define TOTAL_PKT_SIZE (PKT_SIZE + RTE_ETH_CRC_LEN)
 #define ONELINE 6
 #define DUMP 0
+#define TX 0
 
 unsigned char * rx_pkt_buf;
 unsigned char * tx_pkt_buf;
@@ -93,6 +94,7 @@ void copy_to_gpu(unsigned char* buf, int size)
 
 //	printf("size copy\n");
 	check_error(cudaMemcpy(batch_size, &size, sizeof(int), cudaMemcpyHostToDevice));
+//	printf("batch size = %d\n", size);
 
 	idx++;
 	if(idx == RING_BATCH_NUM)
@@ -171,13 +173,12 @@ __global__ void gpu_monitor(unsigned char * rx_pkt_buf, unsigned char * tx_pkt_b
 		rx_pkt_buf[mem_index] = 0;
 
 		__syncthreads();
-		atomicAdd(rx_pkt_cnt, *batch_size);
-
-		//printf("in the loop rx_pkt_cnt = %d\n", *rx_pkt_cnt);
-		//mani_pkt_gpu(rx_pkt_buf + (i * PKT_SIZE));
-		//memset(rx_pkt_buf + (i * PKT_SIZE), 0, PKT_SIZE); 		
+		atomicAdd(rx_pkt_cnt, BATCH_NUM);
+#if TX
+		mani_pkt_gpu(rx_pkt_buf + mem_index);
 				
-		//memcpy(tx_pkt_buf, rx_pkt_buf, PKT_SIZE);
+		memcpy(tx_pkt_buf + mem_index, rx_pkt_buf + mem_index, BATCH_SIZE);
+#endif
 	}
 #endif
 }
@@ -191,7 +192,6 @@ void gpu_monitor_loop(void)
 	{
 		gpu_monitor<<<1, RING_BATCH_NUM, 0, stream>>>(rx_pkt_buf, tx_pkt_buf, rx_pkt_cnt, batch_size);
 		cudaDeviceSynchronize();
-
 	}
 }
 

@@ -81,7 +81,7 @@ static void rx_loop(uint8_t lid)
 
 			memcpy(rx_batch_buf + (b_idx * PKT_SIZE), ptr, sizeof(unsigned char) * (PKT_SIZE * nb_rx));
 			b_idx += nb_rx;
-			if(b_idx >= BATCH_NUM - D_NUM_64)
+			if(b_idx >= BATCH_NUM)
 			{
 				copy_to_gpu(rx_batch_buf, b_idx); 
 				b_idx = 0;
