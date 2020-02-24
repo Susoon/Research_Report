@@ -4,9 +4,10 @@
 #define DUMP 0
 #define SWAP 0
 #define SEND 0
-#define RX_LOOP_CNT 0
-#define PTHREAD_CNT 1
+#define RX_LOOP_CNT 1
+#define PTHREAD_CNT 0
 
+#if PTHREAD_CNT
 void *cpu_monitoring_loop(void *data)
 {
 	uint64_t start;
@@ -29,6 +30,7 @@ void *cpu_monitoring_loop(void *data)
 		}
 	}
 }
+#endif
 
 static void rx_loop(uint8_t lid)
 {
@@ -175,8 +177,10 @@ void dpdk_handler(int argc, char **argv)
 
 	pthread_t thread;
 	int thread_id;
-	
+
+#if PTHREAD_CNT	
 	thread_id = pthread_create(&thread, NULL, cpu_monitoring_loop, NULL); 
+#endif
 
 	if((l2p = l2p_create()) == NULL)
 		printf("Unable to create l2p\n");

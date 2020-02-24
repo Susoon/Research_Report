@@ -2,7 +2,7 @@
 
 void * monitor(void * data)
 {
-	gpu_monitor();
+	gpu_monitor_loop();
 }
 
 int main(int argc, char ** argv)

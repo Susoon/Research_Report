@@ -14,6 +14,9 @@ int * rx_pkt_cnt;
 int tx_idx;
 int * batch_size;
 
+int leastPriority;
+int greatestPriority;
+
 static int count = 0;
 
 void check_error(cudaError_t err)
@@ -121,6 +124,8 @@ void set_gpu_mem_for_dpdk(void)
 	ASSERTRT(cudaMalloc((void**)&batch_size, sizeof(int)));
   	ASSERTRT(cudaMemset(batch_size, 0, sizeof(int)));
 
+	cudaDeviceGetStreamPriorityRange(&leastPriority, &greatestPriority);
+
 	START_GRN
 	printf("[Done]____GPU mem set for dpdk____\n");
 	END
@@ -154,39 +159,37 @@ void get_tx_buf(unsigned char* tx_buf)
 		tx_idx = 0;
 }
 
-__global__ void gpu_monitoring_loop(unsigned char * rx_pkt_buf, unsigned char * tx_pkt_buf, int * rx_pkt_cnt, int * batch_size)
+__global__ void gpu_monitor(unsigned char * rx_pkt_buf, unsigned char * tx_pkt_buf, int * rx_pkt_cnt, int * batch_size)
 {
 	int mem_index = BATCH_SIZE * threadIdx.x;
 
-	__syncthreads();
 #if 1
-	while(true)
+	__syncthreads();
+	if(rx_pkt_buf[mem_index] != 0)
 	{
-#if 0
 		__syncthreads();
-		if(rx_pkt_buf[mem_index] != 0)
-		{
-			__syncthreads();
-			rx_pkt_buf[mem_index] = 0;
+		rx_pkt_buf[mem_index] = 0;
 
-			__syncthreads();
-			atomicAdd(rx_pkt_cnt, BATCH_SIZE);
+		__syncthreads();
+		atomicAdd(rx_pkt_cnt, BATCH_SIZE);
 
-			//printf("in the loop rx_pkt_cnt = %d\n", *rx_pkt_cnt);
-			//mani_pkt_gpu(rx_pkt_buf + (i * PKT_SIZE));
-			//memset(rx_pkt_buf + (i * PKT_SIZE), 0, PKT_SIZE); 		
-					
-			//memcpy(tx_pkt_buf, rx_pkt_buf, PKT_SIZE);
-		}
-#endif
+		//printf("in the loop rx_pkt_cnt = %d\n", *rx_pkt_cnt);
+		//mani_pkt_gpu(rx_pkt_buf + (i * PKT_SIZE));
+		//memset(rx_pkt_buf + (i * PKT_SIZE), 0, PKT_SIZE); 		
+				
+		//memcpy(tx_pkt_buf, rx_pkt_buf, PKT_SIZE);
 	}
 #endif
 }
 
 extern "C"
-void gpu_monitor(void)
+void gpu_monitor_loop(void)
 {
 	cudaStream_t stream;
 	ASSERTRT(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
-	gpu_monitoring_loop<<<1, RING_BATCH_NUM, 0, stream>>>(rx_pkt_buf, tx_pkt_buf, rx_pkt_cnt, batch_size);
+	while(true)
+	{
+		gpu_monitor<<<1, RING_BATCH_NUM, 0, stream>>>(rx_pkt_buf, tx_pkt_buf, rx_pkt_cnt, batch_size);
+	}
 }
+
