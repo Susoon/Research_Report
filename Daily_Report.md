@@ -51,7 +51,6 @@
 
 
 <center> execution result </center>
-
 ![Alt_text](image/02.24_pps.JPG)
 
 * 13.8Mpps로 send에서 보내준 만큼 나옴
@@ -65,7 +64,6 @@
 
 
 <center> buf type conversion </center>
-
 ![Alt_text](image/02.24_dpdk_ptr.JPG)
 
 * buf는 structure 배열이고 ptr은 unsigned char 배열인데, 첫번째 줄은 buf의 packet data만 뽑아서 ptr에 대입해주는 명령이다
@@ -76,7 +74,6 @@
 
 
 <center> copy result </center>
-
 ![Alt_text](image/02.24_copy_error.JPG)
 
 * 두번째 packet자리가 다 0임을 확인할 수 있다
@@ -98,13 +95,11 @@
 
 
 <center> LARGE case without any explicit type conversion </center>
-
 ![Alt_text](image/02.24_type_conversion_LARGE.JPG)
 
 
 
 <center> MID case without any explicit type conversion </center>
-
 ![Alt_text](image/02.24_type_conversion_MID.JPG)
 
 
@@ -119,19 +114,16 @@
 
 
 <center> LARGE case with explicit type conversion to int </center>
-
 ![Alt_text](image/02.24_type_conversion_LARGE_int.JPG)
 
 
 
 <center> MID case with explicit type conversion to int</center>
-
 ![Alt_text](image/02.24_type_conversion_MID_int.JPG)
 
 
 
 <center> SMALL case with explicit type conversion to int</center>
-
 ![Alt_text](image/02.24_type_conversion_SMALL_int.JPG)
 
 * num64를 int로 type conversion해서 나온 결과이다
@@ -141,19 +133,16 @@
 
 
 <center> LARGE case with explicit type conversion to uint64_t</center>
-
 ![Alt_text](image/02.24_type_conversion_LARGE_64.JPG)
 
 
 
 <center> MID case with explicit type conversion to uint64_t</center>
-
 ![Alt_text](image/02.24_type_conversion_MID_64.JPG)
 
 
 
 <center> SMALL case with explicit type conversion to uint64_t</center>
-
 ![Alt_text](image/02.24_type_conversion_SMALL_64.JPG)
 
 * num을 uint64_t로 type conversion해서 나온 결과이다
@@ -163,19 +152,16 @@
 
 
 <center> LARGE case with inequality</center>
-
 ![Alt_text](image/02.24_type_conversion_LARGE_ineq.JPG)
 
 
 
 <center> MID case with inequality</center>
-
 ![Alt_text](image/02.24_type_conversion_MID_ineq.JPG)
 
 
 
 <center> SMALL case with inequality</center>
-
 ![Alt_text](image/02.24_type_conversion_SMALL_ineq.JPG)
 
 * 대소비교 test를 진행한 결과이다
@@ -185,13 +171,53 @@
 * 뺄셈을 test한 결과로는 implicit type conversion은 uint64_t로 된다는 것을 알 수 있다
 * 대소비교 test를 진행한 결과로는 int 범위를 넘어가는 값을 대소비교 하게되면 true, false가 잘못된 값이 나올 수 있다는 것이다.
 
+---
+
+### memcpy 수정 후
 
 
 
+<center> dump in cpu </center>
+
+![Alt_text](image/02.24_copy_success_in_cpu.JPG)
 
 
 
+<center> copy in gpu </center>
 
+![Alt_text](image/02.24_copy_success_in_gpu.JPG)
+
+* gpu와 cpu에서 모두 제대로 packet이 copy 되었음을 알 수 있다
+
+
+
+---
+
+### packet size별 pps 확인
+
+
+
+* packet size별로 최대 pps가 나오는 최대 batch size를 찾는 test를 진행하고 있다
+* 그런데 최대 size로 키워도 속도가 떨어지지 않는다
+* 최대 packet size인 1514B로 1514개를 batch로 받아 실행해보았다
+
+
+
+<center> Packet size : 1514B, Batch size : 1514 pps </center>
+
+![Alt_text](image/02.24_1514B_1514.JPG)
+
+<center> gpu status </center>
+
+![Alt_text](image/02.24_1514B_1514_gpu_status.JPG)
+
+
+
+* GPU memory를 2GB정도 사용하면서 check를 진행하는데 속도가 정상적으로 나왔다
+  * send(pkt-gen) : 8.1Mpps, receive(dpdk) : 8.1Mpps
+* copy가 정상적으로 되고 있음에도 속도가 너무 잘 나온다
+* copy가 진짜 정상적으로 진행되고 있는지 확인이 필요함
+  * packet 받은걸 fprintf로 어딘가에 저장해서, gpu에서 copy한 packet들과 비교하는 코드를 짜서 packet 받고 비교해봐야할듯
 
 
 
