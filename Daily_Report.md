@@ -15,7 +15,7 @@
 
 ---
 
-### 수정 전
+### pps가 낮게 나오는 것 수정 전
 
 
 
@@ -30,19 +30,168 @@
 
 ---
 
-### 수정 후
+### pps가 낮게 나오는 것 수정 후 & if문 condition 수정 전
 
 
 
 <center> gpu test success </center>
-
 ![Alt_text](image/02.24_gpu_test_success.JPG)
 
+* macro를 잘못 넣어줘서 생긴 문제여서 macro를 알맞게 넣어줌
 * send하는 쪽에서 pps가 12.9Mpps 정도 나옴
 * 보내는 만큼 거의 다 받음
 * 7번째를 보면 가끔씩 1/3정도로 떨어지는 때가 있음
 * 5번에 한번씩 저렇게 떨어짐
 * 저게 copy에 대한 overhead인 부분인 거 같음
+
+---
+
+### if문 condition 수정 후 & memcpy 수정 전
+
+
+
+<center> execution result </center>
+
+![Alt_text](image/02.24_pps.JPG)
+
+* 13.8Mpps로 send에서 보내준 만큼 나옴
+* 원인은 uint64_t인 start와 end의 차가 int인 macro ONE_SEC와 비교되다보니 type conversion을 하는 과정에서 문제가 발생한 것이었음
+  * 이와 관련된 test는 다음 장에
+  * 수정 후 해결
+* copy_to_gpu가 제대로 실행 된다면 13.8Mpps가 나올 수 없음
+  * copy overhead때문에
+* 추측상 dpdk.c의 buf를 structure에서 unsigned char*로 변환하는 과정에 문제가 있음
+
+
+
+<center> buf type conversion </center>
+
+![Alt_text](image/02.24_dpdk_ptr.JPG)
+
+* buf는 structure 배열이고 ptr은 unsigned char 배열인데, 첫번째 줄은 buf의 packet data만 뽑아서 ptr에 대입해주는 명령이다
+* 이 과정에서 buf에 저장된 모든 packet들의 data를 contiguous하게 가지는 pointer를 넘겨주는 것이 아니라, buf[0]의 packet data를 가리키는 pointer를 넘겨줌
+  * 실제로 모든 packet data를 contiguous하게 저장하지 않음
+* 이로 인해 첫번째 packet의 data만 제대로 copy되고 나머지 자리에는 0만 들어감
+
+
+
+<center> copy result </center>
+
+![Alt_text](image/02.24_copy_error.JPG)
+
+* 두번째 packet자리가 다 0임을 확인할 수 있다
+* 이 부분은 수정 필요
+
+
+
+
+
+---
+
+### type conversion test
+
+* 다음은 uint64_t의 자료형을 가지는 num64와 int의 자료형을 가지는 num 간의 type conversion을 test한 것이다
+* LARGE case는 2^50 + 2^30 + 2^10을 대입한 case이고,
+* MID case는 2^30 + 2^10을 대입한 case,
+* SMALL case는 2^10을 대입한 case이다
+
+
+
+<center> LARGE case without any explicit type conversion </center>
+
+![Alt_text](image/02.24_type_conversion_LARGE.JPG)
+
+
+
+<center> MID case without any explicit type conversion </center>
+
+![Alt_text](image/02.24_type_conversion_MID.JPG)
+
+
+
+<center> SMALL case without any explicit type conversion </center>
+![Alt_text](image/02.24_type_conversion_SMALL.JPG)
+
+* 어떤 explicit type conversion도 없이 implicit type conversion의 결과를 보기위해 한 test의 결과이다
+
+
+
+
+
+<center> LARGE case with explicit type conversion to int </center>
+
+![Alt_text](image/02.24_type_conversion_LARGE_int.JPG)
+
+
+
+<center> MID case with explicit type conversion to int</center>
+
+![Alt_text](image/02.24_type_conversion_MID_int.JPG)
+
+
+
+<center> SMALL case with explicit type conversion to int</center>
+
+![Alt_text](image/02.24_type_conversion_SMALL_int.JPG)
+
+* num64를 int로 type conversion해서 나온 결과이다
+
+
+
+
+
+<center> LARGE case with explicit type conversion to uint64_t</center>
+
+![Alt_text](image/02.24_type_conversion_LARGE_64.JPG)
+
+
+
+<center> MID case with explicit type conversion to uint64_t</center>
+
+![Alt_text](image/02.24_type_conversion_MID_64.JPG)
+
+
+
+<center> SMALL case with explicit type conversion to uint64_t</center>
+
+![Alt_text](image/02.24_type_conversion_SMALL_64.JPG)
+
+* num을 uint64_t로 type conversion해서 나온 결과이다
+
+
+
+
+
+<center> LARGE case with inequality</center>
+
+![Alt_text](image/02.24_type_conversion_LARGE_ineq.JPG)
+
+
+
+<center> MID case with inequality</center>
+
+![Alt_text](image/02.24_type_conversion_MID_ineq.JPG)
+
+
+
+<center> SMALL case with inequality</center>
+
+![Alt_text](image/02.24_type_conversion_SMALL_ineq.JPG)
+
+* 대소비교 test를 진행한 결과이다
+
+
+
+* 뺄셈을 test한 결과로는 implicit type conversion은 uint64_t로 된다는 것을 알 수 있다
+* 대소비교 test를 진행한 결과로는 int 범위를 넘어가는 값을 대소비교 하게되면 true, false가 잘못된 값이 나올 수 있다는 것이다.
+
+
+
+
+
+
+
+
 
 
 
@@ -54,7 +203,6 @@
 
 
 <center> thand.cu file </center>
-
 ![Alt_text](image/02.22_thand.JPG)
 
 ![Alt_text](image/02.22_thand2.JPG)

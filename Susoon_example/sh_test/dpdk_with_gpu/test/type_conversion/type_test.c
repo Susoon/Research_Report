@@ -17,7 +17,7 @@
 	size = 2;		\
 }
 
-#define TEST_NUM(x) LARGE(x)
+#define TEST_NUM(x) SMALL(x)
 
 int main(void)
 {
@@ -32,7 +32,7 @@ int main(void)
 
 	char * test[] = { "LARGE", "MIDDLE", "SMALL"};
 
-	printf("%s test : num64 = %ld, num = %d\nnum64 - num = %ld\n", test[size], num64, num, num64 - num);
+	printf("%s test : num64 = %ld, num = %d\nnum64 > num = %ld\n", test[size], num64, num, num64 > num);
 
 	return 0;
 }		
