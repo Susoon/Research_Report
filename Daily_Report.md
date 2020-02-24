@@ -8,23 +8,41 @@
 
 
 <center> gpu monitoring code </center>
-
 ![Alt_text](image/02.24_gpu_monitor_code.JPG)
 
 * gpu_monitor가 packet buffer를 check하고 atomicAdd로 count를 올려주는 함수
 * gpu_monitor_loop가 cpu에서 loop를 돌면서 gpu_monitor를 호출해 packet buffer를 check하고 atomicAdd로 count를 올려줌
 
+---
+
+### 수정 전
+
 
 
 <center> execution result </center>
-
 ![Alt_text](image/02.24_monitor_in_cpu.JPG)
 
 * 실행 결과를 보면 rx_pkt_cnt가 rx_cur_pkt에 잘 복사되어 값이 나오는 것을 알 수 있다
 * 5.8Mpps정도 나오는데 이 값이 복사는 잘 된 거 같지만 값 자체가 유의미한지는 의심된다.
   * 12번째를 보면 갑자기 1.7Mpps가 나온다
   * send하는 쪽은 13.8Mpps정도로 찍어주는데 5.8Mpps밖에 안나오는 건 너무 적다
-* 코드 수정 후 재확인 필요
+* 수정함
+
+---
+
+### 수정 후
+
+
+
+<center> gpu test success </center>
+
+![Alt_text](image/02.24_gpu_test_success.JPG)
+
+* send하는 쪽에서 pps가 12.9Mpps 정도 나옴
+* 보내는 만큼 거의 다 받음
+* 7번째를 보면 가끔씩 1/3정도로 떨어지는 때가 있음
+* 5번에 한번씩 저렇게 떨어짐
+* 저게 copy에 대한 overhead인 부분인 거 같음
 
 
 
@@ -36,7 +54,6 @@
 
 
 <center> thand.cu file </center>
-
 
 ![Alt_text](image/02.22_thand.JPG)
 
