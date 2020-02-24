@@ -45,10 +45,17 @@
 #define START_BLU printf("\033[1;34m");
 #define END printf("\033[0m"); 
 
-#define PKT_SIZE 64
-#define BATCH_SIZE (PKT_SIZE * 512)
-#define BATCH_NUM (BATCH_SIZE / PKT_SIZE)
-#define D_NUM_64 32
+#define PKT_SIZE 1514
+#define BATCH_NUM 1514
+// 64 -> 512
+// 128 -> 256
+// 256 -> 128
+// 512 -> 64
+// 1024 -> 2048
+// 1514 -> 
+#define BATCH_SIZE (PKT_SIZE * BATCH_NUM)
+
+#define D_NUM 32
 
 #define ONE_SEC 1000 * 1000 * 1000
 

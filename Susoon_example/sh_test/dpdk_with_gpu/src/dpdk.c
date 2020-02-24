@@ -2,6 +2,7 @@
 
 #define ONELINE 6
 #define DUMP 0
+#define BATCH_DUMP 0
 #define SWAP 0
 #define SEND 0
 #define RX_LOOP_CNT 1
@@ -29,6 +30,17 @@ void *cpu_monitoring_loop(void *data)
 	}
 }
 #endif
+
+static void copy_to_arr(struct rte_mbuf * buf[], unsigned char * batch_buf, int size)
+{
+	unsigned char* tmp;
+	for(int i = 0; i < size; i++)
+	{
+		tmp = (rte_ctrlmbuf_data(buf[i]));
+		memcpy(batch_buf + (i * PKT_SIZE), tmp, PKT_SIZE);
+	}
+}
+
 
 static void print_pkt(unsigned char * ptr)
 {
@@ -60,7 +72,7 @@ static void rx_loop(uint8_t lid)
 	unsigned char* tmp_port;
 
 	unsigned char* rx_batch_buf;
-	unsigned char* tx_batch_buf;
+	struct rte_mbuf* tx_batch_buf;
 	unsigned int b_idx = 0;	
 
 	int start;
@@ -71,7 +83,7 @@ static void rx_loop(uint8_t lid)
 	tmp_port = (unsigned char*)malloc(2);
 	
 	rx_batch_buf = (unsigned char*)malloc(sizeof(unsigned char) * BATCH_SIZE);
-	tx_batch_buf = (unsigned char*)malloc(sizeof(unsigned char) * BATCH_SIZE);
+	tx_batch_buf = (struct rte_mbuf*)malloc(sizeof(struct rte_mbuf) * BATCH_SIZE);
 
 
 	start_lcore(l2p, lid);
@@ -92,11 +104,14 @@ static void rx_loop(uint8_t lid)
 		// [TODO] Need to modify here.
 			ptr = (rte_ctrlmbuf_data(buf[0]));
 
-			memcpy(rx_batch_buf + (b_idx * PKT_SIZE), ptr, sizeof(unsigned char) * (PKT_SIZE * nb_rx));
+			copy_to_arr(buf, rx_batch_buf + (b_idx * PKT_SIZE), nb_rx);
+
 			b_idx += nb_rx;
-			if(b_idx >= BATCH_NUM)
+			if(b_idx > BATCH_NUM - D_NUM)
 			{
-				//print_pkt(rx_batch_buf);
+#if BATCH_DUMP
+				print_pkt(rx_batch_buf);
+#endif
 				copy_to_gpu(rx_batch_buf, b_idx); 
 				b_idx = 0;
 				memset(rx_batch_buf, 0, BATCH_SIZE);
