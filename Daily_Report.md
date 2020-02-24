@@ -1,5 +1,33 @@
 # Daily Report for DPDK
 
+## 02/24 현재상황
+
+* gpu에서 infinite loop를 돌려서 그 외의 code에서 gpu에 어떤 명령도 걸 수 없음
+* 그래서 gpu에서 loop를 돌리는 게 아니라 cpu에서 loop을 돌고 그 내부에 gpu를 check하는 코드를 넣음
+
+
+
+<center> gpu monitoring code </center>
+
+![Alt_text](image/02.24_gpu_monitor_code.JPG)
+
+* gpu_monitor가 packet buffer를 check하고 atomicAdd로 count를 올려주는 함수
+* gpu_monitor_loop가 cpu에서 loop를 돌면서 gpu_monitor를 호출해 packet buffer를 check하고 atomicAdd로 count를 올려줌
+
+
+
+<center> execution result </center>
+
+![Alt_text](image/02.24_monitor_in_cpu.JPG)
+
+* 실행 결과를 보면 rx_pkt_cnt가 rx_cur_pkt에 잘 복사되어 값이 나오는 것을 알 수 있다
+* 5.8Mpps정도 나오는데 이 값이 복사는 잘 된 거 같지만 값 자체가 유의미한지는 의심된다.
+  * 12번째를 보면 갑자기 1.7Mpps가 나온다
+  * send하는 쪽은 13.8Mpps정도로 찍어주는데 5.8Mpps밖에 안나오는 건 너무 적다
+* 코드 수정 후 재확인 필요
+
+
+
 ## 02/22 현재상황
 
 * 여전히 gpu_monitoring_loop 때문에 다른 gpu코드가 작동을 못함
@@ -8,7 +36,6 @@
 
 
 <center> thand.cu file </center>
-
 
 
 ![Alt_text](image/02.22_thand.JPG)
@@ -22,7 +49,6 @@
 
 
 <center> execution </center>
-
 ![Alt_text](image/02.22_test_gpu_infinite_loop_test.JPG)
 
 * 이런 형태로 count 값이 전혀 전달받지 못함
@@ -32,7 +58,6 @@
 
 
 <center> dpdk_gpu_test execution </center>
-
 ![Alt_test](image/02.22_gpu_infinite_loop_test.JPG)
 
 * dpdk_gpu_test 파일을 실행시켜 나온 결과
@@ -73,7 +98,6 @@
 
 
 <center> gpu monitoring loop </center>
-
 ![Alt_text](image/02.20_gpu_monitoring_loop.JPG)
 
 * gpu에서 packet buffer를 polling 하는 loop
@@ -82,7 +106,6 @@
 
 
 <center> getter for rx packet count and tx packet buffer </center>
-
 ![Alt_text](image/02.20_getter_fct.JPG)
 
 * dpdk.c 에서 위의 함수를 1초마다 불러서 gpu_monitoring_loop가 rx_pkt_cnt와 tx_pkt_buf를 채워주면 그 값을 가져가고 0으로 초기화해주는 역할을 하는 함수
