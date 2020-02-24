@@ -32,7 +32,11 @@ int main(void)
 
 	char * test[] = { "LARGE", "MIDDLE", "SMALL"};
 
+<<<<<<< HEAD
 	printf("%s test : num64 = %ld, num = %d\nnum64 > num = %d\n", test[size], num64, num, num64 > num);
+=======
+	printf("%s test : num64 = %ld, num = %d\nnum64 > num = %ld\n", test[size], num64, num, num64 > num);
+>>>>>>> 0ed3ea05b8093c5a782ce6e5dd7c803eb5498122
 
 	return 0;
 }		
