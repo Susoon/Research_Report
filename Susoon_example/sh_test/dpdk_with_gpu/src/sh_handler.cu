@@ -2,9 +2,9 @@
 
 #define RING_BATCH_NUM 512
 #define DPDK_RING_SIZE (BATCH_SIZE * RING_BATCH_NUM)
-#define RTE_ETH_CRC_LEN 5
-#define TOTAL_PKT_SIZE (PKT_SIZE + RTE_ETH_CRC_LEN)
+
 #define ONELINE 6
+
 #define DUMP 0
 #define TX 0
 
@@ -13,24 +13,12 @@ unsigned char * tx_pkt_buf;
 static int idx;
 int * rx_pkt_cnt;
 int tx_idx;
-int * batch_size;
 
-int leastPriority;
-int greatestPriority;
-
-static int count = 0;
-
-void check_error(cudaError_t err)
-{	
-	if(err == cudaSuccess)
-	{
-		count++;
-//		printf("%dth success!!!!\n", count);
-	}
-	else
-	{
-//		printf("%s!!!!!!\n", cudaGetErrorName(err));
-	}
+extern "C"
+int monotonic_time() {
+        struct timespec timespec;
+        clock_gettime(CLOCK_MONOTONIC, &timespec);
+        return timespec.tv_sec * ONE_SEC + timespec.tv_nsec;
 }
 
 __global__ void print_gpu(unsigned char* d_pkt_buf)
@@ -80,30 +68,18 @@ __device__ void mani_pkt_gpu(unsigned char * d_pkt_buf)
 }
 
 extern "C"
-uint64_t monotonic_time() {
-        struct timespec timespec;
-        clock_gettime(CLOCK_MONOTONIC, &timespec);
-        return timespec.tv_sec * ONE_SEC + timespec.tv_nsec;
-}
-
-extern "C"
 void copy_to_gpu(unsigned char* buf, int size)
 {
-	//printf("rx_pkt_buf copy\n");
-	check_error(cudaMemcpy(rx_pkt_buf + (idx * BATCH_SIZE), buf, sizeof(unsigned char)* PKT_SIZE * size, cudaMemcpyHostToDevice));
-
-//	printf("size copy\n");
-	check_error(cudaMemcpy(batch_size, &size, sizeof(int), cudaMemcpyHostToDevice));
-//	printf("batch size = %d\n", size);
-
-	idx++;
-	if(idx == RING_BATCH_NUM)
-		idx = 0;
+	cudaMemcpy(rx_pkt_buf + (idx * BATCH_SIZE), buf, sizeof(unsigned char)* BATCH_SIZE, cudaMemcpyHostToDevice);
 
 #if DUMP
 	print_gpu<<<1,1>>>(rx_pkt_buf + (idx * BATCH_SIZE));
 	cudaDeviceSynchronize();
 #endif
+
+	idx++;
+	if(idx == RING_BATCH_NUM)
+		idx = 0;
 }
 
 extern "C"
@@ -123,11 +99,6 @@ void set_gpu_mem_for_dpdk(void)
 	ASSERTRT(cudaMalloc((void**)&rx_pkt_cnt, sizeof(int)));
   	ASSERTRT(cudaMemset(rx_pkt_cnt, 0, sizeof(int)));
 
-	ASSERTRT(cudaMalloc((void**)&batch_size, sizeof(int)));
-  	ASSERTRT(cudaMemset(batch_size, 0, sizeof(int)));
-
-	cudaDeviceGetStreamPriorityRange(&leastPriority, &greatestPriority);
-
 	START_GRN
 	printf("[Done]____GPU mem set for dpdk____\n");
 	END
@@ -136,15 +107,13 @@ void set_gpu_mem_for_dpdk(void)
 extern "C"
 int get_rx_cnt(void)
 {
-	int rx_cur_pkt = tx_idx;
-	printf("rx_cur_pkt copy\n");
-	printf("Before memcpy, rx_cur_pkt = %d\n", rx_cur_pkt);
+	int rx_cur_pkt = 0;
+	static int turn = 0;
+	printf("%dth pps\n", turn);
 	ASSERTRT(cudaMemcpy(&rx_cur_pkt, rx_pkt_cnt, sizeof(int), cudaMemcpyDeviceToHost));
-	printf("After memcpy, rx_cur_pkt = %d\n", rx_cur_pkt);
 
-//	printf("rx_pkt_cnt memset\n");
-	check_error(cudaMemset(rx_pkt_cnt, 0, sizeof(int)));	
-	tx_idx++;
+	cudaMemset(rx_pkt_cnt, 0, sizeof(int));	
+	turn++;
 
 	return rx_cur_pkt;
 }
@@ -161,11 +130,10 @@ void get_tx_buf(unsigned char* tx_buf)
 		tx_idx = 0;
 }
 
-__global__ void gpu_monitor(unsigned char * rx_pkt_buf, unsigned char * tx_pkt_buf, int * rx_pkt_cnt, int * batch_size)
+__global__ void gpu_monitor(unsigned char * rx_pkt_buf, unsigned char * tx_pkt_buf, int * rx_pkt_cnt)
 {
 	int mem_index = BATCH_SIZE * threadIdx.x;
 
-#if 1
 	__syncthreads();
 	if(rx_pkt_buf[mem_index] != 0)
 	{
@@ -175,12 +143,13 @@ __global__ void gpu_monitor(unsigned char * rx_pkt_buf, unsigned char * tx_pkt_b
 		__syncthreads();
 		atomicAdd(rx_pkt_cnt, BATCH_NUM);
 #if TX
+		__syncthreads();
 		mani_pkt_gpu(rx_pkt_buf + mem_index);
 				
+		__syncthreads();
 		memcpy(tx_pkt_buf + mem_index, rx_pkt_buf + mem_index, BATCH_SIZE);
 #endif
 	}
-#endif
 }
 
 extern "C"
@@ -190,7 +159,7 @@ void gpu_monitor_loop(void)
 	ASSERTRT(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
 	while(true)
 	{
-		gpu_monitor<<<1, RING_BATCH_NUM, 0, stream>>>(rx_pkt_buf, tx_pkt_buf, rx_pkt_cnt, batch_size);
+		gpu_monitor<<<1, RING_BATCH_NUM, 0, stream>>>(rx_pkt_buf, tx_pkt_buf, rx_pkt_cnt);
 		cudaDeviceSynchronize();
 	}
 }

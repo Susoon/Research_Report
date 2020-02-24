@@ -12,7 +12,6 @@ int main(int argc, char ** argv)
 	set_gpu_mem_for_dpdk();
 	
 	pthread_create(&thread, NULL, monitor, NULL);
-//	gpu_monitor();
 	dpdk_handler(argc, argv);
 	
 
