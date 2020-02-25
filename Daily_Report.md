@@ -2,18 +2,72 @@
 
 ## 02/25 현재상황
 
+### copy 문제 해결 전
+
+
+
 * packet size별로 최대 pps가 나오는 batch size의 범위를 구해봄
 
 <center> range of batch size </center>
-
 ![Alt_text](image/02.25_categorized_batch_size_with_pkt_size.JPG)
 
 * 범위는 위의 캡쳐와 같다
 * 사실상 upper bound는 없다고 봐도 무방할 것 같으며, lower bound가 각자 다르다는 것을 알 수 있다.
 * 하지만 총 memory 양을 계산해보면 64~1024B까지의 packet들은 batch하는 memory는 같다(2^15B = 1024 * 32B = 32MB)
 * 32MB만큼만 batch해서 GPU에 copy해주면 속도면에서 감소는 0.1~0.2Mpps 미만으로 나온다
+* 위의 내용들은 잘못된 정보임
+  * batch해서 모은 packet들이 gpu에 제대로 copy가 되고 있지 않았음
+
+---
+
+### copy 문제 해결 후
 
 
+<center> fixed copy_to_gpu </center>
+
+
+
+![Alt_text](image/02.25_copy_to_gpu.JPG)
+
+* cudaMemcpy에서 sizeof(unsigned char) * size만큼 copy를 해주고 있었다.
+* 이때 size는 dpdk.c에서 batch해서 모은 packet 수였다
+* 하지만 변수명이 size이다보니 packet 수에 packet size가 곱해진 총 batch된 size를 말하는 줄 알고 그냥 곱해서 copy해주고 있었음
+* 그래서 모든 packet이 copy되고 있지 않았다
+* 변수명을 pkt_num으로 바꿔주고 PKT_SIZE를 곱해서 정확한 batch된 size만큼 copy를 해주어 모든 packet이 copy되게 하였다
+* 그 이후 64B packet으로 test한 결과이다
+
+
+
+<center> batch packet number : 512 </center>
+
+![Alt_text](image/02.25_pps_64_512.JPG)
+
+
+
+
+
+<center> batch packet number : 1024 </center>
+
+![Alt_text](image/02.25_pps_64_1024.JPG)
+
+
+
+
+
+<center> batch packet number : 1024 * 32 </center>
+
+![Alt_text](image/02.25_pps_64_1024_32.JPG)
+
+
+
+* send한 packet 수는 13.8~14.0Mpps였다.
+* 1024개를 batch했을 때가 가장 속도가 빨랐으며 13.5Mpps로 0.3~0.5Mpps정도 떨어졌다
+* 1024를 기준으로 더 적게 batch 했을 때와 더 많이 batch 했을 때 모두 속도가 떨어졌으며 더 적게 batch 했을 때 속도가 더 많이 떨어졌다
+* 하지만 여전히 copy overhead로 인한 속도차가 적긴하다
+
+
+
+---
 
 ## 02/24 현재상황
 
