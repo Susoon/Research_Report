@@ -1,5 +1,20 @@
 # Daily Report for DPDK
 
+## 02/25 현재상황
+
+* packet size별로 최대 pps가 나오는 batch size의 범위를 구해봄
+
+<center> range of batch size </center>
+
+![Alt_text](image/02.25_categorized_batch_size_with_pkt_size.JPG)
+
+* 범위는 위의 캡쳐와 같다
+* 사실상 upper bound는 없다고 봐도 무방할 것 같으며, lower bound가 각자 다르다는 것을 알 수 있다.
+* 하지만 총 memory 양을 계산해보면 64~1024B까지의 packet들은 batch하는 memory는 같다(2^15B = 1024 * 32B = 32MB)
+* 32MB만큼만 batch해서 GPU에 copy해주면 속도면에서 감소는 0.1~0.2Mpps 미만으로 나온다
+
+
+
 ## 02/24 현재상황
 
 * gpu에서 infinite loop를 돌려서 그 외의 code에서 gpu에 어떤 명령도 걸 수 없음
@@ -8,7 +23,6 @@
 
 
 <center> gpu monitoring code </center>
-
 ![Alt_text](image/02.24_gpu_monitor_code.JPG)
 
 * gpu_monitor가 packet buffer를 check하고 atomicAdd로 count를 올려주는 함수
@@ -21,7 +35,6 @@
 
 
 <center> execution result </center>
-
 ![Alt_text](image/02.24_monitor_in_cpu.JPG)
 
 * 실행 결과를 보면 rx_pkt_cnt가 rx_cur_pkt에 잘 복사되어 값이 나오는 것을 알 수 있다
@@ -37,7 +50,6 @@
 
 
 <center> gpu test success </center>
-
 ![Alt_text](image/02.24_gpu_test_success.JPG)
 
 * macro를 잘못 넣어줘서 생긴 문제여서 macro를 알맞게 넣어줌
@@ -54,7 +66,6 @@
 
 
 <center> execution result </center>
-
 ![Alt_text](image/02.24_pps.JPG)
 
 * 13.8Mpps로 send에서 보내준 만큼 나옴
@@ -68,7 +79,6 @@
 
 
 <center> buf type conversion </center>
-
 ![Alt_text](image/02.24_dpdk_ptr.JPG)
 
 * buf는 structure 배열이고 ptr은 unsigned char 배열인데, 첫번째 줄은 buf의 packet data만 뽑아서 ptr에 대입해주는 명령이다
@@ -79,7 +89,6 @@
 
 
 <center> copy result </center>
-
 ![Alt_text](image/02.24_copy_error.JPG)
 
 * 두번째 packet자리가 다 0임을 확인할 수 있다
@@ -101,19 +110,16 @@
 
 
 <center> LARGE case without any explicit type conversion </center>
-
 ![Alt_text](image/02.24_type_conversion_LARGE.JPG)
 
 
 
 <center> MID case without any explicit type conversion </center>
-
 ![Alt_text](image/02.24_type_conversion_MID.JPG)
 
 
 
 <center> SMALL case without any explicit type conversion </center>
-
 ![Alt_text](image/02.24_type_conversion_SMALL.JPG)
 
 * 어떤 explicit type conversion도 없이 implicit type conversion의 결과를 보기위해 한 test의 결과이다
@@ -123,19 +129,16 @@
 
 
 <center> LARGE case with explicit type conversion to int </center>
-
 ![Alt_text](image/02.24_type_conversion_LARGE_int.JPG)
 
 
 
 <center> MID case with explicit type conversion to int</center>
-
 ![Alt_text](image/02.24_type_conversion_MID_int.JPG)
 
 
 
 <center> SMALL case with explicit type conversion to int</center>
-
 ![Alt_text](image/02.24_type_conversion_SMALL_int.JPG)
 
 * num64를 int로 type conversion해서 나온 결과이다
@@ -145,19 +148,16 @@
 
 
 <center> LARGE case with explicit type conversion to uint64_t</center>
-
 ![Alt_text](image/02.24_type_conversion_LARGE_64.JPG)
 
 
 
 <center> MID case with explicit type conversion to uint64_t</center>
-
 ![Alt_text](image/02.24_type_conversion_MID_64.JPG)
 
 
 
 <center> SMALL case with explicit type conversion to uint64_t</center>
-
 ![Alt_text](image/02.24_type_conversion_SMALL_64.JPG)
 
 * num을 uint64_t로 type conversion해서 나온 결과이다
@@ -167,19 +167,16 @@
 
 
 <center> LARGE case with inequality</center>
-
 ![Alt_text](image/02.24_type_conversion_LARGE_ineq.JPG)
 
 
 
 <center> MID case with inequality</center>
-
 ![Alt_text](image/02.24_type_conversion_MID_ineq.JPG)
 
 
 
 <center> SMALL case with inequality</center>
-
 ![Alt_text](image/02.24_type_conversion_SMALL_ineq.JPG)
 
 * 대소비교 test를 진행한 결과이다
@@ -196,13 +193,11 @@
 
 
 <center> dump in cpu </center>
-
 ![Alt_text](image/02.24_copy_success_in_cpu.JPG)
 
 
 
 <center> copy in gpu </center>
-
 ![Alt_text](image/02.24_copy_success_in_gpu.JPG)
 
 * gpu와 cpu에서 모두 제대로 packet이 copy 되었음을 알 수 있다
@@ -222,11 +217,9 @@
 
 
 <center> Packet size : 1514B, Batch size : 1514 pps </center>
-
 ![Alt_text](image/02.24_1514B_1514.JPG)
 
 <center> gpu status </center>
-
 ![Alt_text](image/02.24_1514B_1514_gpu_status.JPG)
 
 
@@ -236,6 +229,8 @@
 * copy가 정상적으로 되고 있음에도 속도가 너무 잘 나온다
 * copy가 진짜 정상적으로 진행되고 있는지 확인이 필요함
   * packet 받은걸 fprintf로 어딘가에 저장해서, gpu에서 copy한 packet들과 비교하는 코드를 짜서 packet 받고 비교해봐야할듯
+
+---
 
 
 
@@ -247,7 +242,6 @@
 
 
 <center> thand.cu file </center>
-
 ![Alt_text](image/02.22_thand.JPG)
 
 ![Alt_text](image/02.22_thand2.JPG)
@@ -259,7 +253,6 @@
 
 
 <center> execution </center>
-
 ![Alt_text](image/02.22_test_gpu_infinite_loop_test.JPG)
 
 * 이런 형태로 count 값이 전혀 전달받지 못함
@@ -269,7 +262,6 @@
 
 
 <center> dpdk_gpu_test execution </center>
-
 ![Alt_test](image/02.22_gpu_infinite_loop_test.JPG)
 
 * dpdk_gpu_test 파일을 실행시켜 나온 결과
