@@ -5,6 +5,7 @@
 #define BATCH_DUMP 0
 #define SWAP 0
 #define SEND 0
+#define BATCH 1
 #define RX_LOOP_CNT 1
 #define PTHREAD_CNT 0
 
@@ -46,7 +47,7 @@ static void print_pkt(unsigned char * ptr)
 {
 		START_GRN
 		printf("batch_ pkt_dump: \n");
-		for(int i = 0; i < BATCH_SIZE; i++){
+		for(int i = 0; i < PKT_BATCH_SIZE; i++){
 			if(i != 0 && i % ONELINE == 0)
 				printf("\n");
 			if(i != 0 && i % PKT_SIZE == 0)
@@ -60,7 +61,7 @@ static void print_pkt(unsigned char * ptr)
 static void rx_loop(uint8_t lid)
 {
 	struct rte_mbuf *buf[DEFAULT_PKT_BURST];
-	struct rte_mbuf *tx_buf[BATCH_SIZE];
+	struct rte_mbuf *tx_buf[PKT_BATCH_SIZE];
 	uint16_t nb_rx;
 	int ret;
 	unsigned int i, j;
@@ -82,8 +83,8 @@ static void rx_loop(uint8_t lid)
 	tmp_ip = (unsigned char*)malloc(4);
 	tmp_port = (unsigned char*)malloc(2);
 	
-	rx_batch_buf = (unsigned char*)malloc(sizeof(unsigned char) * BATCH_SIZE);
-	tx_batch_buf = (struct rte_mbuf*)malloc(sizeof(struct rte_mbuf) * BATCH_SIZE);
+	rx_batch_buf = (unsigned char*)malloc(sizeof(unsigned char) * PKT_BATCH_SIZE);
+	tx_batch_buf = (struct rte_mbuf*)malloc(sizeof(struct rte_mbuf) * PKT_BATCH_SIZE);
 
 
 	start_lcore(l2p, lid);
@@ -103,20 +104,26 @@ static void rx_loop(uint8_t lid)
 			//printf("nb_rx: %d\n", nb_rx);
 		// [TODO] Need to modify here.
 			ptr = (rte_ctrlmbuf_data(buf[0]));
-
+#if BATCH
 			copy_to_arr(buf, rx_batch_buf + (b_idx * PKT_SIZE), nb_rx);
 
 			b_idx += nb_rx;
-			if(b_idx >= BATCH_NUM - D_NUM)
+			if(b_idx >= PKT_BATCH - BURST_NUM)
 			{
 #if BATCH_DUMP
 				print_pkt(rx_batch_buf);
 #endif
 				copy_to_gpu(rx_batch_buf, b_idx); 
 				b_idx = 0;
-				memset(rx_batch_buf, 0, BATCH_SIZE);
+				memset(rx_batch_buf, 0, PKT_BATCH_SIZE);
 			}
-			//recv_total += nb_rx;
+#else
+			recv_total += nb_rx;
+			copy_to_arr(buf, rx_batch_buf, nb_rx);
+
+			copy_to_gpu(rx_batch_buf, nb_rx); 
+			memset(rx_batch_buf, 0, PKT_BATCH_SIZE);
+#endif
 			end = monotonic_time();
 #if RX_LOOP_CNT
 				//printf("Before If end = %u, start = %u, end - start = %u\n", end, start, end - start);
@@ -180,7 +187,7 @@ static void rx_loop(uint8_t lid)
 
 #if SEND
 		get_tx_buf(tx_batch_buf);
-		memcpy(tx_batch_buf, (rte_ctrlmbuf_data(tx_buf[0])), BATCH_SIZE);
+		memcpy(tx_batch_buf, (rte_ctrlmbuf_data(tx_buf[0])), PKT_BATCH_SIZE);
 		ret = rte_eth_tx_burst(0, 0, tx_buf, nb_rx);
 #endif
 
