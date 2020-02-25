@@ -13,6 +13,7 @@ unsigned char * tx_pkt_buf;
 static int idx;
 int * rx_pkt_cnt;
 int tx_idx;
+FILE * fpoint;
 
 int * batch_size;
 
@@ -22,6 +23,8 @@ int monotonic_time() {
         clock_gettime(CLOCK_MONOTONIC, &timespec);
         return timespec.tv_sec * ONE_SEC + timespec.tv_nsec;
 }
+
+#if DUMP
 
 __global__ void print_gpu(unsigned char* d_pkt_buf)
 {
@@ -39,6 +42,8 @@ __global__ void print_gpu(unsigned char* d_pkt_buf)
 	printf("\n");
 	END
 }
+
+#endif
 
 __device__ void mani_pkt_gpu(unsigned char * d_pkt_buf)
 {

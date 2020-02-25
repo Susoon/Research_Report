@@ -46,13 +46,13 @@
 #define END printf("\033[0m"); 
 
 #define PKT_SIZE 1514
-#define BATCH_NUM 1514
-// 64 -> 512
-// 128 -> 256
-// 256 -> 128
-// 512 -> 64
-// 1024 -> 2048
-// 1514 -> 
+#define BATCH_NUM 32
+// 64 -> 512, 1024 * 32
+// 128 -> 256, 1024 * 16
+// 256 -> 128, 1024 * 8
+// 512 -> 64, 4096
+// 1024 -> 32, 2048
+// 1514 -> 32, 1514
 #define BATCH_SIZE (PKT_SIZE * BATCH_NUM)
 
 #define D_NUM 32

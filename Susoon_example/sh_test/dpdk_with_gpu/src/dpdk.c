@@ -107,7 +107,7 @@ static void rx_loop(uint8_t lid)
 			copy_to_arr(buf, rx_batch_buf + (b_idx * PKT_SIZE), nb_rx);
 
 			b_idx += nb_rx;
-			if(b_idx > BATCH_NUM - D_NUM)
+			if(b_idx >= BATCH_NUM - D_NUM)
 			{
 #if BATCH_DUMP
 				print_pkt(rx_batch_buf);
