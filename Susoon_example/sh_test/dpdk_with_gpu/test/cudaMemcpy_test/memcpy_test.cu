@@ -26,7 +26,7 @@ char * host_buf;
 
 int test_cnt;
 
-FILE * data;
+FILE * data = fopen("data.txt", "r");
 
 uint64_t latency[17] = { 0 };
 const char* size_str[17] = { "64", "128", "256", "512", "1024", "1514",\
@@ -50,23 +50,26 @@ int monotonic_time()
 
 void call_data(int size)
 {
-	data = fopen("data.txt", "r");
-
 	fseek(data, 0, SEEK_SET);
 	for(int i = 0; i < size; i++)
 	{
 		fscanf(data, "%c", host_buf + i);
 	}
-
-	fclose(data);
 }
 
 void once(void)
 {
 	int i = 0;
+	
+	int skip = 0;
 
 	while(i < test_cnt)
 	{
+#if RAND
+#else
+		call_data(HALF * 2);
+		skip = 0;
+#endif
 		for(int j = 0; j < CASE; j++)
 		{
 #if RAND
@@ -74,9 +77,9 @@ void once(void)
 			start[j] = monotonic_time();
 			cudaMemcpy(device_buf, host_buf + rand() % size[j], size[j], cudaMemcpyHostToDevice);
 #else
-			call_data(size[j]);
 			start[j] = monotonic_time();
-			cudaMemcpy(device_buf, host_buf, size[j], cudaMemcpyHostToDevice);
+			cudaMemcpy(device_buf, host_buf + skip, size[j], cudaMemcpyHostToDevice);
+			skip += size[j];
 #endif
 			end[j] = monotonic_time();
 			latency[j] += end[j] - start[j];
@@ -227,6 +230,8 @@ int main(void)
 	print_result();
 
 	cudaFree(device_buf);
+
+	fclose(data);
 
 	return 0;
 }
