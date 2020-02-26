@@ -13,7 +13,6 @@ unsigned char * tx_pkt_buf;
 static int idx;
 int * rx_pkt_cnt;
 int tx_idx;
-FILE * fpoint;
 
 int * pkt_batch_num;
 
@@ -82,10 +81,12 @@ void copy_to_gpu(unsigned char* buf, int pkt_num)
 // THREAD_NUM 512
 // RING_SIZE (PKT_BATCH_SIZE * THREAD_NUM)
 
-	cudaMemcpy(rx_pkt_buf + (idx * PKT_BATCH_SIZE), buf, sizeof(unsigned char)* pkt_num * PKT_SIZE, cudaMemcpyHostToDevice);
+	cudaMemcpy(rx_pkt_buf + (idx * PKT_BATCH_SIZE), buf, sizeof(unsigned char) * pkt_num * PKT_SIZE, cudaMemcpyHostToDevice);
+//	cudaMemcpy(rx_pkt_buf + (idx * PKT_BATCH_SIZE), buf, sizeof(unsigned char) * PKT_BAT_SIZE, cudaMemcpyHostToDevice);
 
 	cudaMemcpy(pkt_batch_num + idx, &pkt_num, sizeof(int), cudaMemcpyHostToDevice);
 //	printf("[copy_to_gpu] idx: %d, pkt_batch_num: %d\n", idx, pkt_num);
+//	printf("[copy_to_gpu] idx: %d, PKT_BATCH_NUM - pkt_batch_num: %d\n", idx, PKT_BATCH_SIZE - (pkt_num * PKT_SIZE));
 
 #if DUMP
 	print_gpu<<<1,1>>>(rx_pkt_buf + (idx * PKT_BATCH_SIZE), pkt_batch_num + idx);
@@ -157,16 +158,11 @@ __global__ void gpu_monitor(unsigned char * rx_pkt_buf, unsigned char * tx_pkt_b
 // THREAD_NUM 512
 // RING_SIZE (PKT_BATCH_SIZE * THREAD_NUM)
 
-	//printf("tid: %d, pkt_batch_num: %d\n", threadIdx.x, pkt_batch_num[threadIdx.x]);
-	//printf("tid: %d, rx_pkt_buf: %c\n", threadIdx.x, rx_pkt_buf[mem_index + ((pkt_batch_num[threadIdx.x] - 1) * PKT_SIZE)]);
 	__syncthreads();
 	if(pkt_batch_num[threadIdx.x] != 0 && rx_pkt_buf[mem_index + ((pkt_batch_num[threadIdx.x] - 1) * PKT_SIZE)] != 0)
-	//if(rx_pkt_buf[mem_index] != 0)
 	{
-	//	printf("[GPU] tid: %d, pkt_batch_num: %d\n", threadIdx.x, pkt_batch_num[threadIdx.x]);
 		__syncthreads();
 		rx_pkt_buf[mem_index + ((pkt_batch_num[threadIdx.x] - 1) * PKT_SIZE)] = 0;
-		//rx_pkt_buf[mem_index] = 0;
 
 		__syncthreads();
 		atomicAdd(rx_pkt_cnt, pkt_batch_num[threadIdx.x]);

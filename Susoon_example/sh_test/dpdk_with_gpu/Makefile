@@ -81,7 +81,7 @@ dpdk_gpu_test: sh_handler.o dpdk.o main.o
  -Wl,--no-whole-archive -Wl,-lrt -Wl,-lm -Wl,-lnuma -Wl,-ldl -Wl,-export-dynamic\
  -L/home/susoon/work/Research_Report/Susoon_examples/sh_test/dpdk_with_gpu/build/lib\
  -L/home/susoon/work/dpdk-stable-18.11.2/x86_64-native-linuxapp-gcc/lib\
- -Wl,--as-needed -Wl,-Map=dtest.map -Wl,--cref	
+ -Wl,--as-needed -Wl,-Map=dpdk_gpu_test.map -Wl,--cref	
 	mv *.o $(LIB_DIR)
 
 #sh_handler compile

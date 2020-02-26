@@ -12,8 +12,8 @@
 #if PTHREAD_CNT
 void *cpu_monitoring_loop(void *data)
 {
-	uint64_t start;
-	uint64_t end;
+	int start;
+	int end;
 
 	int rx_pkt_cnt = 1;
 
@@ -65,7 +65,8 @@ static void rx_loop(uint8_t lid)
 	uint16_t nb_rx;
 	int ret;
 	unsigned int i, j;
-	uint64_t recv_total = 0;
+	uint64_t gpu_recv = 0;
+	uint64_t cpu_recv = 0;
 	unsigned char* ptr;
 	unsigned char* tx_ptr;
 	unsigned char* tmp_mac;
@@ -107,8 +108,9 @@ static void rx_loop(uint8_t lid)
 #if BATCH
 			copy_to_arr(buf, rx_batch_buf + (b_idx * PKT_SIZE), nb_rx);
 
+			cpu_recv += nb_rx;
 			b_idx += nb_rx;
-			if(b_idx >= PKT_BATCH - BURST_NUM)
+			if(b_idx >= PKT_BATCH - RX_NB)
 			{
 #if BATCH_DUMP
 				print_pkt(rx_batch_buf);
@@ -118,7 +120,6 @@ static void rx_loop(uint8_t lid)
 				memset(rx_batch_buf, 0, PKT_BATCH_SIZE);
 			}
 #else
-			recv_total += nb_rx;
 			copy_to_arr(buf, rx_batch_buf, nb_rx);
 
 			copy_to_gpu(rx_batch_buf, nb_rx); 
@@ -126,13 +127,13 @@ static void rx_loop(uint8_t lid)
 #endif
 			end = monotonic_time();
 #if RX_LOOP_CNT
-				//printf("Before If end = %u, start = %u, end - start = %u\n", end, start, end - start);
 			if(end - start > ONE_SEC)
 			{
-				recv_total = get_rx_cnt();
-				printf("recv_total = %ld\n", recv_total);
+				gpu_recv = get_rx_cnt();
+				printf("gpu_recv = %ld, cpu_recv = %ld\n", gpu_recv, cpu_recv);
 				start = end;
-				recv_total = 0;
+				gpu_recv = 0;
+				cpu_recv = 0;
 			}
 #endif
 
@@ -186,9 +187,9 @@ static void rx_loop(uint8_t lid)
 		}
 
 #if SEND
-		get_tx_buf(tx_batch_buf);
-		memcpy(tx_batch_buf, (rte_ctrlmbuf_data(tx_buf[0])), PKT_BATCH_SIZE);
-		ret = rte_eth_tx_burst(0, 0, tx_buf, nb_rx);
+		//get_tx_buf(tx_batch_buf);
+		//memcpy(tx_batch_buf, (rte_ctrlmbuf_data(tx_buf[0])), PKT_BATCH_SIZE);
+		ret = rte_eth_tx_burst(0, 0, buf, nb_rx);
 #endif
 
 		for(i = 0; i < nb_rx; i++)

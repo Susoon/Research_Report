@@ -46,7 +46,7 @@
 #define END printf("\033[0m"); 
 
 #define PKT_SIZE 64
-#define PKT_BATCH (32)
+#define PKT_BATCH (1024 + 32)
 // 64 -> 512, 1024 * 32
 // 128 -> 256, 1024 * 16
 // 256 -> 128, 1024 * 8
@@ -55,7 +55,7 @@
 // 1514 -> 32, 1514
 #define PKT_BATCH_SIZE (PKT_SIZE * PKT_BATCH)
 
-#define BURST_NUM 32
+#define RX_NB 32
 
 #define ONE_SEC 1000 * 1000 * 1000
 
