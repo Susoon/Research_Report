@@ -2,6 +2,62 @@
 
 ## 02/26 현재상황
 
+* cudaMemcpy를 할 때 생기는 latency가 copy해주는 size에 더 큰 영향을 받는지, cudaMemcpy를 호출하는 횟수에 더 큰 영향을 받는지, 각각 어느정도의 latency를 가지는지에 대한 test를 진행하였다.
+
+<center> cudaMemcpy test values </center>
+![Alt_text](image/memcpy_test/02.26_memcpy_test_value.JPG)
+
+* 위는 test로 얻은 latency를 정리해놓은 것이다
+* once라는 것은 같은 size의 cudaMemcpy 호출을 한 번 실행하여 test한 것을 의미한다
+* 100 times loop라는 것은 cudaMemcpy 호출을 100번 연속해서 실행하여 test한 것을 의미한다
+* random data라는 것은 copy해주는 data를 random한 data로 사용했음을 의미한다
+* normal data라는 것은 copy해주는 data를 non-random한 data로 사용했음을 의미한다
+* 각 data의 size는 64B packet부터 1514B packet까지, 그리고 64 * 32B부터 64 * 1024 * 32B까지 dpdk test에 사용했던 batch size를 사용했다
+* 각 test는 100번 시행하여 latency의 평균을 내어 data로 사용했다.
+
+<center> graph for cudaMemcpy test </center>
+![Alt_text](image/memcpy_test/02.26_memcpy_test_condition.JPG)
+
+* 위의 graph는 표의 data들을 시각화한 것이다
+* 이를 통해 알 수 있는 것은 size가 커짐에 따라 latency가 증가했다는 것이다
+* 또한 once의 경우 100 times loop의 경우보다 latency의 증가폭이 크며, 최대 size인 64 * 1024 * 32B의 경우 once의 경우가 100 times loop의 경우보다 눈에 띄게 높은 latency를 가짐을 확인할 수 있다
+* 반면 random data와 normal data 간의 차는 눈에 띄게 벌어져있지 않다
+
+* graph를 통해 알 수 없는 것들도 있다
+	* 1) code 구조상 once를 측정하는 경우, size가 작은 case부터 큰 case까지 순차적으로 한번씩 cudaMemcpy를 호출해준다
+	* host\_buf라는 배열의 순차적으로 훑으면서 data를 copy해주며 test를 진행하였다
+		* 이 때문에 indexing을 하여 caching의 영향을 받아 latency의 증감이 매끄럽지 않다
+			* 이는 data 표를 보면 확인할 수 있다
+		* 이는 normal data의 유효성이 의심되는 부분이다
+	* 2) 64 * 1024B의 size를 기점으로 latency가 2배씩 상승하는데 이는 gpu의 page가 64K인것과 관련이 있어보인다
+
+<center> data for cudaMemcpy same size test </center>
+![Alt_text](image/memcpy_test/02.26_memcpy_test_same_size.JPG)
+
+* 위의 data 표는 같은 size를 copy할때의 latency를 측정한 표이다
+	* 같은 size를 copy한다는 것은, 최대 size인 64 * 1024 * 32B를 copy하기 위해서, cudaMemcpy를 여러번 호출하였을 때의 latency를 측정한 것이다
+	* e.g.) 최소 size인 64B는 64 * 1024 * 32B를 copy하기 위해서 cudaMemcpy를 1024 * 32번 호출한다
+* 이 전의 표와 동일하게 각 test는 100번씩 실행하여 latency를 평균낸 것이고, 각 size는 packet size와 batch size이다
+
+<center> graph for cudaMemcpy same size test </center>
+![Alt_text](image/memcpy_test/02.26_memcpy_test_same_size_data.JPG)
+
+* 위의 graph는 data 표를 시각화한 것이다.
+* cudaMemcpy의 호출이 잦아질수록 latency가 급격히 증가함을 알 수 있다
+* 이 증가폭은 첫번째 test의 증가폭과는 비교도 안 될만큼 큰 데, 이를 통해 copy하는 size보다, cudaMemcpy의 호출 횟수가 latency에 더 큰 영향을 미친다는 것을 알 수 있다
+
+* 다만 random data의 64 * 1024B(이하 64K) 이상의 경우 표를 확인해보면 32 * 64K를 한 번에 copy하는 것과 64K와 4 * 64K를 copy하는 것은 latency가 거의 동일하고, 심지어 2 * 64K와 8 * 64K, 16 * 64K를 여러번 copy해주는 것이 더 빠르다는 것을 볼 수 있다
+* 수치가 거의 비슷한 것을 보면 64K이상의 data copy는 어차피 gpu page를 여러개 가져와서 copy해줘야하기 때문에 더 이상 latency가 감소하기 힘들다는 것을 추측할 수 있다
+
+
+### 결론
+
+* cudaMemcpy는 copy하려는 size가 크면 클 수록 latency가 크고, 호출 빈도가 잦을수록 latency가 커진다
+* 하지만 그 증가폭은 호출 빈도에 의한 증가폭이 훨씬 높으며, 이를 통해 호출 빈도가 latency에 더 큰 영향을 미침을 알 수 있다
+* 또한 gpu page size 이상의 data는 어차피 gpu page size로 쪼개서 copy해줘야하기 때문에 cudaMemcpy를 한번 호출해서 copy해주나 여러번 호출해서 copy해주나 거의 비슷한 latency를 보인다
+
+
+---
 * packet size별로 batch 개수에 따른 pps변화를 알아보고 있다
 * test 중 의아한 점이 생겨서 원인 파악중
 
@@ -24,7 +80,7 @@
 * 지난번 실수처럼 gpu에 copy하는 과정에 모든 packet을 copy하지 않는다든가 하는 오류가 있을 수 있다
 * 현재 512B의 packet까지 test한 상태이며, pps의 기록은 batch_size_text.xlsx 파일에, 각 test 결과 캡쳐사진은 image/batch_test/ 안에 packet size별로 정리되어있다
 
-
+* 이 part의 의문 해결은 02/26 시작부분에 서술되어 있다
 
 
 ---
