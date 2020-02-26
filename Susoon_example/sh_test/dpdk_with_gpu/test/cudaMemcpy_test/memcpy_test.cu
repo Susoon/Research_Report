@@ -15,15 +15,11 @@
 
 #define RAND 0
 
-#define BATCH 0
-
 #define LOOP 0
 
-#if BATCH
-#define CASE 11
-#else
-#define CASE 7
-#endif
+#define SEL 1
+
+#define CASE 17
 
 char * device_buf;
 char * host_buf;
@@ -32,17 +28,18 @@ int test_cnt;
 
 FILE * data;
 
-uint64_t latency[11] = { 0 };
-const char* pkt_size_str[7] = { "32", "64", "128", "256", "512", "1024", "1514"};
-const char* batch_size_str[11] = { "64 * 32", "64 * 64", "64 * 128", "64 * 256",	\
+uint64_t latency[17] = { 0 };
+const char* size_str[17] = { "64", "128", "256", "512", "1024", "1514",\
+		 "64 * 32", "64 * 64", "64 * 128", "64 * 256",	\
 		"64 * 512", "64 * 1024", "64 * 1024 * 2", "64 * 1024 * 4",		 	\
 		"64 * 1024 * 8", "64 * 1024 * 16", "64 * 1024 * 32"};
-int pkt_size[7] = { 32, 64, 128, 256, 512, 1024, 1514};
-int batch_size[11] = { 64 * 32, 64 * 64, 64 * 128, 64 * 256, 64 * 512, 64 * 1024,\
- 64 * 1024 * 2, 64 * 1024 * 4, 64 * 1024 * 8, 64 * 1024 * 16, 64 * 1024 * 32};
+int size[17] = { 64, 128, 256, 512, 1024, 1514, 64 * 32, 64 * 64,\
+			 64 * 128, 64 * 256, 64 * 512, 64 * 1024,\
+			 64 * 1024 * 2, 64 * 1024 * 4, 64 * 1024 * 8,\
+			 64 * 1024 * 16, 64 * 1024 * 32};
 
-int start[11] = { 0 };
-int end[11] = { 0 };
+int start[17] = { 0 };
+int end[17] = { 0 };
 
 int monotonic_time() 
 {
@@ -67,13 +64,6 @@ void call_data(int size)
 void once(void)
 {
 	int i = 0;
-	int * size;
-
-#if BATCH
-	size = batch_size;
-#else
-	size = pkt_size;
-#endif
 
 	while(i < test_cnt)
 	{
@@ -105,14 +95,6 @@ void loop(int loop_cnt)
 {
 	int i = 0;
 
-	int * size;
-	
-#if BATCH
-	size = batch_size;
-#else
-	size = pkt_size;
-#endif
-
 	while(i < test_cnt)
 	{
 		for(int j = 0; j < CASE; j++) 
@@ -128,6 +110,45 @@ void loop(int loop_cnt)
 			call_data(size[j]);
 			start[j] = monotonic_time();
 			for(int k = 0; k < loop_cnt; k++)
+			{
+			cudaMemcpy(device_buf, host_buf, size[j], cudaMemcpyHostToDevice);
+			}
+#endif
+			end[j] = monotonic_time();
+			latency[j] += (end[j] - start[j]) / (uint64_t)loop_cnt;
+		}
+		i++;
+	}
+
+	for(i = 0; i < CASE; i++)
+	{
+		latency[i] /= (uint64_t)test_cnt;
+	}
+}
+
+void same_cnt_loop(void)
+{
+	int i = 0;
+
+	int loop_cnt = size[16];
+	int cur_loop_cnt;
+
+	while(i < test_cnt)
+	{
+		for(int j = 0; j < CASE; j++) 
+		{
+			cur_loop_cnt = loop_cnt / size[j];
+#if RAND
+			call_data(size[j] * 2);
+			start[j] = monotonic_time();
+			for(int k = 0; k < cur_loop_cnt; k++)
+			{
+			cudaMemcpy(device_buf, host_buf + rand() % size[j], size[j], cudaMemcpyHostToDevice);
+			}
+#else
+			call_data(size[j]);
+			start[j] = monotonic_time();
+			for(int k = 0; k < cur_loop_cnt; k++)
 			{
 			cudaMemcpy(device_buf, host_buf, size[j], cudaMemcpyHostToDevice);
 			}
@@ -161,19 +182,13 @@ void print_result(void)
 	START_GRN
 #if LOOP
 	printf("TEST WAS RUNNED %d TIMES!\n", test_cnt);
+#elif SEL
+	printf("TEST WAS RUNNED SAME TIMES!\n");
 #else
 	printf("TEST WAS RUNNED ONCE!\n");
 #endif
 	END
 
-	const char ** size_str;
-
-#if BATCH 
-	size_str = batch_size_str;
-#else
-	size_str = pkt_size_str;
-#endif
- 
 	for(int i = 0; i < CASE; i++)
 	{
 		printf("data size : %s, latency : %ld\n", size_str[i], latency[i]);
@@ -187,21 +202,24 @@ void print_result(void)
 
 int main(void)
 {
-	int loop_cnt;
 
 	srand(time(NULL));
 
 	host_buf = (char *)calloc(HALF * 2, sizeof(char));
-	cudaMalloc((void**)&device_buf, HALF * sizeof(char));
+	cudaHostAlloc((void**)&device_buf, HALF * sizeof(char), cudaHostAllocDefault);
 	cudaMemset(device_buf, 0 ,HALF * sizeof(char)); 
 
 	printf("Enter the test_cnt\n");
 	scanf("%d", &test_cnt);
 
 #if LOOP
+	int loop_cnt;
+
 	printf("Enter the loop_cnt\n");
 	scanf("%d", &loop_cnt);
 	loop(loop_cnt);
+#elif SEL
+	same_cnt_loop();
 #else
 	once();
 #endif
