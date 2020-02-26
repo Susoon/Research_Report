@@ -103,7 +103,10 @@ void set_gpu_mem_for_dpdk(void)
 	idx = 0;
 	tx_idx = 0;
 
-	printf("RING_SIZE = %d\n",RING_SIZE);
+	START_BLU
+	printf("RING_SIZE = %d\n", RING_SIZE);
+	printf("PKT_SIZE = %d, PKT_BATCH = %d\n", PKT_SIZE, PKT_BATCH);
+	END
 
 	ASSERTRT(cudaMalloc((void**)&rx_pkt_buf, RING_SIZE));
   	ASSERTRT(cudaMemset(rx_pkt_buf, 0, RING_SIZE));
