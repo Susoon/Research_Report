@@ -35,7 +35,7 @@
 
 <center> data for cudaMemcpy same size test </center>
 
-![Alt_text](image/memcpy_test/02.26_memcpy_test_same_size.JPG)
+![Alt_text](image/memcpy_test/02.26_memcpy_test_value_same_size.JPG)
 
 * 위의 data 표는 같은 size를 copy할때의 latency를 측정한 표이다
 	* 같은 size를 copy한다는 것은, 최대 size인 64 * 1024 * 32B를 copy하기 위해서, cudaMemcpy를 여러번 호출하였을 때의 latency를 측정한 것이다
