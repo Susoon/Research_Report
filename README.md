@@ -1,5 +1,41 @@
 # Daily Report for DPDK
 
+## 02/27 현재상황
+
+* code를 수정하였다
+* 원래는 caching effect를 없애보려고 수정하였으나 의도대로 되지 않은 것 같다...
+* random case의 경우 random index를 가져올때 범위 밖으로 벗어나는 경우가 없게 수정하였다
+* 어제의 test의 경우 size를 기준으로 오름차순의 경우만 test를 해보았는데 code를 수정하면서 내림차순의 test도 가등하게 해보았다
+* 결과는 유사했고, test시 첫번째 실행되는 size의 경우만 latency가 조금 더 높게 나왔다
+
+<center> ascending order test </center>
+
+![Alt_text](image/memcpy_test/02.27_memcpy_test_value_ascending.JPG)
+
+![Alt_text](image/memcpy_test/02.27_memcpy_test_value_same_size_ascending.JPG)
+
+![Alt_text](image/memcpy_test/02.27_condition_graph_ascending.JPG)
+
+![Alt_text](image/memcpy_test/02.27_same_size_graph_ascending.JPG)
+
+* 오름차순으로 test를 진행한 결과값과 graph이다
+
+<center> descending order test </center>
+
+![Alt_text](image/memcpy_test/02.27_memcpy_test_value_descending.JPG)
+
+![Alt_text](image/memcpy_test/02.27_memcpy_test_value_same_size_descending.JPG)
+
+![Alt_text](image/memcpy_test/02.27_condition_graph_descending.JPG)
+
+![Alt_text](image/memcpy_test/02.27_same_size_graph_descending.JPG)
+
+* 내림차순으로 test를 진행한 결과값과 graph이다
+
+* 값의 큰 차이는 보이지 않으며, caching이 어디서 진행되었나에 따라서 latency 값이 튀는 부분만 조금씩 달라진다고 추측할 수 있다
+* same size test의 경우에는 descending과 ascending 모두 동일하게 나왔다
+
+
 ## 02/26 현재상황
 
 * cudaMemcpy를 할 때 생기는 latency가 copy해주는 size에 더 큰 영향을 받는지, cudaMemcpy를 호출하는 횟수에 더 큰 영향을 받는지, 각각 어느정도의 latency를 가지는지에 대한 test를 진행하였다.
