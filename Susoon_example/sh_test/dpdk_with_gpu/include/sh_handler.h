@@ -45,7 +45,7 @@
 #define START_BLU printf("\033[1;34m");
 #define END printf("\033[0m"); 
 
-#define PKT_SIZE 64
+#define PKT_SIZE 1024
 #define PKT_BATCH (1024 + 32)
 // 64 -> 512, 1024 * 32
 // 128 -> 256, 1024 * 16

@@ -43,6 +43,16 @@ static void copy_to_arr(struct rte_mbuf * buf[], unsigned char * batch_buf, int 
 }
 
 
+static void copy_to_struct(struct rte_mbuf * buf[], unsigned char * batch_buf, int size)
+{
+	unsigned char* tmp;
+	for(int i = 0; i < size; i++)
+	{
+		tmp = (rte_ctrlmbuf_data(buf[i]));
+		memcpy(tmp, batch_buf + (i * PKT_SIZE), PKT_SIZE);
+	}
+}
+
 static void print_pkt(unsigned char * ptr)
 {
 		START_GRN
@@ -63,10 +73,12 @@ static void rx_loop(uint8_t lid)
 	struct rte_mbuf *buf[DEFAULT_PKT_BURST];
 	struct rte_mbuf *tx_buf[PKT_BATCH_SIZE];
 	uint16_t nb_rx;
+	uint16_t nb_tx;
 	int ret;
 	unsigned int i, j;
 	uint64_t gpu_recv = 0;
 	uint64_t cpu_recv = 0;
+	uint64_t gpu_send = 0;
 	unsigned char* ptr;
 	unsigned char* tx_ptr;
 	unsigned char* tmp_mac;
@@ -74,7 +86,8 @@ static void rx_loop(uint8_t lid)
 	unsigned char* tmp_port;
 
 	unsigned char* rx_batch_buf;
-	struct rte_mbuf* tx_batch_buf;
+	unsigned char* tx_batch_buf;
+	struct rte_mbuf* tx_batch_buf_struct;
 	unsigned int b_idx = 0;	
 
 	int start;
@@ -85,7 +98,8 @@ static void rx_loop(uint8_t lid)
 	tmp_port = (unsigned char*)malloc(2);
 	
 	rx_batch_buf = (unsigned char*)malloc(sizeof(unsigned char) * PKT_BATCH_SIZE);
-	tx_batch_buf = (struct rte_mbuf*)malloc(sizeof(struct rte_mbuf) * PKT_BATCH_SIZE);
+	tx_batch_buf = (unsigned char*)malloc(sizeof(unsigned char) * PKT_BATCH_SIZE);
+	tx_batch_buf_struct = (struct rte_mbuf*)malloc(sizeof(struct rte_mbuf) * PKT_BATCH_SIZE);
 
 
 	start_lcore(l2p, lid);
@@ -187,8 +201,9 @@ static void rx_loop(uint8_t lid)
 		}
 
 #if SEND
-		//get_tx_buf(tx_batch_buf);
-		//memcpy(tx_batch_buf, (rte_ctrlmbuf_data(tx_buf[0])), PKT_BATCH_SIZE);
+		nb_tx = get_tx_buf(tx_batch_buf);
+		copy_to_struct(tx_batch_buf_struct, tx_batch_buf, nb_tx);
+		gpu_send += nb_tx;
 		ret = rte_eth_tx_burst(0, 0, buf, nb_rx);
 #endif
 

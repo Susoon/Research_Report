@@ -10,8 +10,6 @@ ASSERT	include/sh_handler.h	21;"	d
 ASSERTRT	include/sh_handler.h	31;"	d
 BATCH	src/dpdk.c	8;"	d	file:
 BATCH_DUMP	src/dpdk.c	5;"	d	file:
-BATCH_NUM	include/sh_handler.h	49;"	d
-BATCH_SIZE	include/sh_handler.h	56;"	d
 CFLAGS	Makefile	/^CFLAGS = -O3 $(shell $(PKGCONF) --cflags libdpdk)$/;"	m
 CUDA	Makefile	/^CUDA ?= \/usr\/local\/cuda-10.2$/;"	m
 CUDA	test/gpu_infinite_loop/Makefile	/^CUDA ?= \/usr\/local\/cuda-10.2$/;"	m
@@ -21,7 +19,6 @@ CUDA_LIBPATH	Makefile	/^CUDA_LIBPATH := -L$(CUDA)\/lib64 -L$(CUDA)\/lib -L\/usr\
 CUDA_LIBPATH	test/gpu_infinite_loop/Makefile	/^CUDA_LIBPATH := -L$(CUDA)\/lib64 -L$(CUDA)\/lib -L\/usr\/lib64\/nvidia -L\/usr\/lib\/nvidia$/;"	m
 DEFAULT_PKT_BURST	include/dpdk.h	25;"	d
 DUMP	src/dpdk.c	4;"	d	file:
-D_NUM	include/sh_handler.h	58;"	d
 END	include/sh_handler.h	46;"	d
 GPU_PAGE_MASK	include/sh_handler.h	40;"	d
 GPU_PAGE_SHIFT	include/sh_handler.h	38;"	d
@@ -44,11 +41,14 @@ ONELINE	src/dpdk.c	3;"	d	file:
 ONE_SEC	include/sh_handler.h	60;"	d
 PC_FILE	Makefile	/^PC_FILE := $(shell $(PKGCONF) --path libdpdk 2>\/dev\/null)$/;"	m
 PKGCONF	Makefile	/^PKGCONF = pkg-config$/;"	m
+PKT_BATCH	include/sh_handler.h	49;"	d
+PKT_BATCH_SIZE	include/sh_handler.h	56;"	d
 PKT_SIZE	include/sh_handler.h	48;"	d
 PTHREAD_CNT	src/dpdk.c	10;"	d	file:
 RTE_TARGET	Makefile	/^RTE_TARGET ?= $(notdir $(abspath $(dir $(firstword $(wildcard $(RTE_SDK)\/*\/.config)))))$/;"	m
 RX_DESC_DEFAULT	include/dpdk.h	24;"	d
 RX_LOOP_CNT	src/dpdk.c	9;"	d	file:
+RX_NB	include/sh_handler.h	58;"	d
 RX_TYPE	include/l2p.h	/^enum { NO_TYPE = 0, RX_TYPE = 0x01, TX_TYPE = 0x02 };$/;"	e	enum:__anon1
 SEND	src/dpdk.c	7;"	d	file:
 SMALL	test/type_conversion/type_test.c	15;"	d	file:
@@ -71,6 +71,7 @@ ck_dpdk	include/dpdk.h	/^ck_dpdk_t ck_dpdk; $/;"	v
 ck_dpdk	include/dpdk.h	/^typedef struct ck_dpdk{$/;"	s
 ck_dpdk_t	include/dpdk.h	/^}ck_dpdk_t;$/;"	t	typeref:struct:ck_dpdk
 copy_to_arr	src/dpdk.c	/^static void copy_to_arr(struct rte_mbuf * buf[], unsigned char * batch_buf, int size)$/;"	f	file:
+copy_to_struct	src/dpdk.c	/^static void copy_to_struct(struct rte_mbuf * buf[], unsigned char * batch_buf, int size)$/;"	f	file:
 cpu_monitoring_loop	src/dpdk.c	/^void *cpu_monitoring_loop(void *data)$/;"	f
 curr_stats	include/dpdk.h	/^	eth_stats_t curr_stats;$/;"	m	struct:port_info
 default_port_conf	include/dpdk.h	/^static struct rte_eth_conf default_port_conf = {$/;"	v	typeref:struct:rte_eth_conf
@@ -101,6 +102,7 @@ lid	include/l2p.h	/^	uint16_t lid;$/;"	m	struct:__anon2
 lids	include/l2p.h	/^	uint16_t lids[RTE_MAX_LCORE];$/;"	m	struct:__anon3
 lobj_t	include/l2p.h	/^} lobj_t;	\/* lcore type and ports\/qids *\/$/;"	t	typeref:struct:__anon2
 main	main.c	/^int main(int argc, char ** argv)$/;"	f
+main	test/cudaMemcpy_test/MakeRandom.c	/^int main(void)$/;"	f
 main	test/type_conversion/type_test.c	/^int main(void)$/;"	f
 map	include/l2p.h	/^	rxtx_t map[MAX_MAP_PORTS][MAX_MAP_LCORES];$/;"	m	struct:__anon6
 monitor	main.c	/^void * monitor(void * data)$/;"	f

@@ -139,20 +139,25 @@ int get_rx_cnt(void)
 }
 
 extern "C"
-void get_tx_buf(unsigned char* tx_buf)
+int get_tx_buf(unsigned char* tx_buf)
 {
-	printf("get_tx_buf!!!!!\n");
+	int tx_cur_pkt = 0;
 
 	cudaMemcpy(tx_buf, tx_pkt_buf + (tx_idx * PKT_BATCH_SIZE), sizeof(unsigned char) * PKT_BATCH_SIZE, cudaMemcpyDeviceToHost);
+
+//	cudaMemcpy(&tx_cur_pkt, pkt_batch_num + tx_idx, sizeof(int), cudaMemcpyDeviceToHost);
 
 	tx_idx++;
 	if(tx_idx == THREAD_NUM)
 		tx_idx = 0;
+
+	return tx_cur_pkt;
 }
 
 __global__ void gpu_monitor(unsigned char * rx_pkt_buf, unsigned char * tx_pkt_buf, int * rx_pkt_cnt, int * pkt_batch_num)
 {
 	int mem_index = PKT_BATCH_SIZE * threadIdx.x;
+	int batch_num;
 
 // PKT_BATCH_SIZE 64 * 512
 // THREAD_NUM 512
@@ -162,22 +167,44 @@ __global__ void gpu_monitor(unsigned char * rx_pkt_buf, unsigned char * tx_pkt_b
 	if(pkt_batch_num[threadIdx.x] != 0 && rx_pkt_buf[mem_index + ((pkt_batch_num[threadIdx.x] - 1) * PKT_SIZE)] != 0)
 	{
 		__syncthreads();
-		rx_pkt_buf[mem_index + ((pkt_batch_num[threadIdx.x] - 1) * PKT_SIZE)] = 0;
+		batch_num = pkt_batch_num[threadIdx.x];
 
 		__syncthreads();
-		atomicAdd(rx_pkt_cnt, pkt_batch_num[threadIdx.x]);
-		
+		rx_pkt_buf[mem_index + ((batch_num - 1) * PKT_SIZE)] = 0;
+
 		__syncthreads();
-		memset(pkt_batch_num + threadIdx.x, 0, sizeof(int));
+		atomicAdd(rx_pkt_cnt, batch_num);
+		
 #if TX
 		__syncthreads();
-		mani_pkt_gpu(rx_pkt_buf + mem_index);
-				
-		__syncthreads();
 		memcpy(tx_pkt_buf + mem_index, rx_pkt_buf + mem_index, PKT_BATCH_SIZE);
+
+		for(int i = 0; i < batch_num; i++)
+		{
+			__syncthreads();
+			mani_pkt_gpu(tx_pkt_buf + mem_index + i * PKT_SIZE);
+		}
 #endif
+		__syncthreads();
+		memset(pkt_batch_num + threadIdx.x, 0, sizeof(int));
+		
 	}
 }
+
+#if 0
+__global__ void gpu_mani_loop(unsigned char * tx_pkt_buf,int * pkt_batch_num)
+{
+	__syncthreads();
+	if(pkt_batch_num[threadIdx.x] != 0 && rx_pkt_buf[mem_index + ((pkt_batch_num[threadIdx.x] - 1) * PKT_SIZE)] != 0)
+	{
+		__syncthreads();
+		memcpy(tx_pkt_buf + mem_index, rx_pkt_buf + mem_index, PKT_BATCH_SIZE);
+
+		__syncthreads();
+		mani_pkt_gpu(tx_pkt_buf + mem_index + i * PKT_SIZE);
+	}
+}	
+#endif
 
 extern "C"
 void gpu_monitor_loop(void)
