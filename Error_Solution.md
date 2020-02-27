@@ -58,7 +58,7 @@
 * dpdk.c 파일을 compile할 때 뜬 warning이다
 * dpdk.c에서 sh_handler.cu에 있는 copy_to_gpu 함수를 불러오지 못하고 있다
   * 내가 만든 파일끼리의 linking이 되지 않았다는 증거
-* 해결안됨!!
+* compile tag 문제, 아래의 port를 못 찾을 때의 에러 참고
 
 
 
@@ -76,7 +76,35 @@
   * sh_handler.cu 내에 read_handler 함수에서 device를 건드리는 function(\_\_global\_\_ or \_\_device\_\_ or cudaMalloc etc...)를 호출하면 error가 발생
   * linking 과정이나 함수 코드 내의 문제일 가능성 있음
 * 두번째 error는 port를 찾을 수 없는 error
-  * 이 error는 좀 더 살펴봐야함
+  * compile tag에 의한 error
+  * 원래는 rte.var.mk를 통한 compile이 되어야하지만 libdpdk.pc를 수정하는 과정에서 그 연결이 끊어짐
+  * 다시 연결을 잇는 법을 찾지 못해 tag를 다 넣어줌
 
 
 
+<center>  Execution Result </center>
+
+![Alt_text](C:/Users/김수환/AppData/Local/Packages/CanonicalGroupLimited.Ubuntu18.04onWindows_79rhkp1fndgsc/LocalState/rootfs/home/add/work/Research_Report/image/02.17_output.JPG)
+
+
+
+* 위의 캡쳐처럼 copy_to_gpu가 print_gpu를 호출하지만 출력 결과를 보면 packet도 출력이 안되고 [GPU]: 이부분도 아예 출력이 안되는 걸 보면 print_gpu가 호출이 안됨
+* 그래서 copy_to_gpu에 print로 packet을 출력시키려 하니 segmentation fault error가 발생함
+
+### Solution
+
+* cuda compile시 gpu driver에 따라 다른 sm 버젼을 줘야함
+  * K4000의 경우 30을 줘야 정상적으로 제 기능을 함
+
+## 3.2 Infinite loop in GPU
+
+* gpu에서 persistent loop를 돌리려하면 다른 cudaMemcpy같은 gpu 관련 함수들이 전혀 실행되지 않음
+
+
+
+### Solution
+
+* 이는 Kepla 시리즈가 preemption을 지원하지 않기 때문
+* 찬규형의 test환경은 Pascal gpu를 사용함
+  * 그래서 찬규형의 코드에는 infinite loop가 있어도 다른 gpu 함수들이 preemption으로 loop를 밀고 들어와 실행하기 때문에 정상적인 기능을 할 수 있음
+* pthread를 사용해서 CPU에서 infinite loop을 돌리고 loop 안에 monitor code를 넣어 gpu에서 infinite loop을 도는 것과 유사한 환경을 만들어줌

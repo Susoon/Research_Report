@@ -2,6 +2,106 @@
 
 ## 02/27 현재상황
 
+### 현재까지 test 결과 분석
+
+#### 1) rx pps
+
+<center> pps table </center>
+
+
+
+![Alt_text](image/batch_test/02.27_packet_batch_test.JPG)
+
+* packet size보다 batch하는 packet의 수에 더 큰 영향을 받음
+  * 그런 줄 알았으나 실제로는 조금 다름
+  * 마지막 analysis에서 자세히 설명
+* 32개를 batch 했을 때 64B, 128B, 256B, 512B의 경우 pps가 1.9Mpps로 동일함
+  * 최대 pps가 1.9Mpps를 넘는 case들임
+* 64개를 batch 했을 때 64B, 128B, 256B의 경우 pps가 3.8Mpps로 동일함
+  * 역시 최대 pps가 3.8Mpps를 넘음
+* 128개를 batch 했을 때부터 모두 다른 pps를 보임
+* 예상대로라면 64B size의 packet을 128개 batch했을 때, 5.8Mpps수준으로 128B size의 packet과 동일한 pps를 보여야하지만 더 높은 pps를 보임
+  * 96개를 batch했을 때 5.8Mpps 정도를 보임
+  * 이유는 아직 모름...
+
+
+
+#### 2) cudaMemcpy
+
+* 같은 횟수의 cudaMemcpy를 시도할 때 copy하는 size가 크면 클 수록 latency가 더 커짐
+* 같은 size를 copy할 때 copy하는 횟수가 잦으면 잦을 수록 latency가 더 커짐
+
+<center> memcpy test graph </center>
+
+
+
+![Alt_text](image/memcpy_test/02.27_condition_graph_descending.JPG)
+
+
+
+![Alt_text](image/memcpy_test/02.27_same_size_graph_descending.JPG)
+
+
+
+<center> memcpy test table </center>
+
+![Alt_text](image/memcpy_test/02.27_memcpy_test_value_descending.JPG)
+
+
+
+![Alt_text](image/memcpy_test/02.27_memcpy_test_value_same_size_descending.JPG)
+
+
+
+
+
+* 횟수에 의한 latency 증가폭이 size에 의한 latency 증가폭보다 훨씬 커서 최대한 적은 횟수의 cudaMemcpy 호출이 이득임
+  * 하지만 64K의 gpu page 크기 이상을 copy하는 경우 1번 호출하여 전체를 copy하든지 page 크기 이상으로  n번에 나누어서 호출하든지 여러개의 page를 호출해야한다는 점에서 같은 overhead가 발생하여 횟수에 의한 latency 증가폭이 미미해짐
+* 100번 loop를 돌린 경우가 한 번만 돌린 경우에 비해 latency가 조금 적다
+  * 이는 cudaMemcpy를 할 때 aggregation해서 copy하는 가에 대한 추측을 할 수 있게 한다
+
+* same size test에서 64 * 1024 * 2B 이상의 case를 확인해보면 latency 차이가 거의 미미하며, 심지어 64 * 1024 * 32B보다 작은 case의 latency가 더 작은 경우가 있음을 확인할 수 있다
+
+
+
+#### 3) analysis
+
+* 같은 size를 gpu memory에 copy할 때,  cudaMemcpy를 한 번  호출하여 한 번에 올리는 것이 여러번으로 나누어 copy하는 것보다 더 빠르다는 test 결과를 도출해냄
+  * same size test
+* 의문점은 그 전의 packet size별 batch size에 따른 pps를 test한 결과를 살펴보면, 32개를 batch한 경우, 64B, 128B, 256B, 512B의 pps가 같다
+* 이것의 원인이 same size test의 결과 때문이라고 생각했다
+* 하지만 실제 호출되는 횟수를 계산해보면 packet size의 영향과, batch하는 packet 수의 영향은 거의 동일해보인다
+  * 64B 
+    * max rx pps : 13.8Mpps
+    * 32개 batch 후 cudaMemcpy 호출 횟수 : 약 431,250회 
+  * 128B
+    * max rx pps : 8.4Mpps
+    * 32개 batch 후 cudaMemcpy  호출 횟수 : 약 262,500회
+  * 256B
+    * max rx pps : 4.5Mpps
+    * 32개 batch 후 cudaMemcpy 호출 횟수 : 약 140,625회
+  * 512B
+    * max rx pps : 2.35Mpps
+    * 32개 batch 후 cudaMemcpy 호출 횟수 : 약 73,437회
+* size가 2배 늘어나면 cudaMemcpy 호출 횟수도 2배 줄어든다
+* 그 결과 거의 동일한 pps를 보인다
+* 이는 cudaMemcpy의 overhead뿐만이 아닌 다른 원인이 존재한다는 것을 보여준다
+  * size의 증가보다 cudaMemcpy 호출 횟수의 증가가 latency에 더 큰 영향을 준다는 것을 증명했으므로
+* 혹은 test의 방식에 문제가 있을 수 있다는 것을 보여준다
+  * size의 증가와 호출 횟수의 증가가 latency에 동일한 영향을 주지만 test 자체가 잘못되어 다른 결과를 보여줬을 수 있으므로 
+* pps에 영향을 주는 또다른 원인을 찾아서 관련된 test를 진행해봐야할 것 같다 
+  * e.g.) caching (pkt-gen이 packet당 3개의 숫자를 제외하고는 같은 data가 담긴 packet을 보냄 (정확한 수치는 아님)) 등...
+* batch하는 packet의 수를 1024개로 맞춰주면 모든 packet size에서 최고 속도를 낼 수 있다
+* normal data의 경우 latency 증가폭이 매끄럽지 않은데 이는 caching의 영향으로 추측중이다
+
+
+
+---
+
+### memcpy test code 수정
+
+
+
 * code를 수정하였다
 * 원래는 caching effect를 없애보려고 수정하였으나 의도대로 되지 않은 것 같다...
 * random case의 경우 random index를 가져올때 범위 밖으로 벗어나는 경우가 없게 수정하였다
@@ -19,6 +119,8 @@
 ![Alt_text](image/memcpy_test/02.27_same_size_graph_ascending.JPG)
 
 * 오름차순으로 test를 진행한 결과값과 graph이다
+
+
 
 <center> descending order test </center>
 
@@ -96,7 +198,6 @@
 * 하지만 그 증가폭은 호출 빈도에 의한 증가폭이 훨씬 높으며, 이를 통해 호출 빈도가 latency에 더 큰 영향을 미침을 알 수 있다
 * 또한 gpu page size 이상의 data는 어차피 gpu page size로 쪼개서 copy해줘야하기 때문에 cudaMemcpy를 한번 호출해서 copy해주나 여러번 호출해서 copy해주나 거의 비슷한 latency를 보인다
 
-
 ---
 * packet size별로 batch 개수에 따른 pps변화를 알아보고 있다
 * test 중 의아한 점이 생겨서 원인 파악중
@@ -121,7 +222,6 @@
 * 현재 512B의 packet까지 test한 상태이며, pps의 기록은 batch_size_text.xlsx 파일에, 각 test 결과 캡쳐사진은 image/batch_test/ 안에 packet size별로 정리되어있다
 
 * 이 part의 의문 해결은 02/26 시작부분에 서술되어 있다
-
 
 ---
 ## 02/25 현재상황
