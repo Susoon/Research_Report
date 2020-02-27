@@ -12,6 +12,7 @@ unsigned char * rx_pkt_buf;
 unsigned char * tx_pkt_buf;
 static int idx;
 int * rx_pkt_cnt;
+
 int tx_idx;
 
 int * pkt_batch_num;
@@ -75,7 +76,7 @@ __device__ void mani_pkt_gpu(unsigned char * d_pkt_buf)
 }
 
 extern "C"
-void copy_to_gpu(unsigned char* buf, int pkt_num)
+int copy_to_gpu(unsigned char* buf, int pkt_num)
 {
 // PKT_BATCH_SIZE 64 * 512
 // THREAD_NUM 512
@@ -96,6 +97,8 @@ void copy_to_gpu(unsigned char* buf, int pkt_num)
 	idx++;
 	if(idx == THREAD_NUM)
 		idx = 0;
+	
+	return 1;
 }
 
 extern "C"
@@ -106,7 +109,7 @@ void set_gpu_mem_for_dpdk(void)
 
 	START_BLU
 	printf("RING_SIZE = %d\n", RING_SIZE);
-	printf("PKT_SIZE = %d, PKT_BATCH = %d\n", PKT_SIZE, PKT_BATCH);
+	printf("PKT_SIZE = %d, PKT_BATCH = %d + %d\n", PKT_SIZE, PKT_BATCH - RX_NB, RX_NB);
 	END
 
 	ASSERTRT(cudaMalloc((void**)&rx_pkt_buf, RING_SIZE));

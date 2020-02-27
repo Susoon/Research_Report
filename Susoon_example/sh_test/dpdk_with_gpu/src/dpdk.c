@@ -79,6 +79,7 @@ static void rx_loop(uint8_t lid)
 	uint64_t gpu_recv = 0;
 	uint64_t cpu_recv = 0;
 	uint64_t gpu_send = 0;
+	uint64_t copy_cnt = 0;
 	unsigned char* ptr;
 	unsigned char* tx_ptr;
 	unsigned char* tmp_mac;
@@ -129,7 +130,7 @@ static void rx_loop(uint8_t lid)
 #if BATCH_DUMP
 				print_pkt(rx_batch_buf);
 #endif
-				copy_to_gpu(rx_batch_buf, b_idx); 
+				copy_cnt += copy_to_gpu(rx_batch_buf, b_idx); 
 				b_idx = 0;
 				memset(rx_batch_buf, 0, PKT_BATCH_SIZE);
 			}
@@ -144,10 +145,11 @@ static void rx_loop(uint8_t lid)
 			if(end - start > ONE_SEC)
 			{
 				gpu_recv = get_rx_cnt();
-				printf("gpu_recv = %ld, cpu_recv = %ld\n", gpu_recv, cpu_recv);
+				printf("gpu_recv = %ld, cpu_recv = %ld, copy_cnt = %ld\n", gpu_recv, cpu_recv, copy_cnt);
 				start = end;
 				gpu_recv = 0;
 				cpu_recv = 0;
+				copy_cnt = 0;
 			}
 #endif
 
