@@ -8,12 +8,13 @@
 #define START_RED printf("\033[1;31m");
 #define START_GRN printf("\033[1;32m");
 #define START_YLW printf("\033[1;33m");
+#define START_BLU printf("\033[1;34m");
 #define END printf("\033[0m");
 
 #define ONE_SEC (1000 * 1000 * 1000)
 #define HALF (1024 * 32 * 64)
 
-#define RAND 0
+#define NORM 0
 
 #define LOOP 0
 
@@ -21,10 +22,7 @@
 
 #define CASE 17
 
-char * device_buf;
-char * host_buf;
-
-int test_cnt;
+#define REVERSE 0
 
 FILE * data = fopen("data.txt", "r");
 
@@ -48,16 +46,19 @@ int monotonic_time()
 	return timespec.tv_sec * ONE_SEC + timespec.tv_nsec;
 }
 
-void call_data(int size)
+void call_data(char * host_buf, int size)
 {
 	fseek(data, 0, SEEK_SET);
+	fgets(host_buf, sizeof(char) * size, data);
+/*
 	for(int i = 0; i < size; i++)
 	{
 		fscanf(data, "%c", host_buf + i);
 	}
+*/
 }
 
-void once(void)
+void once(char * device_buf, char * host_buf, int test_cnt)
 {
 	int i = 0;
 	
@@ -65,22 +66,23 @@ void once(void)
 
 	while(i < test_cnt)
 	{
-#if RAND
-#else
-		call_data(HALF * 2);
+		call_data(host_buf, HALF * 2);
 		skip = 0;
-#endif
-		for(int j = 0; j < CASE; j++)
-		{
-#if RAND
-			call_data(size[j] * 2);
-			start[j] = monotonic_time();
-			cudaMemcpy(device_buf, host_buf + rand() % size[j], size[j], cudaMemcpyHostToDevice);
+#if REVERSE
+		for(int j = CASE - 1; j >= 0; j--)
 #else
+		for(int j = 0; j < CASE; j++)
+#endif
+		{
+#if NORM
+			skip += size[j];
+#else
+			skip = rand();
+#endif
+			if(skip >= HALF)
+				skip %= HALF;
 			start[j] = monotonic_time();
 			cudaMemcpy(device_buf, host_buf + skip, size[j], cudaMemcpyHostToDevice);
-			skip += size[j];
-#endif
 			end[j] = monotonic_time();
 			latency[j] += end[j] - start[j];
 			cudaMemset(device_buf, 0, size[j]);
@@ -94,29 +96,34 @@ void once(void)
 	}
 }
 
-void loop(int loop_cnt)
+void loop(char * device_buf, char * host_buf, int test_cnt, int loop_cnt)
 {
 	int i = 0;
 
+	int skip = 0;
+
 	while(i < test_cnt)
 	{
-		for(int j = 0; j < CASE; j++) 
-		{
-#if RAND
-			call_data(size[j] * 2);
-			start[j] = monotonic_time();
-			for(int k = 0; k < loop_cnt; k++)
-			{
-			cudaMemcpy(device_buf, host_buf + rand() % size[j], size[j], cudaMemcpyHostToDevice);
-			}
+		call_data(host_buf, HALF * 2);
+		skip = 0;
+#if REVERSE
+		for(int j = CASE - 1; j >= 0; j--)
 #else
-			call_data(size[j]);
+		for(int j = 0; j < CASE; j++)
+#endif
+		{
+#if NORM
+			skip += size[j];
+#else
+			skip = rand();
+#endif
+			if(skip >= HALF)
+				skip %= HALF;
 			start[j] = monotonic_time();
 			for(int k = 0; k < loop_cnt; k++)
 			{
-			cudaMemcpy(device_buf, host_buf, size[j], cudaMemcpyHostToDevice);
+			cudaMemcpy(device_buf, host_buf + skip, size[j], cudaMemcpyHostToDevice);
 			}
-#endif
 			end[j] = monotonic_time();
 			latency[j] += (end[j] - start[j]) / (uint64_t)loop_cnt;
 		}
@@ -129,33 +136,37 @@ void loop(int loop_cnt)
 	}
 }
 
-void same_cnt_loop(void)
+void same_cnt_loop(char * device_buf, char * host_buf, int test_cnt)
 {
 	int i = 0;
 
 	int loop_cnt = size[16];
 	int cur_loop_cnt;
+	int skip = 0;
 
 	while(i < test_cnt)
 	{
-		for(int j = 0; j < CASE; j++) 
+		call_data(host_buf, HALF * 2);
+		skip = 0;
+#if REVERSE
+		for(int j = CASE - 1; j >= 0; j--)
+#else
+		for(int j = 0; j < CASE; j++)
+#endif
 		{
 			cur_loop_cnt = loop_cnt / size[j];
-#if RAND
-			call_data(size[j] * 2);
-			start[j] = monotonic_time();
-			for(int k = 0; k < cur_loop_cnt; k++)
-			{
-			cudaMemcpy(device_buf, host_buf + rand() % size[j], size[j], cudaMemcpyHostToDevice);
-			}
+#if NORM
+			skip += size[j];
 #else
-			call_data(size[j]);
+			skip = rand();
+#endif
+			if(skip >= HALF)
+				skip %= HALF;
 			start[j] = monotonic_time();
 			for(int k = 0; k < cur_loop_cnt; k++)
 			{
-			cudaMemcpy(device_buf, host_buf, size[j], cudaMemcpyHostToDevice);
+			cudaMemcpy(device_buf, host_buf + skip, size[j], cudaMemcpyHostToDevice);
 			}
-#endif
 			end[j] = monotonic_time();
 			latency[j] += end[j] - start[j];
 		}
@@ -168,43 +179,53 @@ void same_cnt_loop(void)
 	}
 }
 
-void print_result(void)
+void print_result(int test_cnt)
 {
 	START_RED
-	printf("\n\n___________________TEST START____________________\n\n");
+	printf("\n\n______________________TEST START_______________________\n\n");
 	END
 
 	START_YLW
-#if RAND
-	printf("RANDOM DATA TEST!\n");
+#if NORM
+	printf("   NORMAL DATA TEST!\n");
 #else
-	printf("NORMAL DATA TEST!\n");
+	printf("   RANDOM DATA TEST!\n");
 #endif
 	END
 
 	START_GRN
 #if LOOP
-	printf("TEST WAS RUNNED %d TIMES!\n", test_cnt);
+	printf("   TEST WAS RUNNED %d TIMES!\n", test_cnt);
 #elif SEL
-	printf("TEST WAS RUNNED SAME TIMES!\n");
+	printf("   TEST WAS RUNNED SAME TIMES!\n");
 #else
-	printf("TEST WAS RUNNED ONCE!\n");
+	printf("   TEST WAS RUNNED ONCE!\n");
 #endif
 	END
 
+#if REVERSE
+	START_BLU
+	printf("   TEST WAS RUNNED REVERSED ORDER!\n");
+	END
+#endif
+
 	for(int i = 0; i < CASE; i++)
 	{
-		printf("data size : %s, latency : %ld\n", size_str[i], latency[i]);
+		printf("   data size : %s, latency : %ld\n", size_str[i], latency[i]);
 	}
 
 	START_RED
-	printf("\n___________________TEST END____________________\n\n\n");
+	printf("\n______________________TEST END_______________________\n\n\n");
 	END
 }
 
 
 int main(void)
 {
+	int test_cnt;
+
+	char * device_buf;
+	char * host_buf;
 
 	srand(time(NULL));
 
@@ -220,14 +241,13 @@ int main(void)
 
 	printf("Enter the loop_cnt\n");
 	scanf("%d", &loop_cnt);
-	loop(loop_cnt);
+	loop(device_buf, host_buf, test_cnt, loop_cnt);
 #elif SEL
-	same_cnt_loop();
+	same_cnt_loop(device_buf, host_buf, test_cnt);
 #else
-	once();
+	once(device_buf, host_buf, test_cnt);
 #endif
-
-	print_result();
+	print_result(test_cnt);
 
 	cudaFree(device_buf);
 
