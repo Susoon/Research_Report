@@ -5,6 +5,7 @@
 * cudaMemcpy를 할 때 생기는 latency가 copy해주는 size에 더 큰 영향을 받는지, cudaMemcpy를 호출하는 횟수에 더 큰 영향을 받는지, 각각 어느정도의 latency를 가지는지에 대한 test를 진행하였다.
 
 <center> cudaMemcpy test values </center>
+
 ![Alt_text](image/memcpy_test/02.26_memcpy_test_value.JPG)
 
 * 위는 test로 얻은 latency를 정리해놓은 것이다
@@ -16,6 +17,7 @@
 * 각 test는 100번 시행하여 latency의 평균을 내어 data로 사용했다.
 
 <center> graph for cudaMemcpy test </center>
+
 ![Alt_text](image/memcpy_test/02.26_memcpy_test_condition.JPG)
 
 * 위의 graph는 표의 data들을 시각화한 것이다
@@ -32,6 +34,7 @@
 	* 2) 64 * 1024B의 size를 기점으로 latency가 2배씩 상승하는데 이는 gpu의 page가 64K인것과 관련이 있어보인다
 
 <center> data for cudaMemcpy same size test </center>
+
 ![Alt_text](image/memcpy_test/02.26_memcpy_test_same_size.JPG)
 
 * 위의 data 표는 같은 size를 copy할때의 latency를 측정한 표이다
@@ -40,6 +43,7 @@
 * 이 전의 표와 동일하게 각 test는 100번씩 실행하여 latency를 평균낸 것이고, 각 size는 packet size와 batch size이다
 
 <center> graph for cudaMemcpy same size test </center>
+
 ![Alt_text](image/memcpy_test/02.26_memcpy_test_same_size_data.JPG)
 
 * 위의 graph는 data 표를 시각화한 것이다.
