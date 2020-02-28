@@ -1,5 +1,75 @@
 # Daily Report for DPDK
 
+## 02/28 현재상황
+
+* dpdk.c에서 copy_to_gpu를 호출하면, copy_to_gpu에서 직접 gpu kernel을 호출하여 packet 개수를 count하게끔 code를 수정함
+* 이를 통해 pps가 더 떨어질 것이라고 예상함
+  * 또다른 thread를 통해 dpdk.c와 독립적으로 count를 해주면 dpdk를 담당하는 core가 할 일이 적어지므로 더 빠름
+  * 이를 dpdk.c가 gpu kernel을 통해 packet의 copy가 정상적으로 진행되었는지 확인하고, packet의 수까지 count하게 바꾸었으니 core가 할 일이 많아져 더 느려져야함
+
+
+
+
+<center> kernel launch test result table </center>
+
+
+
+![Alt_text](image/memcpy_test/02.28_pps_test_value.JPG)
+
+
+
+* 위의 표를 보면 64B를 제외한 나머지 packet size의 경우 pkt-gen이 보내주는 pps만큼 받아줄 수 있다는 것을 확인할 수 있다
+
+
+
+<center> kernel launch test rx rate result </center>
+
+
+
+![Alt_text](image/memcpy_test/02.28_pps_test_rate.JPG)
+
+
+
+![Alt_text](image/memcpy_test/02.28_pps_test_graph_pkt.JPG)
+
+* 위의 graph는 gpu가 받은 rx pps를 pkt-gen에서 보내준 pps로 나누어 받은 packet의 비율을 나타낸 것이다
+* 64B의 경우 100% 모든 packet을 받은 경우가 없었지만 그 외의 size의 경우 100% 모든 packet을 받는 경우가 존재했다
+* 모든 packet size가 100%의 packet을 받는 경우는 없었다
+  * 모든 packet size를 수용할 수 있는 batch 개수는 32부터 1024개까지이다
+  * 128B가 100%의 packet을 수용하려면 1024 * 2개의 batch가 필요하다
+  * 256B 이상의 packet size의 경우 512나 1024개의 batch size가 필요하다
+* 64B의 경우 어제의 test 결과에서도, 이번 test 결과에서도 다른 size와는 조금 다른 특징을 가졌다
+  * 어제의 test에서는 batch 개수 증가에 따른 pps 증가량이 달랐음
+  * 이번 test에서는 100%의 packet을 수용하지 못한 유일한 packet size임
+* 그 원인은 아직 잘 모르겠다
+
+
+
+* 원래는 64B size만 10Mpps를 넘는 속도로 pkt-gen이 보내주기 때문이 아닐까라고 추측을 했었다
+* packet을 보내주는 개수가 압도적으로 많으니 cpu가 따라가지 못한다는 가설을 세웠다
+* cudaMemcpy call의 횟수를 보면 가설이 틀렸음을 알 수 있다
+
+
+
+<center> cudaMemcpy call count </center>
+
+
+
+![Alt_text](image/memcpy_test/02.28_pps_test_copy_cnt.JPG)
+
+* packet을 보내주는 수가 많아서 다른 특징을 보이는 거라면, 결국 cudaMemcpy나 gpu kernel의 호출 횟수가 달라서 다른 특징을 보이는 것이라는 얘기가 된다
+* 하지만 call count table을 보면 64B의 cudaMemcpy의 호출 횟수가 점점 줄어듬을 알 수 있다
+  * copy_to_gpu 한 번 호출 당 1씩 증가시켰으므로 gpu kernel도 동일한 횟수로 불렸다
+* 당연한 얘기지만 이를 통해 알 수 있는 것은 cudaMemcpy의 호출 횟수가 줄어들었으므로 cudaMemcpy의 latency가 줄어들었다는 얘기가 된다
+
+* 이는 어제의 test 결과로 추측해보았을때 cudaMemcpy의 overhead로 인한 pps 감소 외에 다른 요인이 있다는 결론이 나온다
+* 여기서 의문점은 그렇다면 왜 64B에서만 이러한 특징이보이는 가이다
+  * 이 부분은 아직 잘 모르겠다...
+
+
+
+---
+
 ## 02/27 현재상황
 
 ### 현재까지 test 결과 분석
