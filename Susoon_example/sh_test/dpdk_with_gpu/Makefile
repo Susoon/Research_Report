@@ -21,11 +21,30 @@ PC_FILE := $(shell $(PKGCONF) --path libdpdk 2>/dev/null)
 CFLAGS = -O3 $(shell $(PKGCONF) --cflags libdpdk)
 LDFLAGS_SHARED = $(shell $(PKGCONF) --libs libdpdk)
 
+ifndef BUILD
+
+sixteen := x x x x x x x x x x x x x x x x
+MAX := $(foreach x, $(sixteen), $(sixteen))
+
+T := $(shell $(MAKE) -nrRf $(firstword $(MAKEFILE_LIST)) $(MAKECMDGOALS) \
+	BUILD="COUNTTHIS" | grep -c "COUNTTHIS")
+
+N := $(wordlist 1, $T, $(MAX))
+
+counter = $$(($(T)-$(words $N) + 1))$(eval N := $(wordlist 2,$(words $N),$N))
+
+BUILD = @echo $(counter) of $(T)
+endif
+
+
+
+
 all: dpdk_gpu_test
+	@echo done
 
 #all compile
 dpdk_gpu_test: sh_handler.o dpdk.o main.o
-	g++ -o $@ -m64 -pthread\
+	@g++ -o $@ -m64 -pthread\
  -I/home/susoon/work/dpdk-stable-18.11.2/lib/librte_eal/linux/eal/include\
   -march=native -DRTE_MACHINE_CPUFLAG_SSE -DRTE_MACHINE_CPUFLAG_SSE2\
  -DRTE_MACHINE_CPUFLAG_SSE3 -DRTE_MACHINE_CPUFLAG_SSSE3 -DRTE_MACHINE_CPUFLAG_SSE4_1\
@@ -82,16 +101,18 @@ dpdk_gpu_test: sh_handler.o dpdk.o main.o
  -L/home/susoon/work/Research_Report/Susoon_examples/sh_test/dpdk_with_gpu/build/lib\
  -L/home/susoon/work/dpdk-stable-18.11.2/x86_64-native-linuxapp-gcc/lib\
  -Wl,--as-needed -Wl,-Map=dpdk_gpu_test.map -Wl,--cref	
-	mv *.o $(LIB_DIR)
+	$(BUILD) dpdk_with_gpu
+	@mv *.o $(LIB_DIR)
 
 #sh_handler compile
 sh_handler.o: $(SRC_DIR)/sh_handler.cu
-	nvcc -arch=compute_$(SMV) -c $^ $(INC) 
-	#nvcc --gpu-architecture=sm_$(SMV) -c $^ $(INC) 
+	@nvcc -w -arch=compute_$(SMV) -c $^ $(INC) 
+	@#nvcc --gpu-architecture=sm_$(SMV) -c $^ $(INC) 
+	$(BUILD) sh_handler
 
 #dpdk compile
 $(APP): $(SRC_DIR)/dpdk.c
-	gcc -Wp,-MD,./.dpdk.o.d.tmp -m64 -pthread\
+	@gcc -w -Wp,-MD,./.dpdk.o.d.tmp -m64 -pthread\
  -I/home/susoon/work/dpdk-stable-18.11.2/lib/librte_eal/linux/eal/include\
   -march=native -DRTE_MACHINE_CPUFLAG_SSE -DRTE_MACHINE_CPUFLAG_SSE2\
  -DRTE_MACHINE_CPUFLAG_SSE3 -DRTE_MACHINE_CPUFLAG_SSSE3\
@@ -105,15 +126,16 @@ $(APP): $(SRC_DIR)/dpdk.c
  -I/home/susoon/work/dpdk-stable-18.11.2/x86_64-native-linuxapp-gcc/include\
  -include /home/susoon/work/dpdk-stable-18.11.2/x86_64-native-linuxapp-gcc/include/rte_config.h\
  -D_GNU_SOURCE -o $@ -c $^ $(INC) $(CUDA_LIB_PATH) $(CUDA_INC)
+	$(BUILD) dpdk
 
 #main compile
 main.o: main.c
-	gcc -o $@ -c $^ $(INC) $(CUDA_LIBPATH) $(CUDA_INC) $(CFLAGS) $(LDFLAGS) $(LDFLAGS_SHARED) -lcudart -lcuda -lcudadevrt -ldl -pthread -lnuma
-
+	@gcc -w -o $@ -c $^ $(INC) $(CUDA_LIBPATH) $(CUDA_INC) $(CFLAGS) $(LDFLAGS) $(LDFLAGS_SHARED) -lcudart -lcuda -lcudadevrt -ldl -pthread -lnuma
+	$(BUILD) main	
 
 clean:
-	rm $(LIB_DIR)/*.o dpdk_gpu_test 
-
+	@rm $(LIB_DIR)/*.o dpdk_gpu_test 
+	@echo clean
 else
 
 ifeq ($(RTE_SDK),)

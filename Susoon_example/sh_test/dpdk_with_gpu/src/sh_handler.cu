@@ -24,6 +24,8 @@ int monotonic_time() {
         return timespec.tv_sec * ONE_SEC + timespec.tv_nsec;
 }
 
+__global__ void gpu_monitor(unsigned char * rx_pkt_buf, unsigned char * tx_pkt_buf, int * rx_pkt_cnt, int * pkt_batch_num);
+
 #if DUMP
 
 __global__ void print_gpu(unsigned char* d_pkt_buf, int * pkt_num)
@@ -78,16 +80,15 @@ __device__ void mani_pkt_gpu(unsigned char * d_pkt_buf)
 extern "C"
 int copy_to_gpu(unsigned char* buf, int pkt_num)
 {
-// PKT_BATCH_SIZE 64 * 512
-// THREAD_NUM 512
-// RING_SIZE (PKT_BATCH_SIZE * THREAD_NUM)
 
 	cudaMemcpy(rx_pkt_buf + (idx * PKT_BATCH_SIZE), buf, sizeof(unsigned char) * pkt_num * PKT_SIZE, cudaMemcpyHostToDevice);
-//	cudaMemcpy(rx_pkt_buf + (idx * PKT_BATCH_SIZE), buf, sizeof(unsigned char) * PKT_BAT_SIZE, cudaMemcpyHostToDevice);
 
 	cudaMemcpy(pkt_batch_num + idx, &pkt_num, sizeof(int), cudaMemcpyHostToDevice);
-//	printf("[copy_to_gpu] idx: %d, pkt_batch_num: %d\n", idx, pkt_num);
-//	printf("[copy_to_gpu] idx: %d, PKT_BATCH_NUM - pkt_batch_num: %d\n", idx, PKT_BATCH_SIZE - (pkt_num * PKT_SIZE));
+	cudaStream_t stream;
+	ASSERTRT(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
+	gpu_monitor<<<1, THREAD_NUM, 0, stream>>>(rx_pkt_buf, tx_pkt_buf, rx_pkt_cnt, pkt_batch_num);
+	cudaDeviceSynchronize();
+	cudaStreamDestroy(stream);
 
 #if DUMP
 	print_gpu<<<1,1>>>(rx_pkt_buf + (idx * PKT_BATCH_SIZE), pkt_batch_num + idx);
@@ -181,12 +182,13 @@ __global__ void gpu_monitor(unsigned char * rx_pkt_buf, unsigned char * tx_pkt_b
 #if TX
 		__syncthreads();
 		memcpy(tx_pkt_buf + mem_index, rx_pkt_buf + mem_index, PKT_BATCH_SIZE);
-
+/*
 		for(int i = 0; i < batch_num; i++)
 		{
 			__syncthreads();
 			mani_pkt_gpu(tx_pkt_buf + mem_index + i * PKT_SIZE);
 		}
+*/
 #endif
 		__syncthreads();
 		memset(pkt_batch_num + threadIdx.x, 0, sizeof(int));

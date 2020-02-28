@@ -1,9 +1,7 @@
 #include "dpdk.h"
 
 #define ONELINE 6
-#define DUMP 0
 #define BATCH_DUMP 0
-#define SWAP 0
 #define SEND 0
 #define BATCH 1
 #define RX_LOOP_CNT 1
@@ -25,7 +23,7 @@ void *cpu_monitoring_loop(void *data)
 		if(end - start >= ONE_SEC)
 		{
 			rx_pkt_cnt = get_rx_cnt();
-			printf("rx_pkt_cnt = %d\n", rx_pkt_cnt);
+			printf("PTHREAD : rx_pkt_cnt = %d\n", rx_pkt_cnt);
 			start = end;
 		}
 	}
@@ -55,17 +53,17 @@ static void copy_to_struct(struct rte_mbuf * buf[], unsigned char * batch_buf, i
 
 static void print_pkt(unsigned char * ptr)
 {
-		START_GRN
-		printf("batch_ pkt_dump: \n");
-		for(int i = 0; i < PKT_BATCH_SIZE; i++){
-			if(i != 0 && i % ONELINE == 0)
-				printf("\n");
-			if(i != 0 && i % PKT_SIZE == 0)
-				printf("\n\n");
-			printf("%02x ", ptr[i]);
-		}
-		printf("\n\n");
-		END
+	START_GRN
+	printf("batch_ pkt_dump: \n");
+	for(int i = 0; i < PKT_BATCH_SIZE; i++){
+		if(i != 0 && i % ONELINE == 0)
+			printf("\n");
+		if(i != 0 && i % PKT_SIZE == 0)
+			printf("\n\n");
+		printf("%02x ", ptr[i]);
+	}
+	printf("\n\n");
+	END
 }
 
 static void rx_loop(uint8_t lid)
@@ -134,71 +132,18 @@ static void rx_loop(uint8_t lid)
 				b_idx = 0;
 				memset(rx_batch_buf, 0, PKT_BATCH_SIZE);
 			}
-#else
-			copy_to_arr(buf, rx_batch_buf, nb_rx);
-
-			copy_to_gpu(rx_batch_buf, nb_rx); 
-			memset(rx_batch_buf, 0, PKT_BATCH_SIZE);
 #endif
 			end = monotonic_time();
 #if RX_LOOP_CNT
 			if(end - start > ONE_SEC)
 			{
 				gpu_recv = get_rx_cnt();
-				printf("gpu_recv = %ld, cpu_recv = %ld, copy_cnt = %ld\n", gpu_recv, cpu_recv, copy_cnt);
+				printf("RX LOOP : gpu_recv = %ld, cpu_recv = %ld, copy_cnt = %ld\n", gpu_recv, cpu_recv, copy_cnt);
 				start = end;
 				gpu_recv = 0;
 				cpu_recv = 0;
 				copy_cnt = 0;
 			}
-#endif
-
-#if DUMP
-			START_GRN
-			printf("pkt_dump: \n");
-			for(i = 0; i < buf[0]->pkt_len + ETHER_CRC_LEN; i++){
-				//printf("%02x ", (rte_ctrlmbuf_data(buf[0]))[i]);
-				if(i != 0 && i % ONELINE == 0)
-					printf("\n");
-				printf("%02x ", ptr[i]);
-			}
-			printf("\n\n");
-			END
-
-#endif /* if DUMP */
-
-#if SWAP
-			// Swap mac
-			for(i = 0; i < 6; i++){
-				tmp_mac[i] = ptr[i];
-				ptr[i] = ptr[i + 6];
-				ptr[i + 6] = tmp_mac[i];
-			}
-			// Swap ip
-			for(i = 26; i < 30; i++){
-				tmp_ip[i-26] = ptr[i];
-				ptr[i] = ptr[i + 4];
-				ptr[i + 4] = tmp_ip[i-26];
-			}
-			// Swap port
-			for(i = 34; i < 36; i++){
-				tmp_port[i-34] = ptr[i];
-				ptr[i] = ptr[i + 2];
-				ptr[i + 2] = tmp_port[i-34];
-			}
-#endif /* if SWAP */
-
-#if DUMP
-			START_YLW
-			printf("\n[After] pkt_dump: \n");
-			for(i = 0; i < buf[0]->pkt_len + ETHER_CRC_LEN; i++){
-				//printf("%02x ", (rte_ctrlmbuf_data(buf[0]))[i]);
-				if(i != 0 && i % ONELINE == 0)
-					printf("\n");
-				printf("%02x ", ptr[i]);
-			}
-			printf("\n\n");
-			END
 #endif
 		}
 
@@ -230,13 +175,16 @@ void dpdk_handler(int argc, char **argv)
 	uint32_t sid; // Socket id
 	int i;
 
-	pthread_t thread;
-	int thread_id;
-
 #if PTHREAD_CNT	
-	thread_id = pthread_create(&thread, NULL, cpu_monitoring_loop, NULL); 
-#endif
+	pthread_t thread;
 
+	pthread_create(&thread, NULL, cpu_monitoring_loop, NULL); 
+#endif
+#if CPU_LOAD
+	pthread_t thread2;
+
+	pthread_create(&thread2, NULL, cpu_load, NULL);
+#endif
 	if((l2p = l2p_create()) == NULL)
 		printf("Unable to create l2p\n");
 
@@ -247,7 +195,7 @@ void dpdk_handler(int argc, char **argv)
 		rte_exit(EXIT_FAILURE, "Error with EAL initialization.\n");
 
 	/* Check if at least one port is available. */
-  if(rte_eth_dev_count_total() == 0)
+	if(rte_eth_dev_count_total() == 0)
 	 	rte_exit(EXIT_FAILURE, "Error: No port available.\n");
 	/* Configure the Ethernet device */
 	/* Params,
@@ -292,7 +240,6 @@ void dpdk_handler(int argc, char **argv)
 	ret = rte_eth_tx_queue_setup(0, 0, RX_DESC_DEFAULT, sid, NULL);
 	if(ret)
 		rte_exit(EXIT_FAILURE, "TX : Cannot init port %"PRIu8 "\n", 0);
-
 
 
 	/* Stats bindings (if more than one queue) */

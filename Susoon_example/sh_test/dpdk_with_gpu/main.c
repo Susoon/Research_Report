@@ -11,7 +11,7 @@ int main(int argc, char ** argv)
 
 	set_gpu_mem_for_dpdk();
 	
-	pthread_create(&thread, NULL, monitor, NULL);
+	//pthread_create(&thread, NULL, monitor, NULL);
 	dpdk_handler(argc, argv);
 	
 
