@@ -2,6 +2,8 @@
 
 ## 02/28 현재상황
 
+### kernel launch
+
 * dpdk.c에서 copy_to_gpu를 호출하면, copy_to_gpu에서 직접 gpu kernel을 호출하여 packet 개수를 count하게끔 code를 수정함
 * 이를 통해 pps가 더 떨어질 것이라고 예상함
   * 또다른 thread를 통해 dpdk.c와 독립적으로 count를 해주면 dpdk를 담당하는 core가 할 일이 적어지므로 더 빠름
@@ -41,9 +43,6 @@
 * 64B의 경우 어제의 test 결과에서도, 이번 test 결과에서도 다른 size와는 조금 다른 특징을 가졌다
   * 어제의 test에서는 batch 개수 증가에 따른 pps 증가량이 달랐음
   * 이번 test에서는 100%의 packet을 수용하지 못한 유일한 packet size임
-* 그 원인은 아직 잘 모르겠다
-
-
 
 * 원래는 64B size만 10Mpps를 넘는 속도로 pkt-gen이 보내주기 때문이 아닐까라고 추측을 했었다
 * packet을 보내주는 개수가 압도적으로 많으니 cpu가 따라가지 못한다는 가설을 세웠다
@@ -61,10 +60,55 @@
 * 당연한 얘기지만 call count table을 보면 64B의 cudaMemcpy의 호출 횟수가 점점 줄어듬을 알 수 있다
   * copy_to_gpu 한 번 호출 당 1씩 증가시켰으므로 gpu kernel도 동일한 횟수로 불렸다
 * 이를 통해 알 수 있는 것은 cudaMemcpy의 호출 횟수가 줄어들었으므로 cudaMemcpy의 latency가 줄어들었다는 얘기가 된다
-
 * 이는 어제의 test 결과로 추측해보았을때 cudaMemcpy의 overhead로 인한 pps 감소 외에 다른 요인이 있다는 결론이 나온다
 * 여기서 의문점은 그렇다면 왜 64B에서만 이러한 특징이보이는 가이다
-  * 이 부분은 아직 잘 모르겠다...
+
+
+
+#### 64B만 저런 특징이 보이는 이유
+
+* 64B는 10Mpps를 넘기는 유일한 size이다
+* 위의 분석에서는 cudaMemcpy에 대한 overhead만 신경쓴 상태
+* 실제로 dpdk가 packet을 gpu에 넘겨주는 과정은 NIC에서 packet을 \"받아서\" 넘겨준다
+* 그렇기 때문에 dpdk가 NIC에서 packet을 받아오는데 걸리는 시간도 고려해야한다
+* cpu가 NIC에서 10Mpps 이상의 속도로 packet을 받아오려면 그에 맞게 core 사용을 할당해야한다
+* dpdk는 항상 32개 이하의 packet만 batch해서 가져오므로 여기서 overhead가 발생
+* 이 때문에 pps가 100%를 못 찍는다
+
+
+
+### 앞으로의 방향
+
+* 찬규형이 slack에 올린 부분을 test해봐야한다
+
+---
+
+
+
+* 1) gpu가 nf 처리를 하면서 다른 application까지 돌리려면 지금처럼 gpu memory를 2GB나 쓰면서 packet을 받아줄 수는 없다
+  * K4000 기준 gpu memory 3GB
+* 그렇기 때문에 batch해주는 packet의 수를 일정량 이상 높일 수 없기 때문에 100%pps를 보장해줄 수 없다
+* 2) gpu가 하나의 thread block에 1024개의 thread를 넣어줄 수 있다
+* 그래서 gpu가 한 번에 처리할 수 있는 packet의 수는 1024개
+* 1024개 이상의 packet을 batch해서 넣어주면 gpu는 순차적으로 1024개씩 처리해줄 수 밖에 없다
+  * e.g.) 1024 * 2개의 packet을 batch해주면 gpu는 한 번 copy로 받은 packet을 처리해주기 위해 1024개의 thread를 두번 돌려야한다
+* 이 말은 1024개 이상의 packet을 batch해서 넘겨주면 gpu가 감당할 수 없다는 뜻이다
+* 3) cpu core에 부하를 줬을 때의 pps 확인이 필요하다
+
+---
+
+* 위의 내용을 확실하게 해주기위한 test가 필요하다
+* 받은 packet을 다시 보내주기 위해서는 header를 바꿔주는 작업은 필수다
+  * nf처리를 안 한다고 가정했을 때 최소한 header는 바꿔줘야 재전송을 할 수 있으니
+* 받은 packet에 대해서 header를 바꿔주는 code를 짜서 실행시켜보고 결과를 뽑아봐야함
+* 최대 1024개의 thread를 할당할 수 있고 현재 512개의 thread를 사용하고 있으니 512개의 packet을 batch해서 header를 바꿔줬을 때의 pps와 thread 개수와 batch하는 packet의 수를 1024로 늘려줬을 때의 pps를 확인해봐야함
+* cpu core에 부하를 줬을 때의 pps 확인의 경우 현재 test한 결과를 미루어보았을 때 gpu의 rx pps와 cpu의 rx pps가 유사한 것을 근거로 제시할 수 있다
+  * test 결과 표는 gpu의 rx pps이지만 cpu의 rx pps도 유사한 값을 나타낸다
+* cudaMemcpy를 호출하고 kernel을 launching하는 과정에 cpu core에 부하가 오고, 이 때문에 cpu도 packet을 pkt-gen이 보내주는 만큼 받을 수 없다
+* 이는 같은 cpu core에서 진행하는 일이니 dpdk가 cpu의 영향을 많이 받는 다는 것을 보여준 셈이다
+* 따라서 추가적인 test는 필요없어보인다
+  * test를 진행한다면 thread를 하나 파서 또다른 core에 할당한 다음 그 thread상에서 cudaMemcpy와 kernel launching을 해주게 한 후 pps를 확인하는 것
+  * cudaMemcpy와 kernel launching이 dpdk가 NIC에서 packet을 받아오는 것과 독립적으로 실행되니 cpu의 pps가 떨어지지 않을 것이고 이를 보이면 지금까지의 test 결과의 대조군으로써 위의 결과를 입증해줄 것이다
 
 
 
