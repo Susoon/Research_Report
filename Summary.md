@@ -9,11 +9,11 @@
 
 # Contents
 
-[toc]1. 2개의 cpu core 사용
+1. 2개의 cpu core 사용
 
-[toc]2. cudaMemcpy에 의한 성능 저하
+2. cudaMemcpy에 의한 성능 저하
 
-[toc]3. batch-size의 중량화
+3. batch-size의 중량화
 
 
 
