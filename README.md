@@ -1,5 +1,79 @@
 # Daily Report for DPDK
 
+## ToDo List
+
+* ~~64B, 128B의 추가 test 필요~~
+* dpdk와 copy_to_gpu가 실행되는 core 확인
+* 만약 dpdk와 copy_to_gpu가 같은 core에서 실행되고 있다면, 다른 core에서 실행되게끔 code 수정 후 test
+
+
+
+## 03/02 현재상황
+
+### Additional Test
+
+* 64B와 128B의 추가적인 test를 진행하였다
+
+
+
+
+<center> test result </center>
+
+
+
+![Alt_text](image/memcpy_test/03.02_addi_pps.JPG)
+
+
+
+![Alt_text](image/memcpy_test/03.02_addi_pps_rate.JPG)
+
+
+
+![Alt_text](image/memcpy_test/03.02_addi_copy_cnt.JPG)
+
+
+
+* 비교를 위해서 1024 * 2개의 batch부터 캡쳐를 했다
+* 64B와 128B 두 size 모두 max pps를 찍고 다시 떨어지는 모습을 보여준다
+* 이는 cudaMemcpy의 호출 횟수가 반으로 줄었지만 줄어든 횟수가 100보다도 작은 값이기 때문에 latency에 큰 영향을 미치지 못했기 때문으로 추측된다
+* 호출 횟수의 영향이 줄어들어 copy하는 size의 영향이 더 크게 작용하게 되어 속도가 점점 줄어들게 되는 것으로 보인다 
+* 다만 여기서 64B의 1024 * 512개 batch와 128B의 1024 * 256개 batch test는 값의 신뢰성이 없다
+  * 그 이유는 cudaMemcpy가 제대로 진행되지 않았기 때문이다
+  * 다음의 캡쳐 사진에서 확인할 수 있다
+
+
+
+<center>  cudaMemcpy error </center>
+
+
+
+![Alt_text](image/memcpy_test/03.02_64_1024_512.JPG)
+
+* 64B를 1024 * 512개 batch했을 때의 실행 결과이다
+
+
+
+![Alt_text](image/memcpy_test/03.02_128_1024_256.JPG)
+
+* 128B를 1024 * 256개 batch했을 때의 결과이다
+
+
+
+* 모두 cuda관련 함수 호출에 실패한다
+  * cudaMemcpy, cudaStreamCreate, etc...
+* 64B의 1024 * 512개 batch면 32MB의 size인데 이 이상의 copy는 gpu가 버거워하는 것 같다
+  * 왜 실패하는 건지는 모르겠다
+  * 일정 이상의 size는 copy가 안되나?
+  * copy가 안되면 다른 함수(e.g. cudaStreamCreate)는 실행돼야하는 거 아닌가?
+
+
+
+
+
+
+
+---
+
 ## 02/28 현재상황
 
 ### kernel launch
