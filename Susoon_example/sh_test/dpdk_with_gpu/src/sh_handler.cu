@@ -82,7 +82,7 @@ extern "C"
 int copy_to_gpu(unsigned char* buf, int pkt_num)
 {
 
-	cudaMemcpy(rx_pkt_buf + (idx * PKT_BATCH_SIZE), buf, sizeof(unsigned char) * pkt_num * PKT_SIZE, cudaMemcpyHostToDevice);
+	ASSERTRT(cudaMemcpy(rx_pkt_buf + (idx * PKT_BATCH_SIZE), buf, sizeof(unsigned char) * pkt_num * PKT_SIZE, cudaMemcpyHostToDevice));
 
 	cudaMemcpy(pkt_batch_num + idx, &pkt_num, sizeof(int), cudaMemcpyHostToDevice);
 	cudaStream_t stream;
