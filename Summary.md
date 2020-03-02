@@ -9,11 +9,11 @@
 
 # Contents
 
-[1. cpu core](#cpu-core)
+[toc]1. 2개의 cpu core 사용
 
-[2. cudaMemcpy](#cudaMemcpy)
+[toc]2. cudaMemcpy에 의한 성능 저하
 
-[3. batch size](#batch-size)
+[toc]3. batch-size의 중량화
 
 
 
@@ -25,7 +25,7 @@
 
 
 
-## 2. cudaMemcpy
+## 2. cudamemcpy
 
 * cudaMemcpy를 통해 gpu에 copy해주게 되면 모든 packet을 받아올 수 없다
 
