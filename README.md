@@ -3,10 +3,13 @@
 ## ToDo List
 
 * ~~64B, 128B의 추가 test 필요~~
-* dpdk와 copy_to_gpu가 실행되는 core 확인
-* 만약 dpdk와 copy_to_gpu가 같은 core에서 실행되고 있다면, 다른 core에서 실행되게끔 code 수정 후 test
-
-
+* ~~dpdk와 copy_to_gpu가 실행되는 core 확인~~
+* ~~만약 dpdk와 copy_to_gpu가 같은 core에서 실행되고 있다면, 다른 core에서 실행되게끔 code 수정 후 test~~
+* ~~monitoring loop가 다른 core에서 실행되게 code 수정 후 test~~
+* 현재까지 나온 test 결과 정리 (Summary 파일에 정리)
+  * polling으로 64B, 128B 추가 측정하여 data 뽑기
+  * 3-3) batch delay 부분 수정
+  * graph로 쓸만한 data 선별하여 graph 추가하기
 
 ## 03/02 현재상황
 
@@ -21,19 +24,20 @@
 
 
 
-![Alt_text](image/memcpy_test/03.02_addi_pps.JPG)
+![Alt_text](image/03.02_lau_addi_pps.JPG)
 
 
 
-![Alt_text](image/memcpy_test/03.02_addi_pps_rate.JPG)
+![Alt_text](image/03.02_lau_addi_pps_rate.JPG)
 
 
 
-![Alt_text](image/memcpy_test/03.02_addi_copy_cnt.JPG)
+![Alt_text](image/03.02_lau_addi_copy_cnt.JPG)
 
 
 
 * 비교를 위해서 1024 * 2개의 batch부터 캡쳐를 했다
+  * 1024 * 32보다 작은 batch 개수의 test는 thread를 512개 사용할때의 값이었어서 thread를 64개 사용할때의 값을 다시 측정해서 캡쳐사진 수정함
 * 64B와 128B 두 size 모두 max pps를 찍고 다시 떨어지는 모습을 보여준다
 * 이는 cudaMemcpy의 호출 횟수가 반으로 줄었지만 줄어든 횟수가 100보다도 작은 값이기 때문에 latency에 큰 영향을 미치지 못했기 때문으로 추측된다
 * 호출 횟수의 영향이 줄어들어 copy하는 size의 영향이 더 크게 작용하게 되어 속도가 점점 줄어들게 되는 것으로 보인다 
@@ -47,13 +51,13 @@
 
 
 
-![Alt_text](image/memcpy_test/03.02_64_1024_512.JPG)
+![Alt_text](image/03.02_64_1024_512.JPG)
 
 * 64B를 1024 * 512개 batch했을 때의 실행 결과이다
 
 
 
-![Alt_text](image/memcpy_test/03.02_128_1024_256.JPG)
+![Alt_text](image/03.02_128_1024_256.JPG)
 
 * 128B를 1024 * 256개 batch했을 때의 결과이다
 
@@ -66,9 +70,214 @@
   * 일정 이상의 size는 copy가 안되나?
   * copy가 안되면 다른 함수(e.g. cudaStreamCreate)는 실행돼야하는 거 아닌가?
 
+---
+
+### Pthread Test
+
+* pthread를 통해 만들어진 thread가 기존 core와 같은 core에 할당되는지 새로운 core에 할당되는지에 대한 실험을 진행함
 
 
 
+<center> test code </center>
+
+
+
+![Alt_text](image/03.02_pthread_core_test_code.JPG)
+
+* main함수와 thread\_func에서 각각 infinite loop를 실행시키되 main함수의 경우 i값이 증가됨에 따라 점진적으로 core 사용량이 증가되게 만듬
+* 만약 기존 core에 할당되었다가 core 사용량의 증가량에 의해 다른 core로 이전되는 방식이라면 program 시작시 하나의 core만 작동해야함
+
+
+
+<center> result </center>
+
+
+
+![Alt_text](image/03.02_pthread_core_test.JPG)
+
+* cpu3과 cpu6 모두 11.0으로 하나의 core에서 작동가능한 수준을 사용하고 있으나 서로 다른 core에서 작동함을 알 수 있음
+  * main함수는 점진적으로 사용량이 증가하고,  thread_func는 사용량이 고정되었는데 둘의 cpu 사용량이 같은 이유는 둘 모두 infinite loop이기 때문으로 추정됨
+    * main함수의 사용량이 점진적으로 증가할 필요가 없었다...
+* 위의 결과로 인해 pthread가 thread를 기존과 다른 core에 할당함을 알 수 있음
+
+
+
+---
+
+### ~~Core Seperation Test~~
+
+---
+
+* 원래 dpdk가 master core와 slave core 두개를 사용해서 core가 2개 사용되는데 이걸 간과하고 test를 진행해버림
+* 무의미한 실험이 되었음
+* pthread를 통해 만들어진 thread가 같은 core에 실행되는가 아니면 새로운 core에 할당되어 실행되는가에 대한 실험을 추가적으로 진행하였음
+  * 이를 통해 persistent loop가 dpdk와 다른 core에 실행된다는 것을 알아냄
+* 아래의 test 결과들은 무의미한 실험이지만 결과만 기록해둠
+  * markdown 정리시 삭제 예정
+
+---
+
+* persistent loop를 사용하여 gpu를 monitor하는 code로 수정 후 cpu의 사용상태를 check 해봤다
+
+
+
+<center> cpu status with persistent loop </center>
+
+
+
+![Alt_text](image/03.02_polling_sep_cpu_stat_origin.JPG)
+
+* 3개의 core를 쓰는 것을 확인할 수 있다
+  * 0번 core는 dpdk master core
+  * 1번 core는 dpdk slave core
+* pthread가 다른 core에서 실행되는 thread를 만들어주었음을 알 수 있다
+* 아래의 code는 기존 main.c의 code이다
+
+
+
+<center> main.c code </center>
+
+
+
+![Alt_text](image/03.02_orig_main_code.JPG)
+
+
+
+* code를 다음과 같이 수정해 test를 진행하였다
+
+
+
+<center> main.c code with core coalescing  </center>
+
+
+
+![Alt_text](image/03.02_sep_poll_main_code.JPG)
+
+* core_mask를 2로 주어 1번 core에 monitor thread를 강제적으로 할당해 2개의 core만을 사용하게끔 했다
+
+* 64B와 128B의 packet size를 사용했고, 256개의 batch_size를 사용했다
+
+
+
+<center> pps with core seperation </center>
+
+
+
+![Alt_text](image/03.02_sep_poll_64_256.JPG)
+
+* monitor하는 thread를 새로운 core에서 실행하는 기존 코드로 64B를 256개 batch하였을 때의 test 결과이다
+
+
+
+![Alt_text](image/03.02_sep_poll_128_256.JPG)
+
+* 동일한 code로 128B를 256개 batch했을때의 pps이다
+
+
+
+<center> pps without core seperation </center>
+
+
+
+![Alt_text](image/03.02_poll_64_256.JPG)
+
+* monitor하는 thread를 새로운 core에서 실행하는 기존 코드로 64B를 256개 batch하였을 때의 test 결과이다
+
+
+
+![Alt_text](image/03.02_poll_128_256.JPG)
+
+* 동일한 code로 128B를 256개 batch했을때의 pps이다
+
+
+
+---
+
+
+
+* dpdk의 persistent loop과 copy_to_gpu를 통한 gpu memcpy가 서로 같은 core에서 실행되는지 확인해보았다
+
+* sched_setaffinity함수를 사용하여 분리했다
+
+
+
+<center> code for seperation </center>
+
+
+
+![Alt_text](image/03.02_core_seperate_code_1.JPG)
+
+* 아래는 코드 수정 전 후의 cpu status이다
+
+
+
+<center> cpu status before seperation </center>
+
+
+
+![Alt_text](image/03.02_two_core_cpu_status_before.JPG)
+
+
+
+<center> cpu status after seperation with core mask 1 </center>
+
+
+
+![Alt_text](image/03.02_two_core_cpu_status_1.JPG)
+
+* cpu를 분리하는 code를 삽입하니 cpu 하나에 몰렸다
+* 분리하는 code를 삽입하였는데 왜 하나의 cpu만 작동하는지 고민하다가 core_mask를 2로 줘서 copy_to_gpu가 1번 cpu에 돌게 했더니 다음과 같은 결과가 나타났다
+
+
+
+<center> cpu status after seperation with core mask 2 </center>
+
+
+
+![Alt_text](image/03.02_two_core_cpu_status_after.JPG)
+
+* copy_to_gpu가 원래 cpu 1번에서 실행되고 있고, dpdk loop가 0번에서 실행되고 있어서 copy_to_gpu를 0번에 할당하니 하나로 돌게 된 것이다
+
+* 위의 결과를 통해 copy_to_gpu와 dpdk의 loop가 서로 다른 core에서 실행되고 있었다는 것을 알게되었다
+* 아래는 core를 분리하기 전과 후의 pps이다
+* test는 64B와 128B의 packet size를 사용했고, 각자 최대의 pps를 보여줬던 1024\*8개의 batch(64B)와 1024\*2개의 batch(128B)에서 test했다
+
+
+
+<center> pps with two cores </center>
+
+
+
+![Alt_text](image/03.02_two_core_64_1024_8.JPG)
+
+* 64B를 1024 \* 8개 batch했을 때의 pps이다
+
+
+
+![Alt_text](image/03.02_two_core_128_1024_2.JPG)
+
+* 128B를 1024 \* 2개 batch했을 때의 pps이다
+
+
+
+
+<center> pps with one cores </center>
+
+
+
+![Alt_text](image/03.02_one_core_64_1024_8.JPG)
+
+* 64B를 1024 \* 8개 batch했을 때의 pps이다
+
+
+
+![Alt_text](image/03.02_one_core_128_1024_2.JPG)
+
+* 128B를 1024 \* 2개 batch했을 때의 pps이다
+
+
+
+* pps가 50%정도로 떨어진 것을 확인할 수 있다
 
 
 
