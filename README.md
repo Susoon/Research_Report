@@ -159,15 +159,15 @@
 
 
 
-* 1) gpu가 nf 처리를 하면서 다른 application까지 돌리려면 지금처럼 gpu memory를 2GB나 쓰면서 packet을 받아줄 수는 없다
+1) gpu가 nf 처리를 하면서 다른 application까지 돌리려면 지금처럼 gpu memory를 2GB나 쓰면서 packet을 받아줄 수는 없다
   * K4000 기준 gpu memory 3GB
 * 그렇기 때문에 batch해주는 packet의 수를 일정량 이상 높일 수 없기 때문에 100%pps를 보장해줄 수 없다
-* 2) gpu가 하나의 thread block에 1024개의 thread를 넣어줄 수 있다
+2) gpu가 하나의 thread block에 1024개의 thread를 넣어줄 수 있다
 * 그래서 gpu가 한 번에 처리할 수 있는 packet의 수는 1024개
 * 1024개 이상의 packet을 batch해서 넣어주면 gpu는 순차적으로 1024개씩 처리해줄 수 밖에 없다
   * e.g.) 1024 * 2개의 packet을 batch해주면 gpu는 한 번 copy로 받은 packet을 처리해주기 위해 1024개의 thread를 두번 돌려야한다
 * 이 말은 1024개 이상의 packet을 batch해서 넘겨주면 gpu가 감당할 수 없다는 뜻이다
-* 3) cpu core에 부하를 줬을 때의 pps 확인이 필요하다
+3) cpu core에 부하를 줬을 때의 pps 확인이 필요하다
 
 ---
 
