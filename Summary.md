@@ -9,15 +9,15 @@
 
 # Contents
 
-[1. 2개의 cpu core 사용](#2개의-cpu-core-사용)
+1. 2개의 cpu core 사용
 
-[2. cudaMemcpy에 의한 성능 저하](#cudaMemcpy에-의한-성능-저하)
+2. cudaMemcpy에 의한 성능 저하
 
-[3. batch size의 중량화](#batch-size의-중량화)
+3. batch-size의 중량화
 
 
 
-## 1. 2개의 cpu core 사용
+## 1. cpu core
 
 * dpdk는 모든 packet을 받아올 수 있으나 특성상 master core와 slave core가 필요하므로 최소 2개 이상의 cpu core가 필요하며, 2개의 core 모두 100% 사용량을 보인다
 
@@ -25,7 +25,7 @@
 
 
 
-## 2. cudaMemcpy에 의한 성능 저하
+## 2. cudamemcpy
 
 * cudaMemcpy를 통해 gpu에 copy해주게 되면 모든 packet을 받아올 수 없다
 
@@ -96,7 +96,7 @@
 
 
 
-## 3. batch size의 중량화
+## 3. batch size
 
 ### 1) batch size와 pps 비례관계
 
