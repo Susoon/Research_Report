@@ -1,7 +1,8 @@
 #include "sh_handler.h"
 
-#define THREAD_NUM 512
-#define RING_SIZE (PKT_BATCH_SIZE * THREAD_NUM)
+#define BLOCK_NUM 64
+#define THREAD_NUM BLOCK_NUM
+#define RING_SIZE ((uint64_t)PKT_BATCH_SIZE * BLOCK_NUM)
 
 #define ONELINE 6
 
@@ -24,7 +25,7 @@ int monotonic_time() {
         return timespec.tv_sec * ONE_SEC + timespec.tv_nsec;
 }
 
-__global__ void gpu_monitor(unsigned char * rx_pkt_buf, unsigned char * tx_pkt_buf, int * rx_pkt_cnt, int * pkt_batch_num);
+__global__ void gpu_monitor(unsigned char * rx_pkt_buf, int * rx_pkt_cnt, int * pkt_batch_num);
 
 #if DUMP
 
@@ -86,7 +87,7 @@ int copy_to_gpu(unsigned char* buf, int pkt_num)
 	cudaMemcpy(pkt_batch_num + idx, &pkt_num, sizeof(int), cudaMemcpyHostToDevice);
 	cudaStream_t stream;
 	ASSERTRT(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
-	gpu_monitor<<<1, THREAD_NUM, 0, stream>>>(rx_pkt_buf, tx_pkt_buf, rx_pkt_cnt, pkt_batch_num);
+	gpu_monitor<<<1, THREAD_NUM, 0, stream>>>(rx_pkt_buf, rx_pkt_cnt, pkt_batch_num);
 	cudaDeviceSynchronize();
 	cudaStreamDestroy(stream);
 
@@ -96,7 +97,7 @@ int copy_to_gpu(unsigned char* buf, int pkt_num)
 #endif
 
 	idx++;
-	if(idx == THREAD_NUM)
+	if(idx == BLOCK_NUM)
 		idx = 0;
 	
 	return 1;
@@ -116,14 +117,14 @@ void set_gpu_mem_for_dpdk(void)
 	ASSERTRT(cudaMalloc((void**)&rx_pkt_buf, RING_SIZE));
   	ASSERTRT(cudaMemset(rx_pkt_buf, 0, RING_SIZE));
 
-	ASSERTRT(cudaMalloc((void**)&tx_pkt_buf, RING_SIZE));
-  	ASSERTRT(cudaMemset(tx_pkt_buf, 0, RING_SIZE));
+//	ASSERTRT(cudaMalloc((void**)&tx_pkt_buf, RING_SIZE));
+// 	ASSERTRT(cudaMemset(tx_pkt_buf, 0, RING_SIZE));
 
 	ASSERTRT(cudaMalloc((void**)&rx_pkt_cnt, sizeof(int)));
   	ASSERTRT(cudaMemset(rx_pkt_cnt, 0, sizeof(int)));
 
-	ASSERTRT(cudaMalloc((void**)&pkt_batch_num, sizeof(int) * THREAD_NUM));
-  	ASSERTRT(cudaMemset(pkt_batch_num, 0, sizeof(int) * THREAD_NUM));
+	ASSERTRT(cudaMalloc((void**)&pkt_batch_num, sizeof(int) * BLOCK_NUM));
+  	ASSERTRT(cudaMemset(pkt_batch_num, 0, sizeof(int) * BLOCK_NUM));
 
 	START_GRN
 	printf("[Done]____GPU mem set for dpdk____\n");
@@ -152,38 +153,30 @@ int get_tx_buf(unsigned char* tx_buf)
 //	cudaMemcpy(&tx_cur_pkt, pkt_batch_num + tx_idx, sizeof(int), cudaMemcpyDeviceToHost);
 
 	tx_idx++;
-	if(tx_idx == THREAD_NUM)
+	if(tx_idx == BLOCK_NUM)
 		tx_idx = 0;
 
 	return tx_cur_pkt;
 }
 
-__global__ void gpu_monitor(unsigned char * rx_pkt_buf, unsigned char * tx_pkt_buf, int * rx_pkt_cnt, int * pkt_batch_num)
+__global__ void gpu_monitor(unsigned char * rx_pkt_buf, int * rx_pkt_cnt, int * pkt_batch_num)
 {
 	int mem_index = PKT_BATCH_SIZE * threadIdx.x;
-	int batch_num;
-
-// PKT_BATCH_SIZE 64 * 512
-// THREAD_NUM 512
-// RING_SIZE (PKT_BATCH_SIZE * THREAD_NUM)
 
 	__syncthreads();
 	if(pkt_batch_num[threadIdx.x] != 0 && rx_pkt_buf[mem_index + ((pkt_batch_num[threadIdx.x] - 1) * PKT_SIZE)] != 0)
 	{
 		__syncthreads();
-		batch_num = pkt_batch_num[threadIdx.x];
+		rx_pkt_buf[mem_index + ((pkt_batch_num[threadIdx.x] - 1) * PKT_SIZE)] = 0;
 
 		__syncthreads();
-		rx_pkt_buf[mem_index + ((batch_num - 1) * PKT_SIZE)] = 0;
-
-		__syncthreads();
-		atomicAdd(rx_pkt_cnt, batch_num);
+		atomicAdd(rx_pkt_cnt, pkt_batch_num[threadIdx.x]);
 		
 #if TX
 		__syncthreads();
 		memcpy(tx_pkt_buf + mem_index, rx_pkt_buf + mem_index, PKT_BATCH_SIZE);
 /*
-		for(int i = 0; i < batch_num; i++)
+		for(int i = 0; i < pkt_batch_num[threadIdx.x]; i++)
 		{
 			__syncthreads();
 			mani_pkt_gpu(tx_pkt_buf + mem_index + i * PKT_SIZE);
@@ -218,7 +211,7 @@ void gpu_monitor_loop(void)
 	ASSERTRT(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
 	while(true)
 	{
-		gpu_monitor<<<1, THREAD_NUM, 0, stream>>>(rx_pkt_buf, tx_pkt_buf, rx_pkt_cnt, pkt_batch_num);
+		gpu_monitor<<<1, THREAD_NUM, 0, stream>>>(rx_pkt_buf, rx_pkt_cnt, pkt_batch_num);
 		cudaDeviceSynchronize();
 	}
 }

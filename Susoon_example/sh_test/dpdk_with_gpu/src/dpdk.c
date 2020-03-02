@@ -69,7 +69,6 @@ static void print_pkt(unsigned char * ptr)
 static void rx_loop(uint8_t lid)
 {
 	struct rte_mbuf *buf[DEFAULT_PKT_BURST];
-	struct rte_mbuf *tx_buf[PKT_BATCH_SIZE];
 	uint16_t nb_rx;
 	uint16_t nb_tx;
 	int ret;
@@ -79,10 +78,6 @@ static void rx_loop(uint8_t lid)
 	uint64_t gpu_send = 0;
 	uint64_t copy_cnt = 0;
 	unsigned char* ptr;
-	unsigned char* tx_ptr;
-	unsigned char* tmp_mac;
-	unsigned char* tmp_ip;
-	unsigned char* tmp_port;
 
 	unsigned char* rx_batch_buf;
 	unsigned char* tx_batch_buf;
@@ -92,18 +87,15 @@ static void rx_loop(uint8_t lid)
 	int start;
 	int end = 0;
 
-	tmp_mac = (unsigned char*)malloc(6);
-	tmp_ip = (unsigned char*)malloc(4);
-	tmp_port = (unsigned char*)malloc(2);
-	
 	rx_batch_buf = (unsigned char*)malloc(sizeof(unsigned char) * PKT_BATCH_SIZE);
-	tx_batch_buf = (unsigned char*)malloc(sizeof(unsigned char) * PKT_BATCH_SIZE);
-	tx_batch_buf_struct = (struct rte_mbuf*)malloc(sizeof(struct rte_mbuf) * PKT_BATCH_SIZE);
+	//tx_batch_buf = (unsigned char*)malloc(sizeof(unsigned char) * PKT_BATCH_SIZE);
+	//tx_batch_buf_struct = (struct rte_mbuf*)malloc(sizeof(struct rte_mbuf) * PKT_BATCH_SIZE);
 
 
 	start_lcore(l2p, lid);
 	
 	start = monotonic_time();
+
 
 	while(lcore_is_running(l2p, lid)){
 
@@ -179,11 +171,6 @@ void dpdk_handler(int argc, char **argv)
 	pthread_t thread;
 
 	pthread_create(&thread, NULL, cpu_monitoring_loop, NULL); 
-#endif
-#if CPU_LOAD
-	pthread_t thread2;
-
-	pthread_create(&thread2, NULL, cpu_load, NULL);
 #endif
 	if((l2p = l2p_create()) == NULL)
 		printf("Unable to create l2p\n");
