@@ -6,13 +6,6 @@
 #define BATCH 1
 #define RX_LOOP_CNT 1
 #define PTHREAD_CNT 0
-#define CPU_LOAD 0
-
-#if CPU_LOAD
-void *cpu_load(void * data)
-{
-}
-#endif 
 
 #if PTHREAD_CNT
 void *cpu_monitoring_loop(void *data)

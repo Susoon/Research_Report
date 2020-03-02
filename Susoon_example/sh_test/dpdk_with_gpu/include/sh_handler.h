@@ -47,8 +47,8 @@
 
 #define RX_NB 32
 
-#define PKT_SIZE 128
-#define PKT_BATCH (1024 * 2 + RX_NB)
+#define PKT_SIZE 64
+#define PKT_BATCH (256 + RX_NB)
 #define PKT_BATCH_SIZE (PKT_SIZE * PKT_BATCH)
 
 #define ONE_SEC 1000 * 1000 * 1000

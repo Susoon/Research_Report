@@ -87,8 +87,6 @@ static void rx_loop(uint8_t lid)
 	int start;
 	int end = 0;
 
-	unsigned long core_mask = 2;
-
 	rx_batch_buf = (unsigned char*)malloc(sizeof(unsigned char) * PKT_BATCH_SIZE);
 	//tx_batch_buf = (unsigned char*)malloc(sizeof(unsigned char) * PKT_BATCH_SIZE);
 	//tx_batch_buf_struct = (struct rte_mbuf*)malloc(sizeof(struct rte_mbuf) * PKT_BATCH_SIZE);
@@ -122,10 +120,7 @@ static void rx_loop(uint8_t lid)
 #if BATCH_DUMP
 				print_pkt(rx_batch_buf);
 #endif
-				//sched_setaffinity(0, sizeof(core_mask), &core_mask);
 				copy_cnt += copy_to_gpu(rx_batch_buf, b_idx); 
-				core_mask = 1;
-				//sched_setaffinity(0, sizeof(core_mask), &core_mask);
 				b_idx = 0;
 				memset(rx_batch_buf, 0, PKT_BATCH_SIZE);
 			}

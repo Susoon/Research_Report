@@ -85,11 +85,13 @@ int copy_to_gpu(unsigned char* buf, int pkt_num)
 	ASSERTRT(cudaMemcpy(rx_pkt_buf + (idx * PKT_BATCH_SIZE), buf, sizeof(unsigned char) * pkt_num * PKT_SIZE, cudaMemcpyHostToDevice));
 
 	cudaMemcpy(pkt_batch_num + idx, &pkt_num, sizeof(int), cudaMemcpyHostToDevice);
+#if 0
 	cudaStream_t stream;
 	ASSERTRT(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
 	gpu_monitor<<<1, THREAD_NUM, 0, stream>>>(rx_pkt_buf, rx_pkt_cnt, pkt_batch_num);
 	cudaDeviceSynchronize();
 	cudaStreamDestroy(stream);
+#endif
 
 #if DUMP
 	print_gpu<<<1,1>>>(rx_pkt_buf + (idx * PKT_BATCH_SIZE), pkt_batch_num + idx);
