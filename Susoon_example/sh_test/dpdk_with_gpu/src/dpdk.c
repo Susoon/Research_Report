@@ -72,10 +72,10 @@ static void rx_loop(uint8_t lid)
 	uint16_t nb_tx;
 	int ret;
 	unsigned int i, j;
-	uint64_t gpu_recv = 0;
-	uint64_t cpu_recv = 0;
-	uint64_t gpu_send = 0;
-	uint64_t copy_cnt = 0;
+	double gpu_recv = 0;
+	double cpu_recv = 0;
+	double gpu_send = 0;
+	int copy_cnt = 0;
 	unsigned char* ptr;
 
 	unsigned char* rx_batch_buf;
@@ -129,7 +129,20 @@ static void rx_loop(uint8_t lid)
 			if(end - start > ONE_SEC)
 			{
 				gpu_recv = get_rx_cnt();
-				printf("RX LOOP : gpu_recv = %ld, cpu_recv = %ld, copy_cnt = %ld\n", gpu_recv, cpu_recv, copy_cnt);
+				gpu_recv /= MEGA;
+				cpu_recv /= MEGA;	
+				system("clear");
+				PRINT_V();
+				printf("RING_SIZE = %d\n", RING_SIZE);
+				if(PKT_BATCH - RX_NB > 1024)
+				{
+					printf("PKT_SIZE = %d, PKT_BATCH = %d * 1024 + %d\n", PKT_SIZE, (PKT_BATCH - RX_NB) / 1024, RX_NB);
+				}
+				else
+				{
+					printf("PKT_SIZE = %d, PKT_BATCH = %d + %d\n", PKT_SIZE, PKT_BATCH - RX_NB, RX_NB);
+				}	
+				printf("RX LOOP : gpu_recv = %.4lfMpps, cpu_recv = %.4lfMpps, copy_cnt = %d\n", gpu_recv, cpu_recv, copy_cnt);
 				start = end;
 				gpu_recv = 0;
 				cpu_recv = 0;

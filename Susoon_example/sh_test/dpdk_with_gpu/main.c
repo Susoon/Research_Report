@@ -14,7 +14,9 @@ int main(int argc, char ** argv)
 	
 	set_gpu_mem_for_dpdk();
 	
+#if POLL
 	pthread_create(&thread, NULL, monitor, NULL);
+#endif
 	dpdk_handler(argc, argv);
 	
 

@@ -47,10 +47,25 @@
 
 #define RX_NB 32
 
-#define PKT_SIZE 128
-#define PKT_BATCH (1024 * 512 + RX_NB)
+#define PKT_SIZE 64
+#define PKT_BATCH (512 + RX_NB)
 #define PKT_BATCH_SIZE (PKT_SIZE * PKT_BATCH)
 
 #define ONE_SEC 1000 * 1000 * 1000
+#define MEGA 1000 * 1000
+
+#define POLL 0
+
+#if POLL
+#define LAUNCH 0
+#define PRINT_V() { printf("POLLING VERSION\n"); }
+#else
+#define LAUNCH 1
+#define PRINT_V() { printf("KERNEL LAUNCH VERSION\n"); }
+#endif
+
+#define BLOCK_NUM 64
+#define THREAD_NUM BLOCK_NUM
+#define RING_SIZE ((uint64_t)PKT_BATCH_SIZE * BLOCK_NUM) 
 
 #endif

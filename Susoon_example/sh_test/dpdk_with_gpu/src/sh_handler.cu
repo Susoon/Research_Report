@@ -1,9 +1,5 @@
 #include "sh_handler.h"
 
-#define BLOCK_NUM 64
-#define THREAD_NUM BLOCK_NUM
-#define RING_SIZE ((uint64_t)PKT_BATCH_SIZE * BLOCK_NUM)
-
 #define ONELINE 6
 
 #define DUMP 0
@@ -52,7 +48,7 @@ int copy_to_gpu(unsigned char* buf, int pkt_num)
 	ASSERTRT(cudaMemcpy(rx_pkt_buf + (idx * PKT_BATCH_SIZE), buf, sizeof(unsigned char) * pkt_num * PKT_SIZE, cudaMemcpyHostToDevice));
 
 	cudaMemcpy(pkt_batch_num + idx, &pkt_num, sizeof(int), cudaMemcpyHostToDevice);
-#if 0
+#if LAUNCH
 	cudaStream_t stream;
 	ASSERTRT(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
 	gpu_monitor<<<1, THREAD_NUM, 0, stream>>>(rx_pkt_buf, rx_pkt_cnt, pkt_batch_num);
@@ -78,6 +74,11 @@ void set_gpu_mem_for_dpdk(void)
 	idx = 0;
 
 	START_BLU
+#if POLL
+	printf("__________POLLING VERSION___________\n");
+#else
+	printf("__________KERNEL LAUNCH VERSION___________\n");
+#endif
 	printf("RING_SIZE = %d\n", RING_SIZE);
 	printf("PKT_SIZE = %d, PKT_BATCH = %d + %d\n", PKT_SIZE, PKT_BATCH - RX_NB, RX_NB);
 	END
