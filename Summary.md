@@ -136,9 +136,7 @@
 
 
 
-![Alt_text](image/03.02_per_addi_pps_rate.JPG)
-
-(data 뽑아서 이미지 추가해야함)
+![Alt_text](image/03.03_per_addi_pps_rate.JPG)
 
 
 
@@ -162,9 +160,7 @@
 
 
 
-![Alt_text](image/03.02_per_addi_copy_cnt.JPG)
-
-(data 뽑아서 이미지 추가해야함)
+![Alt_text](image/03.03_per_addi_copy_cnt.JPG)
 
 
 
