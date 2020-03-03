@@ -2,7 +2,6 @@
 
 #define ONELINE 6
 #define BATCH_DUMP 0
-#define SEND 0
 #define BATCH 1
 #define RX_LOOP_CNT 1
 #define PTHREAD_CNT 0
@@ -138,13 +137,6 @@ static void rx_loop(uint8_t lid)
 			}
 #endif
 		}
-
-#if SEND
-		nb_tx = get_tx_buf(tx_batch_buf);
-		copy_to_struct(tx_batch_buf_struct, tx_batch_buf, nb_tx);
-		gpu_send += nb_tx;
-		ret = rte_eth_tx_burst(0, 0, buf, nb_rx);
-#endif
 
 		for(i = 0; i < nb_rx; i++)
 			rte_pktmbuf_free(buf[i]);

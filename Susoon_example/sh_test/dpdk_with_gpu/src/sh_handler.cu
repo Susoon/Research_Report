@@ -7,14 +7,10 @@
 #define ONELINE 6
 
 #define DUMP 0
-#define TX 0
 
 unsigned char * rx_pkt_buf;
-unsigned char * tx_pkt_buf;
 static int idx;
 int * rx_pkt_cnt;
-
-int tx_idx;
 
 int * pkt_batch_num;
 
@@ -49,35 +45,6 @@ __global__ void print_gpu(unsigned char* d_pkt_buf, int * pkt_num)
 
 #endif
 
-__device__ void mani_pkt_gpu(unsigned char * d_pkt_buf)
-{
-	int i;
-	unsigned char tmp[6] = { 0 };
-
-	// Swap mac
-	for(i = 0; i < 6; i++){
-		tmp[i] = d_pkt_buf[i];
-		d_pkt_buf[i] = d_pkt_buf[i + 6];
-		d_pkt_buf[i + 6] = tmp[i];
-	}
-	// Swap ip
-	for(i = 26; i < 30; i++){
-		tmp[i-26] = d_pkt_buf[i];
-		d_pkt_buf[i] = d_pkt_buf[i + 4];
-		d_pkt_buf[i + 4] = tmp[i-26];
-	}
-	// Swap port
-	for(i = 34; i < 36; i++){
-		tmp[i-34] = d_pkt_buf[i];
-		d_pkt_buf[i] = d_pkt_buf[i + 2];
-		d_pkt_buf[i + 2] = tmp[i-34];
-	}	
-	//Manipulatate data
-	for(i = 36; i < PKT_SIZE; i++){
-		d_pkt_buf[i] = 0;
-	}
-}
-
 extern "C"
 int copy_to_gpu(unsigned char* buf, int pkt_num)
 {
@@ -109,7 +76,6 @@ extern "C"
 void set_gpu_mem_for_dpdk(void)
 {
 	idx = 0;
-	tx_idx = 0;
 
 	START_BLU
 	printf("RING_SIZE = %d\n", RING_SIZE);
@@ -118,9 +84,6 @@ void set_gpu_mem_for_dpdk(void)
 
 	ASSERTRT(cudaMalloc((void**)&rx_pkt_buf, RING_SIZE));
   	ASSERTRT(cudaMemset(rx_pkt_buf, 0, RING_SIZE));
-
-//	ASSERTRT(cudaMalloc((void**)&tx_pkt_buf, RING_SIZE));
-// 	ASSERTRT(cudaMemset(tx_pkt_buf, 0, RING_SIZE));
 
 	ASSERTRT(cudaMalloc((void**)&rx_pkt_cnt, sizeof(int)));
   	ASSERTRT(cudaMemset(rx_pkt_cnt, 0, sizeof(int)));
@@ -145,22 +108,6 @@ int get_rx_cnt(void)
 	return rx_cur_pkt;
 }
 
-extern "C"
-int get_tx_buf(unsigned char* tx_buf)
-{
-	int tx_cur_pkt = 0;
-
-	cudaMemcpy(tx_buf, tx_pkt_buf + (tx_idx * PKT_BATCH_SIZE), sizeof(unsigned char) * PKT_BATCH_SIZE, cudaMemcpyDeviceToHost);
-
-//	cudaMemcpy(&tx_cur_pkt, pkt_batch_num + tx_idx, sizeof(int), cudaMemcpyDeviceToHost);
-
-	tx_idx++;
-	if(tx_idx == BLOCK_NUM)
-		tx_idx = 0;
-
-	return tx_cur_pkt;
-}
-
 __global__ void gpu_monitor(unsigned char * rx_pkt_buf, int * rx_pkt_cnt, int * pkt_batch_num)
 {
 	int mem_index = PKT_BATCH_SIZE * threadIdx.x;
@@ -174,37 +121,8 @@ __global__ void gpu_monitor(unsigned char * rx_pkt_buf, int * rx_pkt_cnt, int * 
 		__syncthreads();
 		atomicAdd(rx_pkt_cnt, pkt_batch_num[threadIdx.x]);
 		
-#if TX
-		__syncthreads();
-		memcpy(tx_pkt_buf + mem_index, rx_pkt_buf + mem_index, PKT_BATCH_SIZE);
-/*
-		for(int i = 0; i < pkt_batch_num[threadIdx.x]; i++)
-		{
-			__syncthreads();
-			mani_pkt_gpu(tx_pkt_buf + mem_index + i * PKT_SIZE);
-		}
-*/
-#endif
-		__syncthreads();
-		memset(pkt_batch_num + threadIdx.x, 0, sizeof(int));
-		
 	}
 }
-
-#if 0
-__global__ void gpu_mani_loop(unsigned char * tx_pkt_buf,int * pkt_batch_num)
-{
-	__syncthreads();
-	if(pkt_batch_num[threadIdx.x] != 0 && rx_pkt_buf[mem_index + ((pkt_batch_num[threadIdx.x] - 1) * PKT_SIZE)] != 0)
-	{
-		__syncthreads();
-		memcpy(tx_pkt_buf + mem_index, rx_pkt_buf + mem_index, PKT_BATCH_SIZE);
-
-		__syncthreads();
-		mani_pkt_gpu(tx_pkt_buf + mem_index + i * PKT_SIZE);
-	}
-}	
-#endif
 
 extern "C"
 void gpu_monitor_loop(void)
