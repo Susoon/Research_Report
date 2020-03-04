@@ -6,10 +6,27 @@
 * ~~dpdk와 copy_to_gpu가 실행되는 core 확인~~
 * ~~만약 dpdk와 copy_to_gpu가 같은 core에서 실행되고 있다면, 다른 core에서 실행되게끔 code 수정 후 test~~
 * ~~monitoring loop가 다른 core에서 실행되게 code 수정 후 test~~
-* 현재까지 나온 test 결과 정리 (Summary 파일에 정리)
-  * polling으로 64B, 128B 추가 측정하여 data 뽑기
-  * 3-3) batch delay 부분 수정
-  * graph로 쓸만한 data 선별하여 graph 추가하기
+* ~~현재까지 나온 test 결과 정리 (Summary 파일에 정리)~~
+  * ~~polling으로 64B, 128B 추가 측정하여 data 뽑기~~
+  * ~~3-3) batch delay 부분 수정~~
+  * ~~graph로 쓸만한 data 선별하여 graph 추가하기~~
+
+## 03/04 현재상황
+
+* 그냥 code를 고쳐서 출력값이 조금 더 이뻐지게 만들었다
+
+
+
+<center> improved output </center>
+
+
+
+![Alt_text](image/03.04_utilize.JPG)
+
+* 1초 주기로 화면이 갱신되며 현재 test 실행 상태를 알려준다
+* 찬규형 output화면처럼 깔끔하고 보기 쉽게 만들고 싶어서 수정해봄...
+
+
 
 ## 03/02 현재상황
 

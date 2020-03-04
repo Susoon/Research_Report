@@ -19,15 +19,15 @@
 
 ## 1. cpu core
 
-* dpdk는 모든 packet을 받아올 수 있으나 특성상 master core와 slave core가 필요하므로 최소 2개 이상의 cpu core가 필요하며, 2개의 core 모두 100% 사용량을 보인다
-
+* dpdk를 사용하면 처리속도가 매우 빨라 모든 packet을 받아올 수 있다
+* 하지만 특성상 master core와 slave core가 필요하므로 최소 2개 이상의 cpu core가 필요하며, 2개의 core 모두 100% 사용량을 보인다
 * 이는 자명하게 알려져있는 사실이며 추가적인 근거가 필요하지 않다
 
 
 
 ## 2. cudamemcpy
 
-* cudaMemcpy를 통해 gpu에 copy해주게 되면 모든 packet을 받아올 수 없다
+* cudaMemcpy를 통해 gpu에 packet을 copy해주게 되면 dpdk는 delay에 의해서 모든 packet을 받아올 수 없다
 
 * dpdk는 기본적으로 packet을 32개씩 batch하여 받아오는 데 이를 바로 GPU memory에 복사해주면 pps가 떨어진다
 
@@ -176,7 +176,7 @@
   * 사실 위의 이유를 차치하고서라도 1GB의 packet buffer는 사용하지 않는다
 * 이는 batch size를 일정 이하로 낮출 수 밖에 없다는 결론을 내게 된다
   * 최대 512개의 batch size까지 사용할 듯 하다
-    * 1514B기준 512개의 batch size : (약 47MB \| 확인 후 기록)
+    * 1514B기준 512개의 batch size : 47MB
 * 하지만 batch size를 낮추면 낮출 수록 pps는 떨어지게 된다
 
 
@@ -185,7 +185,7 @@
 
 * batch size가 커졌을 때, 고려해야하는 delay는 3가지 종류가 있다
 * 첫번째, dpdk로 받은 packet을 batch하기 위한 cpu의 delay
-  * 사실 멈추지 않고 packet을 받아 저장해뒀다가 한 번에 보내주는 방식이기 때문에 제일 처음 batch할 때에만 gpu가 조금 기다리는 것 외에는 없다
+  * 사실 batch하는 동안에도 멈추지 않고 packet을 받아주는 방식이기 때문에 제일 처음 batch할 때에만 gpu가 조금 기다리는 것 외에는 없다
 
 
 
@@ -200,7 +200,7 @@
 
 * 세번째, dpdk가 보낼 수 있는 batch size인 32개씩 packet을 나누어서 전송하는 데에서 발생하는 cpu의 delay
 * 사실 가장 큰 delay를 발생시키는 구간이다
-* 이 구간에서 delay가 크게 발생하고, 이는 cpu가 packet을 받는 속도에 영향을 미치고, 이는 다시 gpu가 packet을 받기 위해 대기해야하는 상황을 만든다
+* 이 구간에서 delay가 크게 발생하면, cpu가 packet을 받는 속도에 영향을 미치고, 이는 다시 gpu가 packet을 받기 위해 대기해야하는 상황을 만든다
 * cpu에 의해 실행되기 때문에 cpu의 영향을 크게 받는 dpdk의 큰 단점이다
 
 
