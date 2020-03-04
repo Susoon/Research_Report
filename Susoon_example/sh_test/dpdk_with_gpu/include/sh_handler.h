@@ -48,13 +48,13 @@
 #define RX_NB 32
 
 #define PKT_SIZE 64
-#define PKT_BATCH (512 + RX_NB)
+#define PKT_BATCH (1024 * 128 + RX_NB)
 #define PKT_BATCH_SIZE (PKT_SIZE * PKT_BATCH)
 
 #define ONE_SEC 1000 * 1000 * 1000
 #define MEGA 1000 * 1000
 
-#define POLL 0
+#define POLL 1
 
 #if POLL
 #define LAUNCH 0

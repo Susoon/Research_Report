@@ -121,7 +121,9 @@ __global__ void gpu_monitor(unsigned char * rx_pkt_buf, int * rx_pkt_cnt, int * 
 
 		__syncthreads();
 		atomicAdd(rx_pkt_cnt, pkt_batch_num[threadIdx.x]);
-		
+
+		__syncthreads();
+		memset(pkt_batch_num + threadIdx.x, 0, sizeof(int));
 	}
 }
 

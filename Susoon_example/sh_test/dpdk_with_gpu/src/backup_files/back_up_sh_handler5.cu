@@ -141,6 +141,7 @@ int get_rx_cnt(void)
 	cudaMemcpy(&rx_cur_pkt, rx_pkt_cnt, sizeof(int), cudaMemcpyDeviceToHost);
 
 	cudaMemset(rx_pkt_cnt, 0, sizeof(int));	
+	printf("rx_cur_pkt = %d\n", rx_cur_pkt);
 
 	return rx_cur_pkt;
 }

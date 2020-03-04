@@ -29,6 +29,26 @@ void *cpu_monitoring_loop(void *data)
 }
 #endif
 
+void print_cur_stat(double ring_size, const char * unit, double gpu_recv, double cpu_recv, int copy_cnt)
+{
+	system("clear");
+	gpu_recv = get_rx_cnt();
+	gpu_recv /= MEGA;
+	cpu_recv /= MEGA;	
+	PRINT_V();
+	
+	printf("RING_SIZE = %.4lf%s\n", ring_size, unit);
+	if(PKT_BATCH - RX_NB > 1024)
+	{
+		printf("PKT_SIZE = %d, PKT_BATCH = %d * 1024 + %d\n", PKT_SIZE, (PKT_BATCH - RX_NB) / 1024, RX_NB);
+	}
+	else
+	{
+		printf("PKT_SIZE = %d, PKT_BATCH = %d + %d\n", PKT_SIZE, PKT_BATCH - RX_NB, RX_NB);
+	}	
+	printf("RX LOOP : gpu_recv = %.4lfMpps, cpu_recv = %.4lfMpps, copy_cnt = %d\n", gpu_recv, cpu_recv, copy_cnt);
+}
+
 static void copy_to_arr(struct rte_mbuf * buf[], unsigned char * batch_buf, int size)
 {
 	unsigned char* tmp;
@@ -36,17 +56,6 @@ static void copy_to_arr(struct rte_mbuf * buf[], unsigned char * batch_buf, int 
 	{
 		tmp = (rte_ctrlmbuf_data(buf[i]));
 		memcpy(batch_buf + (i * PKT_SIZE), tmp, PKT_SIZE);
-	}
-}
-
-
-static void copy_to_struct(struct rte_mbuf * buf[], unsigned char * batch_buf, int size)
-{
-	unsigned char* tmp;
-	for(int i = 0; i < size; i++)
-	{
-		tmp = (rte_ctrlmbuf_data(buf[i]));
-		memcpy(tmp, batch_buf + (i * PKT_SIZE), PKT_SIZE);
 	}
 }
 
@@ -69,32 +78,30 @@ static void rx_loop(uint8_t lid)
 {
 	struct rte_mbuf *buf[DEFAULT_PKT_BURST];
 	uint16_t nb_rx;
-	uint16_t nb_tx;
 	int ret;
 	unsigned int i, j;
 	double gpu_recv = 0;
 	double cpu_recv = 0;
-	double gpu_send = 0;
 	int copy_cnt = 0;
-	unsigned char* ptr;
 
 	unsigned char* rx_batch_buf;
-	unsigned char* tx_batch_buf;
-	struct rte_mbuf* tx_batch_buf_struct;
 	unsigned int b_idx = 0;	
 
 	int start;
 	int end = 0;
 
 	rx_batch_buf = (unsigned char*)malloc(sizeof(unsigned char) * PKT_BATCH_SIZE);
-	//tx_batch_buf = (unsigned char*)malloc(sizeof(unsigned char) * PKT_BATCH_SIZE);
-	//tx_batch_buf_struct = (struct rte_mbuf*)malloc(sizeof(struct rte_mbuf) * PKT_BATCH_SIZE);
 
+	double r_size = RING_SIZE;
+	int unit = 0;
+	const char * u_str[] = {"B", "KB", "MB", "GB"};
+	while(r_size > 1) { r_size /= 1024; unit++;}
+	r_size *= 1024;
+	unit--;
 
 	start_lcore(l2p, lid);
 	
 	start = monotonic_time();
-
 
 	while(lcore_is_running(l2p, lid)){
 
@@ -107,8 +114,6 @@ static void rx_loop(uint8_t lid)
 		nb_rx = rte_eth_rx_burst(0, 0, buf, DEFAULT_PKT_BURST);
 		if(nb_rx > 0){
 			//printf("nb_rx: %d\n", nb_rx);
-		// [TODO] Need to modify here.
-			ptr = (rte_ctrlmbuf_data(buf[0]));
 #if BATCH
 			copy_to_arr(buf, rx_batch_buf + (b_idx * PKT_SIZE), nb_rx);
 
@@ -128,21 +133,7 @@ static void rx_loop(uint8_t lid)
 #if RX_LOOP_CNT
 			if(end - start > ONE_SEC)
 			{
-				gpu_recv = get_rx_cnt();
-				gpu_recv /= MEGA;
-				cpu_recv /= MEGA;	
-				system("clear");
-				PRINT_V();
-				printf("RING_SIZE = %d\n", RING_SIZE);
-				if(PKT_BATCH - RX_NB > 1024)
-				{
-					printf("PKT_SIZE = %d, PKT_BATCH = %d * 1024 + %d\n", PKT_SIZE, (PKT_BATCH - RX_NB) / 1024, RX_NB);
-				}
-				else
-				{
-					printf("PKT_SIZE = %d, PKT_BATCH = %d + %d\n", PKT_SIZE, PKT_BATCH - RX_NB, RX_NB);
-				}	
-				printf("RX LOOP : gpu_recv = %.4lfMpps, cpu_recv = %.4lfMpps, copy_cnt = %d\n", gpu_recv, cpu_recv, copy_cnt);
+				print_cur_stat(r_size, u_str[unit], gpu_recv, cpu_recv, copy_cnt);
 				start = end;
 				gpu_recv = 0;
 				cpu_recv = 0;
