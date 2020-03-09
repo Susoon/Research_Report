@@ -3,13 +3,15 @@
 ## ToDo List
 
 * ~~64B, 128B의 추가 test 필요~~
-* ~~dpdk와 copy_to_gpu가 실행되는 core 확인~~
-* ~~만약 dpdk와 copy_to_gpu가 같은 core에서 실행되고 있다면, 다른 core에서 실행되게끔 code 수정 후 test~~
+* ~~dpdk와 copy\_to\_gpu가 실행되는 core 확인~~
+* ~~만약 dpdk와 copy\_to\_gpu가 같은 core에서 실행되고 있다면, 다른 core에서 실행되게끔 code 수정 후 test~~
 * ~~monitoring loop가 다른 core에서 실행되게 code 수정 후 test~~
 * ~~현재까지 나온 test 결과 정리 (Summary 파일에 정리)~~
   * ~~polling으로 64B, 128B 추가 측정하여 data 뽑기~~
   * ~~3-3) batch delay 부분 수정~~
   * ~~graph로 쓸만한 data 선별하여 graph 추가하기~~
+* gpu SHA code 확인해서 fancy의 SHA code랑 비교하기
+  * 제대로 작동하는지는 확인할 수 없으니code 비교해보면서 알고리즘이 제대로 된 게 맞는지 확인하기
 
 ## 03/04 현재상황
 
