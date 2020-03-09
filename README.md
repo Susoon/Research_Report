@@ -11,7 +11,43 @@
   * ~~3-3) batch delay 부분 수정~~
   * ~~graph로 쓸만한 data 선별하여 graph 추가하기~~
 * gpu SHA code 확인해서 fancy의 SHA code랑 비교하기
-  * 제대로 작동하는지는 확인할 수 없으니code 비교해보면서 알고리즘이 제대로 된 게 맞는지 확인하기
+  * 구조 확인하기
+
+---
+
+## 03/09 현재상황
+
+* fancy의 ipsec.cu의 코드와 github의 gpu sha 코드를 비교하는 중
+* 구조를 확인하다보니 의문점이 좀 생겼다
+
+1. sha1_kernel_global에 parameter로 정수값 len을 주는데 왜 inner에선 64로, outer에선 20으로 static하게 넘겨주는지?
+   * 첫번째 inner padding을 이용한 처리를 할 때는 packet을 64B기준으로 나눠서 처리를 하니 64로 넘겨줌
+     * 64B를 다루는 커널이라 사실 나누지는 않지만 1514B 버젼에서도 64로 넘겨주는 것을 통틀어 설명함
+   * 두번째 outer padding을 이용한 처리를 할 때는 첫번째 inner padding을 이용한 처리를 한 후 나온 값이 20B이고 이를 처리하니 20으로 넘겨줌
+   * Hash function에서 처리해야하는 data의 크기를 넘겨주는 것이니 당연한것
+2. sha1_kernel_global_1514에는 e_index를 사용하면서 왜 sha1_kernel_global에는 사용하지 않는가?
+   * sha1_kernel_global은 64B의 packet을 처리하기 위한 커널
+   * 이 때는 하나의 thread가 하나의 packet을 보면 되기때문에 커널 내부에 따로 thread를 분배하는 일이 필요 없음
+   * 1514B의 버젼에서는 여러개의 thread가 하나의 packet을 나누어서 봐야하기 때문에 분재하는 과정이 필요함
+   * 그래서 나눔
+3. sha1_kernel_global_1514에는 pkt_idx를 사용하는데 그 이유는?
+   * 2번의 내용과 관련이 있는데, 64B의 packet은 하나의 thread가 하나의 packet을 보다보니 지정된 자리만 보면 됨
+     * 현재 내가 보고 있는 코드에 한해서
+     * 변경 예정
+   * 그래서 어떤 packet을 보는지는 알려줄 필요가 없음
+   *  1514B의 packet은 여러개의 thread가 하나의 packet을 보다보니 어떤 packet을 봐야하는지도 알려줘야 thread가 모여서 packet을 처리해줌
+   * 그래서 필요
+4. sha1_kernel_global_1514에서 data + block_index를 하는 이유?
+   * 2, 3번과 유사한 이유
+5. github 코드에는 unsigned long W으로 되어있는데 fancy에는 uint32_t W로 되어 있음. size가 달라도 무관한가?
+   * 미해결
+6. sha1_kernel_global_1514에서 total_threads의 값이 24로 fix되어있음(아예 total_threads라는 변수가 없고 그 자리에 24라는 값이 static하게 들어감)
+   * 왜 thread 수를 24로 줬는지는 찬규형 github을 봐야할듯
+7. ipsec이랑 nf_ipsec_64의 차이는?
+   * ipsec이 기존 cpu에서 sha1을 하던 코드를 그대로 gpu에 포팅한 것
+   * 옛날 거라는 뜻
+
+
 
 ## 03/04 현재상황
 
