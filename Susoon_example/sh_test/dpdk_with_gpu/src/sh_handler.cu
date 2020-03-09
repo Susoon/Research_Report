@@ -113,16 +113,20 @@ __global__ void gpu_monitor(unsigned char * rx_pkt_buf, int * rx_pkt_cnt, int * 
 {
 	int mem_index = PKT_BATCH_SIZE * threadIdx.x;
 
-	__syncthreads();
+//	__syncthreads();
+		__threadfence();
 	if(pkt_batch_num[threadIdx.x] != 0 && rx_pkt_buf[mem_index + ((pkt_batch_num[threadIdx.x] - 1) * PKT_SIZE)] != 0)
 	{
-		__syncthreads();
+//		__syncthreads();
+		__threadfence();
 		rx_pkt_buf[mem_index + ((pkt_batch_num[threadIdx.x] - 1) * PKT_SIZE)] = 0;
 
-		__syncthreads();
+//		__syncthreads();
+//		__threadfence_block();
+		__threadfence();
 		atomicAdd(rx_pkt_cnt, pkt_batch_num[threadIdx.x]);
 
-		__syncthreads();
+//		__syncthreads();
 		memset(pkt_batch_num + threadIdx.x, 0, sizeof(int));
 	}
 }
