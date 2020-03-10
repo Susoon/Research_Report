@@ -14,36 +14,74 @@
   * 구조 확인하기
 
 ---
+## 03/10 현재상황
 
+* 의문점 추가
+
+1. sha1\_kernel\_global을 보면 len이 20일 경우에는 다른 알고리즘이 사용되는데 그 이유를 모르겠음..
+
+<center> len 20 </center>
+
+![Alt_text](image/03.09_len20.JPG)
+
+* 현재 코드는 1514B의 packet과 64B의 packet의 경우에 맞춰 구현되어있는데 이를 모든 packet의 size에 대해 적용되도록 코드를 수정해야함
+* 하나의 함수로 모든 size의 packet을 nf처리할 수 있는 코드를 짤 수 있을까가 중요
+* 64B의 버전과 1514B의 버전을 비교해보면, 차이점이 하나의 packet을 위해 몇개의 thread가 필요하냐이다
+* 코드의 차이점이 여기서 오는데, packet당 thread 수를 바꿀 수는 없으니 다른 방법이 필요
+
+1. naive하게 함수 call을 두 번 타고 가게 하는 방법
+    * nf\_ipsec이라는 함수를 호출할 때, packet size를 parameter로 받게한다
+	* packet size에 따라 thread 수와 array의 크기를 지정해주는 변수값을 다르게 선언해주는 기능을 넣는다
+	* sha1\_kernel\_global를 호출하면 그 안에서 packet size에 따라 다른 함수를 호출하게 해준다
+		* nf\_ipsec -> sha1\_kernel\_global -> sha1\_kernel\_global\_1514의 형태
+	* 그냥 nf\_ipsec에서 packet size에 따라 분기점을 만드는 방식
+	* 좋은 방식이 아니라서 어떻게든 합쳐야만 하는데 방법이 없을때만 사용하는 게 좋을듯....
+
+2. parameter 추가 사용
+	* 1514B의 버전을 보면 64B의 버전과 함수가 거의 동일하지만 thread\_idx, e\_index, pkt\_idx, block\_index 등 세부적인 index의 조정만 다른 상태이다
+	* 이 부분을 이용해서 parameter에 index를 조정해주는 parameter(e.g. mani\_idx)를 넘겨줘서, 이 mani\_idx를 이용해 index의 조정을 하는 방법이다
+	* mani\_idx로 어떻게 세부조정을 할 것인가는 더 고민을 해봐야하는 부분이다
+		* 간단한 idea는 sha1\_global\_kernel의 1514B 버전에서 pkt\_idx * e\_index라는 부분이 있는데 이는 64B 버전에는 없는 부분이다
+		* mani\_idx를 이용해 pkt\_idx를 0이 되게끔 해주면 해당 부분은 64B에서도 동일하게 사용할 수 있다
+
+<center> 1514B version </center>
+
+![Alt_text](image/03.10_1514_index.JPG)
+
+<center> 64B version </center>
+
+![Alt_text](image/03.10_64_index.JPG)
+
+---
 ## 03/09 현재상황
 
 * fancy의 ipsec.cu의 코드와 github의 gpu sha 코드를 비교하는 중
 * 구조를 확인하다보니 의문점이 좀 생겼다
 
-1. sha1_kernel_global에 parameter로 정수값 len을 주는데 왜 inner에선 64로, outer에선 20으로 static하게 넘겨주는지?
+1. sha1\_kernel\_global에 parameter로 정수값 len을 주는데 왜 inner에선 64로, outer에선 20으로 static하게 넘겨주는지?
    * 첫번째 inner padding을 이용한 처리를 할 때는 packet을 64B기준으로 나눠서 처리를 하니 64로 넘겨줌
      * 64B를 다루는 커널이라 사실 나누지는 않지만 1514B 버젼에서도 64로 넘겨주는 것을 통틀어 설명함
    * 두번째 outer padding을 이용한 처리를 할 때는 첫번째 inner padding을 이용한 처리를 한 후 나온 값이 20B이고 이를 처리하니 20으로 넘겨줌
    * Hash function에서 처리해야하는 data의 크기를 넘겨주는 것이니 당연한것
-2. sha1_kernel_global_1514에는 e_index를 사용하면서 왜 sha1_kernel_global에는 사용하지 않는가?
-   * sha1_kernel_global은 64B의 packet을 처리하기 위한 커널
+2. sha1\_kernel\_global\_1514에는 e\_index를 사용하면서 왜 sha1\_kernel\_global에는 사용하지 않는가?
+   * sha1\_kernel\_global은 64B의 packet을 처리하기 위한 커널
    * 이 때는 하나의 thread가 하나의 packet을 보면 되기때문에 커널 내부에 따로 thread를 분배하는 일이 필요 없음
    * 1514B의 버젼에서는 여러개의 thread가 하나의 packet을 나누어서 봐야하기 때문에 분재하는 과정이 필요함
    * 그래서 나눔
-3. sha1_kernel_global_1514에는 pkt_idx를 사용하는데 그 이유는?
+3. sha1\_kernel\_global\_1514에는 pkt\_idx를 사용하는데 그 이유는?
    * 2번의 내용과 관련이 있는데, 64B의 packet은 하나의 thread가 하나의 packet을 보다보니 지정된 자리만 보면 됨
      * 현재 내가 보고 있는 코드에 한해서
      * 변경 예정
    * 그래서 어떤 packet을 보는지는 알려줄 필요가 없음
    *  1514B의 packet은 여러개의 thread가 하나의 packet을 보다보니 어떤 packet을 봐야하는지도 알려줘야 thread가 모여서 packet을 처리해줌
    * 그래서 필요
-4. sha1_kernel_global_1514에서 data + block_index를 하는 이유?
+4. sha1\_kernel\_global\_1514에서 data + block\_index를 하는 이유?
    * 2, 3번과 유사한 이유
-5. github 코드에는 unsigned long W으로 되어있는데 fancy에는 uint32_t W로 되어 있음. size가 달라도 무관한가?
+5. github 코드에는 unsigned long W으로 되어있는데 fancy에는 uint32\_t W로 되어 있음. size가 달라도 무관한가?
    * 미해결
-6. sha1_kernel_global_1514에서 total_threads의 값이 24로 fix되어있음(아예 total_threads라는 변수가 없고 그 자리에 24라는 값이 static하게 들어감)
+6. sha1\_kernel\_global\_1514에서 total\_threads의 값이 24로 fix되어있음(아예 total\_threads라는 변수가 없고 그 자리에 24라는 값이 static하게 들어감)
    * 왜 thread 수를 24로 줬는지는 찬규형 github을 봐야할듯
-7. ipsec이랑 nf_ipsec_64의 차이는?
+7. ipsec이랑 nf\_ipsec\_64의 차이는?
    * ipsec이 기존 cpu에서 sha1을 하던 코드를 그대로 gpu에 포팅한 것
    * 옛날 거라는 뜻
 
@@ -208,9 +246,9 @@
 
 ![Alt_text](image/03.02_sep_poll_main_code.JPG)
 
-* core_mask를 2로 주어 1번 core에 monitor thread를 강제적으로 할당해 2개의 core만을 사용하게끔 했다
+* core\_mask를 2로 주어 1번 core에 monitor thread를 강제적으로 할당해 2개의 core만을 사용하게끔 했다
 
-* 64B와 128B의 packet size를 사용했고, 256개의 batch_size를 사용했다
+* 64B와 128B의 packet size를 사용했고, 256개의 batch\_size를 사용했다
 
 
 
@@ -250,9 +288,9 @@
 
 
 
-* dpdk의 persistent loop과 copy_to_gpu를 통한 gpu memcpy가 서로 같은 core에서 실행되는지 확인해보았다
+* dpdk의 persistent loop과 copy\_to\_gpu를 통한 gpu memcpy가 서로 같은 core에서 실행되는지 확인해보았다
 
-* sched_setaffinity함수를 사용하여 분리했다
+* sched\_setaffinity함수를 사용하여 분리했다
 
 
 
@@ -281,7 +319,7 @@
 ![Alt_text](image/03.02_two_core_cpu_status_1.JPG)
 
 * cpu를 분리하는 code를 삽입하니 cpu 하나에 몰렸다
-* 분리하는 code를 삽입하였는데 왜 하나의 cpu만 작동하는지 고민하다가 core_mask를 2로 줘서 copy_to_gpu가 1번 cpu에 돌게 했더니 다음과 같은 결과가 나타났다
+* 분리하는 code를 삽입하였는데 왜 하나의 cpu만 작동하는지 고민하다가 core\_mask를 2로 줘서 copy\_to\_gpu가 1번 cpu에 돌게 했더니 다음과 같은 결과가 나타났다
 
 
 
@@ -291,9 +329,9 @@
 
 ![Alt_text](image/03.02_two_core_cpu_status_after.JPG)
 
-* copy_to_gpu가 원래 cpu 1번에서 실행되고 있고, dpdk loop가 0번에서 실행되고 있어서 copy_to_gpu를 0번에 할당하니 하나로 돌게 된 것이다
+* copy\_to\_gpu가 원래 cpu 1번에서 실행되고 있고, dpdk loop가 0번에서 실행되고 있어서 copy\_to\_gpu를 0번에 할당하니 하나로 돌게 된 것이다
 
-* 위의 결과를 통해 copy_to_gpu와 dpdk의 loop가 서로 다른 core에서 실행되고 있었다는 것을 알게되었다
+* 위의 결과를 통해 copy\_to\_gpu와 dpdk의 loop가 서로 다른 core에서 실행되고 있었다는 것을 알게되었다
 * 아래는 core를 분리하기 전과 후의 pps이다
 * test는 64B와 128B의 packet size를 사용했고, 각자 최대의 pps를 보여줬던 1024\*8개의 batch(64B)와 1024\*2개의 batch(128B)에서 test했다
 
@@ -342,7 +380,7 @@
 
 ### kernel launch
 
-* dpdk.c에서 copy_to_gpu를 호출하면, copy_to_gpu에서 직접 gpu kernel을 호출하여 packet 개수를 count하게끔 code를 수정함
+* dpdk.c에서 copy\_to\_gpu를 호출하면, copy\_to\_gpu에서 직접 gpu kernel을 호출하여 packet 개수를 count하게끔 code를 수정함
 * 이를 통해 pps가 더 떨어질 것이라고 예상함
   * 또다른 thread를 통해 dpdk.c와 독립적으로 count를 해주면 dpdk를 담당하는 core가 할 일이 적어지므로 더 빠름
   * 이를 dpdk.c가 gpu kernel을 통해 packet의 copy가 정상적으로 진행되었는지 확인하고, packet의 수까지 count하게 바꾸었으니 core가 할 일이 많아져 더 느려져야함
@@ -396,7 +434,7 @@
 
 * packet을 보내주는 수가 많아서 다른 특징을 보이는 거라면, 결국 cudaMemcpy나 gpu kernel의 호출 횟수가 달라서 다른 특징을 보이는 것이라는 얘기가 된다
 * 당연한 얘기지만 call count table을 보면 64B의 cudaMemcpy의 호출 횟수가 점점 줄어듬을 알 수 있다
-  * copy_to_gpu 한 번 호출 당 1씩 증가시켰으므로 gpu kernel도 동일한 횟수로 불렸다
+  * copy\_to\_gpu 한 번 호출 당 1씩 증가시켰으므로 gpu kernel도 동일한 횟수로 불렸다
 * 이를 통해 알 수 있는 것은 cudaMemcpy의 호출 횟수가 줄어들었으므로 cudaMemcpy의 latency가 줄어들었다는 얘기가 된다
 * 이는 어제의 test 결과로 추측해보았을때 cudaMemcpy의 overhead로 인한 pps 감소 외에 다른 요인이 있다는 결론이 나온다
 * 여기서 의문점은 그렇다면 왜 64B에서만 이러한 특징이보이는 가이다
@@ -664,7 +702,7 @@
 * 그런데 속도는 동일하다
 * 원래 가설대로라면 batch size가 같아도 packet size가 다르면 총 batch size가 달라서 copy overhead가 더 들어가니 더 속도가 떨어져야하는게 맞다
 * 지난번 실수처럼 gpu에 copy하는 과정에 모든 packet을 copy하지 않는다든가 하는 오류가 있을 수 있다
-* 현재 512B의 packet까지 test한 상태이며, pps의 기록은 batch_size_text.xlsx 파일에, 각 test 결과 캡쳐사진은 image/batch_test/ 안에 packet size별로 정리되어있다
+* 현재 512B의 packet까지 test한 상태이며, pps의 기록은 batch\_size\_text.xlsx 파일에, 각 test 결과 캡쳐사진은 image/batch\_test/ 안에 packet size별로 정리되어있다
 
 * 이 part의 의문 해결은 02/26 시작부분에 서술되어 있다
 
@@ -691,7 +729,6 @@
 
 ### copy 문제 해결 후
 
-
 <center> fixed copy_to_gpu </center>
 
 
@@ -702,7 +739,7 @@
 * 이때 size는 dpdk.c에서 batch해서 모은 packet 수였다
 * 하지만 변수명이 size이다보니 packet 수에 packet size가 곱해진 총 batch된 size를 말하는 줄 알고 그냥 곱해서 copy해주고 있었음
 * 그래서 모든 packet이 copy되고 있지 않았다
-* 변수명을 pkt_num으로 바꿔주고 PKT_SIZE를 곱해서 정확한 batch된 size만큼 copy를 해주어 모든 packet이 copy되게 하였다
+* 변수명을 pkt\_num으로 바꿔주고 PKT\_SIZE를 곱해서 정확한 batch된 size만큼 copy를 해주어 모든 packet이 copy되게 하였다
 * 그 이후 64B packet으로 test한 결과이다
 
 
@@ -748,8 +785,8 @@
 <center> gpu monitoring code </center>
 ![Alt_text](image/02.24_gpu_monitor_code.JPG)
 
-* gpu_monitor가 packet buffer를 check하고 atomicAdd로 count를 올려주는 함수
-* gpu_monitor_loop가 cpu에서 loop를 돌면서 gpu_monitor를 호출해 packet buffer를 check하고 atomicAdd로 count를 올려줌
+* gpu\_monitor가 packet buffer를 check하고 atomicAdd로 count를 올려주는 함수
+* gpu\_monitor_loop가 cpu에서 loop를 돌면서 gpu\_monitor를 호출해 packet buffer를 check하고 atomicAdd로 count를 올려줌
 
 ---
 
@@ -795,7 +832,7 @@
 * 원인은 uint64_t인 start와 end의 차가 int인 macro ONE_SEC와 비교되다보니 type conversion을 하는 과정에서 문제가 발생한 것이었음
   * 이와 관련된 test는 다음 장에
   * 수정 후 해결
-* copy_to_gpu가 제대로 실행 된다면 13.8Mpps가 나올 수 없음
+* copy\_to\_gpu가 제대로 실행 된다면 13.8Mpps가 나올 수 없음
   * copy overhead때문에
 * 추측상 dpdk.c의 buf를 structure에서 unsigned char*로 변환하는 과정에 문제가 있음
 
@@ -959,7 +996,7 @@
 
 ## 02/22 현재상황
 
-* 여전히 gpu_monitoring_loop 때문에 다른 gpu코드가 작동을 못함
+* 여전히 gpu\_monitoring\_loop 때문에 다른 gpu코드가 작동을 못함
 * 그래서 test를 위한 코드를 따로 짜서 확인해봄
 
 
@@ -989,7 +1026,7 @@
 
 * dpdk_gpu_test 파일을 실행시켜 나온 결과
 * 5번째까지는 packet을 gpu에 넣기 전이라 0으로 memcpy되지만 6번째에 84180992라는 값은 이전까지 count된 rx packet 수가 그 전까지 cpu에게 전달이 안 되다가 한번에 전달되어 출력된 수로 추측됨
-* 이 말은 저때까지는 copy_to_gpu 내의 memcpy와 get_rx_cnt의 memcpy가 제대로 실행이 되며 gpu_monitoring_loop내의 loop도 제대로 실행이 되었다는 뜻
+* 이 말은 저때까지는 copy\_to\_gpu 내의 memcpy와 get\_rx\_cnt의 memcpy가 제대로 실행이 되며 gpu\_monitoring\_loop내의 loop도 제대로 실행이 되었다는 뜻
 * 그 이후로는 30초 정도 멈춰있다가 cudaMemcpyLaunchTimeout이 발생
 * gpu에 과부하가 걸리는 건지 잘 모르겠음
 * packet 전송 속도를 0.001%로 해서 초당 200개 미만의 packet을 보내면 조금 더 오랫동안(20~30번 정도?) packet을 count하다가 같은 증상을 보임
@@ -998,7 +1035,7 @@
 
 ## 02/21 현재상황
 
-* gpu에서 gpu_monitoring_loop을 돌리면 다른 gpu코드가 작동을 못함
+* gpu에서 gpu\_monitoring\_loop을 돌리면 다른 gpu코드가 작동을 못함
 * synch 문제인 거 같음
 
 
@@ -1028,31 +1065,31 @@
 ![Alt_text](image/02.20_gpu_monitoring_loop.JPG)
 
 * gpu에서 packet buffer를 polling 하는 loop
-* 원래 의도는 copy_to_gpu를 통해 dpdk.c가 flag를 true로 바꿔주면 packet이 들어왔다는 신호로 인식하고 packet을 manipulate하면서 rx_pkt_cnt를 count해주려했음
+* 원래 의도는 copy\_to\_gpu를 통해 dpdk.c가 flag를 true로 바꿔주면 packet이 들어왔다는 신호로 인식하고 packet을 manipulate하면서 rx_pkt_cnt를 count해주려했음
 
 
 
 <center> getter for rx packet count and tx packet buffer </center>
 ![Alt_text](image/02.20_getter_fct.JPG)
 
-* dpdk.c 에서 위의 함수를 1초마다 불러서 gpu_monitoring_loop가 rx_pkt_cnt와 tx_pkt_buf를 채워주면 그 값을 가져가고 0으로 초기화해주는 역할을 하는 함수
+* dpdk.c 에서 위의 함수를 1초마다 불러서 gpu\_monitoring\_loop가 rx_pkt_cnt와 tx_pkt_buf를 채워주면 그 값을 가져가고 0으로 초기화해주는 역할을 하는 함수
 
 
 
 * 현재 위의 두 함수 모두 제 기능을 못하는 상태
   * 원인 1)
-    *  gpu_monitoring_loop가 무한루프임
-    * 이 때문에 copy_to_gpu나 get_rx_cnt, get_tx_buf 같은 gpu의 resource를 필요로 하는 함수들이 무한루프에 밀려 기능을 못함(cudaErrorLaunchTimeout을 리턴함)
-    * 그래서 gpu memory에 packet이 올라가지 않으니 gpu_monitoring_loop도 일을 안함
+    *  gpu\_monitoring\_loop가 무한루프임
+    * 이 때문에 copy\_to\_gpu나 get\_rx\_cnt, get\_tx\_buf 같은 gpu의 resource를 필요로 하는 함수들이 무한루프에 밀려 기능을 못함(cudaErrorLaunchTimeout을 리턴함)
+    * 그래서 gpu memory에 packet이 올라가지 않으니 gpu\_monitoring\_loop도 일을 안함
     * 위의 내용들이 반복됨
   * 원인 2)
-    * dpdk.c에서 tx_pkt_buf를 받아 tx_buf라는 rte_mbuf 구조체 포인터 배열에 copy해 넣고 이를 transmitt함
+    * dpdk.c에서 tx\_pkt\_buf를 받아 tx\_buf라는 rte\_mbuf 구조체 포인터 배열에 copy해 넣고 이를 transmitt함
     * 그 이유는 rx와 tx packet 모두 하나의 변수에 저장되면 rx가 batch를 하는 동안 tx가 packet을 덮어씌워버림
     * 이 때문에 또 다른 변수를 선언하여 copy하는 것을 택함
-    * 이때 rte_mbuf 구조체에 tx_pkt_buf를 copy해 넣어야하는데 구조체의 field를 대략적으로라도 알아야함
+    * 이때 rte\_mbuf 구조체에 tx\_pkt\_buf를 copy해 넣어야하는데 구조체의 field를 대략적으로라도 알아야함
 
 * 위의 원인들때문에 현재 test가 불가함
-* rte_mbuf는 구조체의 field만 보면 간단히 해결 가능 할 듯
+* rte\_mbuf는 구조체의 field만 보면 간단히 해결 가능 할 듯
 * persistent loop를 고쳐야함
 
 
@@ -1068,7 +1105,7 @@
 
 
 * 여러 테스트를 진행해봄
-* 첫번째, print_gpu가 실행되지 않은 이유를 d_pkt_buf라는 shared memory에 계속 packet을 copy해 넣어서 print_gpu가 scheduler에게 밀려 실행되지 않은 것으로 추정하고 pinned_pkt_buf라는 전역변수에 2MB를 할당해 ring처럼 index에 따라 다른 자리에 packet을 copy해 넣어줘 shared memory 문제를 해결하려고 해봄
+* 첫번째, print\_gpu가 실행되지 않은 이유를 d\_pkt\_buf라는 shared memory에 계속 packet을 copy해 넣어서 print_gpu가 scheduler에게 밀려 실행되지 않은 것으로 추정하고 pinned\_pkt\_buf라는 전역변수에 2MB를 할당해 ring처럼 index에 따라 다른 자리에 packet을 copy해 넣어줘 shared memory 문제를 해결하려고 해봄
   * 하지만 여전히 실행되지 않음
 
 
@@ -1079,7 +1116,7 @@
 
 
 * 두번째, 첫번째 방법을 위한 코드가 제대로 작동하는지 확인하기 위해서 cpu memory에 buffer를 만들어서 같은 역할을 하게끔 코드를 짜서 확인해봄
-  * pinned_pkt_buf를 다 0으로 초기화하고 dpdk에서 buffer를 받아와 copy해 넣은 다음 해당 부분의 위치와 index가 일치하는지 확인하기위해 해당 부분만 초록색으로 출력
+  * pinned\_pkt\_buf를 다 0으로 초기화하고 dpdk에서 buffer를 받아와 copy해 넣은 다음 해당 부분의 위치와 index가 일치하는지 확인하기위해 해당 부분만 초록색으로 출력
   * copy해 넣은 부분을 다시 0으로 만들어서 다음 index의 test때 확인 가능하도록 해줌 
   * 잘 실행 됨
 
@@ -1113,7 +1150,7 @@
 ![Alt_text](image/02.19_rx_rate_without_swap.JPG)
 
 * swap과 send  없이 실행해도 같은 Mpps를 보임
-* sh_handler가 없을때 실행하면 6Mpps가 나왔었음
+* sh\_handler가 없을때 실행하면 6Mpps가 나왔었음
 
 
 
@@ -1127,7 +1164,7 @@
 <center> rx rate without cuda function </center>
 ![Alt_text](image/02.19_rx_rate_without_cuda_fct.JPG)
 
-* recv_total로 직접 rx rate만 확인해보니 12.8Mpps로 보낸 packet수와 얼추 비슷함
+* recv\_total로 직접 rx rate만 확인해보니 12.8Mpps로 보낸 packet수와 얼추 비슷함
   * receive는 잘 되지만 header를 swap하고 send하는 연산의 overhead 때문에 tx가 반 정도 나오는 듯
   * 이 전 결과와 비슷함
 
@@ -1151,7 +1188,7 @@
 ## 02/18 현재상황
 
 * 실행에 문제가 없는 듯함
-* 아래의 사진을 보면 gpu 상에서 dpdk_gpu_test라는 내가 만든 파일이 실행중임
+* 아래의 사진을 보면 gpu 상에서 dpdk\_gpu\_test라는 내가 만든 파일이 실행중임
 
 <center> gpu proccess </center>
 ![Alt_text](image/02.18_dpdk_gpu_test_nvidia_smi.JPG)
@@ -1167,7 +1204,7 @@
 ![Alt_text](image/02.18_dpdk_excution.JPG)
 
 * gpu 함수를 통한 print를 제외한 다른 printf는 주석처리 한 상태
-  * 즉 print_gpu라는 \_\_global\_\_함수를 제외하고는 print하는 함수의 호출이 없음
+  * 즉 print\_gpu라는 \_\_global\_\_함수를 제외하고는 print하는 함수의 호출이 없음
 * 아무것도 뜨지 않음을 알 수 있음
   * 원인은 모르겠음....
   * gpu가 하는 출력이 다른 곳으로 되고 있지 않나하는 막연한 추측만 가지고 있음
@@ -1184,9 +1221,9 @@
 * 함수 호출과 출력으로 인한 overhead로 인해서 속도가 감소한 거 같음 
   * 수정 gpu 함수 호출 안해도 3Mpps정도임
   * cudaMalloc과 cudaMemcpy까지 호출 안하고 test해보니 6Mpps가 나옴
-  * print_gpu는 실행이 안되는 듯 하고, cudaMalloc과 cudaMemcpy는 호출을 하면 속도가 떨어지는 것을보니 실행이 되는 듯함
-* print_gpu는 실행이 안됨
-* dpdk는 정상적으로 packet을 받아들이고 있고, copy_to_gpu가 gpu에 cudaMalloc으로 buffer 자리를 파주고 있지만 print_gpu만 실행이 안됨
+  * print\_gpu는 실행이 안되는 듯 하고, cudaMalloc과 cudaMemcpy는 호출을 하면 속도가 떨어지는 것을보니 실행이 되는 듯함
+* print\_gpu는 실행이 안됨
+* dpdk는 정상적으로 packet을 받아들이고 있고, copy\_to\_gpu가 gpu에 cudaMalloc으로 buffer 자리를 파주고 있지만 print\_gpu만 실행이 안됨
 * \_\_global\_\_함수만 실행이  안 되는 것으로 추측됨
 
 
@@ -1196,16 +1233,17 @@
 * suhwan 계정에서 compile된 걸 이용해 suhwan 계정에 있는 .dpdk.o.cmd와 .dtest.cmd 파일에서 flag들을 가져와 susoon 계정에 Makefile에 넣어주니 compile됨
 * 실행시키면 port도 잘 찾음
 * dpdk관련 실행은 문제 없게 됨
-* 하지만 copy_to_gpu에서 d_pkt_buf를 읽어들이는 것과 print_gpu함수를 호출하는 게 안됨
+* 하지만 copy\_to\_gpu에서 d\_pkt\_buf를 읽어들이는 것과 print\_gpu함수를 호출하는 게 안됨
 
 
 
 <center>copy_to_gpu</center>
+
 ![Alt_text](image/02.17_copy_to_gpu.JPG)
 
 
 
-<center> print_gpu </center>
+<center> print\_gpu </center>
 ![Alt_text](image/02.17_print_gpu.JPG)
 
 
@@ -1215,8 +1253,8 @@
 
 
 
-* 위의 캡쳐처럼 copy_to_gpu가 print_gpu를 호출하지만 출력 결과를 보면 packet도 출력이 안되고 [GPU]: 이부분도 아예 출력이 안되는 걸 보면 print_gpu가 호출이 안됨
-* 그래서 copy_to_gpu에 print로 packet을 출력시키려 하니 segmentation fault error가 발생함
+* 위의 캡쳐처럼 copy\_to\_gpu가 print\_gpu를 호출하지만 출력 결과를 보면 packet도 출력이 안되고 [GPU]: 이부분도 아예 출력이 안되는 걸 보면 print\_gpu가 호출이 안됨
+* 그래서 copy\_to\_gpu에 print로 packet을 출력시키려 하니 segmentation fault error가 발생함
 * cuda관련된 code가 실행되지 않고 있다고 추측 중
 
 
@@ -1233,7 +1271,7 @@
 ## 02/13 현재상황
 
 * suhwan 계정에서는 compile되지 않았지만 root 계정에서는 compile이 된 이유를 알아냄
-  * root 계정으로 설치와 설정했던 모든 파일들이(Susun_examples 내의 파일들) 소유자가 root여서 suhwan 계정이 건들 수 없었음
+  * root 계정으로 설치와 설정했던 모든 파일들이(Susun\_examples 내의 파일들) 소유자가 root여서 suhwan 계정이 건들 수 없었음
   * 소유권 다 넘겨주니 excutable file을 제외하고는 모두 compile 됨
   * excutable file은 sudo가 필요함
     * library가 root 권한이어서 그런듯 함
@@ -1255,7 +1293,7 @@
 
 
 * 첫번째 error는 address mapping error
-  * sh_handler.cu 내에 read_handler 함수에서 device를 건드리는 function(\_\_global\_\_ or \_\_device\_\_ or cudaMalloc etc...)를 호출하면 error가 발생
+  * sh\_handler.cu 내에 read\_handler 함수에서 device를 건드리는 function(\_\_global\_\_ or \_\_device\_\_ or cudaMalloc etc...)를 호출하면 error가 발생
   * linking 과정이나 함수 코드 내의 문제일 가능성 있음
 * 두번째 error는 port를 찾을 수 없는 error
   * 이 error는 좀 더 살펴봐야함
