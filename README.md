@@ -14,6 +14,57 @@
   * 구조 확인하기
 
 ---
+## 03/11 현재상황
+
+* openssl의 sha의 구조의 틀이 머리속에 어느정도 잡힌 듯함
+
+1. context 구조체
+	* h : hash된 값을 저장하는 변수
+		* SHA1은 hash fuction을 돌리고 나온 크기가 20byte여야해서 unsigned int의 크기를 5개 가짐
+		* SHA512는 hash function을 돌리고 나온 크기가 512bit(=64byte)여야해서 unsigned __int64의 크기를 8개 가짐
+	* num : hashing을 해야할 남은 data의 크기
+		* 64byte단위로 hashing을 진행하다보니 data의 크기가 64byte로 딱 나누어 떨어지지 않는 경우를 처리해줘야함
+		* 이를 위해서 hashing을 해야하는 남은 data의 크기가 얼마나 남았는지 알아야함
+		* 이를 저장하는 변수
+		* 우리가 궁금했던 20byte길이의 hashing을 한번 거친 data는 어떤 과정을 거치는가를 보려면 얘를 봐야함
+	* u(d or p, etc...) : hashing이 필요한 data를 임시로 저장하는 공간
+		* 변수명은 SHA버전마다 다름
+
+2. SHA\_Update
+	* data를 64byte단위로 나누어서 sha\_block\_data\_order를 통해 hashing을 돌려주는 함수이다
+	* hashing이 직접 일어나지는 않으며 block 단위로 나누어주는 역할을 한다
+	* 여기서 context의 num변수를 변경시키면서 64byte보다 작은 size의 data를 SHA\_Final에서 처리할 수 있게끔 해준다
+
+3. sha\_block\_data\_order
+	* hashing이 직접적으로 일어나는 함수
+	* data의 값을 rotation이나 ^(XOR)등 다양한 연산을 통해 변형시킨다
+	* 그 후 이 값들을 context의 h변수에 더해준다
+	* 이 과정을 지정해준 횟수만큼 진행해준다
+		* data길이를 64byte로 나눈 횟수만큼
+		* e.g.) data의 길이가 512(64 \* 8)byte라면 8번 돌려준다
+	* 이 함수가 hash function이라고 보면 될 것 같다
+
+4. SHA\_Final
+	* SHA\_Update에서 한번 처리된 data를 말그대로 마무리해주는 함수이다
+	* context -> num을 확인해서 64byte보다 작은 크기의 data가 남았다면 이를 sha\_block\_data\_order함수를 통해 hashing해준다
+	* 우리가 궁금했던 점은 20byte의 크기의 data가 넘겨질때 64byte랑 다르게 돌아가는지였는데 여기서 해답이 나온다
+	* **남은 부분을 0으로 padding해주고 돌린다**
+	* data의 hashing 뒷마무리가 끝나면 이를 md라는 변수에 저장해서 output으로 내보내준다
+	
+* openssl의 SHA1부분을 확인해보면서 이러한 구조를 파악하고 싶었으나 불가능했다
+* 그 이유는 SHA1이 왠지는 모르겠으나 미완성인 상태이다
+* SHA1\_Update만 함수의 몸체가 있으며, SHA1\_Init과 SHA1\_Final의 경우 몸체가 없다
+* 그래서 우리가 궁금했던 data의 처리를 직접적으로 확인해볼 수 없었다
+
+* 이러한 이유에 의해서 SHA512를 확인하였다
+* SHA512의 경우 SHA2 알고리즘이지만 이를 확인한다고해서 문제가 생기지는 않을 것이다
+* 그 이유는 SHA2 알고리즘은 SHA1에서 hash function output의 size만 다르게 한 것이기 때문이다
+* 따라서 알고리즘 자체는 동일하다
+
+* 뭔가 계속 정리가 안되는 느낌이었는데 타자로 직접치면서 확인하다보니 정리가 되었다
+* 머리속에 떠돌아다니는 생각들이 잡히지 않아서 github에도 못 올리고 있었는데 앞으로는 아예 github에 올리면서 공부를 하는 게 좋을 것 같다
+___
+
 ## 03/10 현재상황
 
 * 의문점 추가
