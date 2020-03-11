@@ -11,10 +11,12 @@
   * ~~3-3) batch delay 부분 수정~~
   * ~~graph로 쓸만한 data 선별하여 graph 추가하기~~
 * gpu SHA code 확인해서 fancy의 SHA code랑 비교하기
-  * 구조 확인하기
-
+  * ~~openssl sha 구조 확인하기~~
+  * fancy의 sha가 gpgpu의 sha와 구조적으로 동일한지 확인하기
 ---
 ## 03/11 현재상황
+
+### OPENSSL SHA 구조 확인
 
 * openssl의 sha의 구조의 틀이 머리속에 어느정도 잡힌 듯함
 
@@ -29,6 +31,10 @@
 		* 우리가 궁금했던 20byte길이의 hashing을 한번 거친 data는 어떤 과정을 거치는가를 보려면 얘를 봐야함
 	* u(d or p, etc...) : hashing이 필요한 data를 임시로 저장하는 공간
 		* 변수명은 SHA버전마다 다름
+	* Nh, Nl : hashing된 길이의 합
+		* hashing을 할때마다 hashing한 길이를 bit수를 기준으로 Nl에 저장해준다
+		* hashing을 할때마다 저장해주다보니 overflow가 일어날 수도 있어서 Nh라는 값을 추가로 준듯하다
+		* 결국 최종적으로 Nh와 Nl이 가지게 되는 값은 hashing이 일어난 길이의 누적 합이다
 
 2. SHA\_Update
 	* data를 64byte단위로 나누어서 sha\_block\_data\_order를 통해 hashing을 돌려주는 함수이다
@@ -60,6 +66,52 @@
 * SHA512의 경우 SHA2 알고리즘이지만 이를 확인한다고해서 문제가 생기지는 않을 것이다
 * 그 이유는 SHA2 알고리즘은 SHA1에서 hash function output의 size만 다르게 한 것이기 때문이다
 * 따라서 알고리즘 자체는 동일하다
+___
+
+### fancy code 수정
+
+* 현재 상태
+	* 원래 수정해야할 것이라고 생각하였으나 찬규형과의 이야기 후 큰 틀에서의 수정은 필요가 없는 것으로 판단됨
+	* 원래 수정해야할 것이라고 생각했지만 실제로는 필요없는 것들과 실제로도 수정이 필요한 것을 모두 기록함
+	* 이를 마지막에 정리하여 어떻게 수정했는지 기록함
+
+
+1. sha를 해줄때 key 값이 있어야하는데 key 값이 없음
+	* sha1_gpu_process에서 P라는 macro를 통해 manipulation을 할 때, K라는 macro 값을 계속 변경시켜주면서 더해줌
+	* 여기서의 K값이 key값임
+
+2. sha1_kernel_global은 hashing을 하는 함수인데, 그럼 hashing을 확인하는 함수는?
+	* 사실 sha1은 hashing한 결과값을 프로그램이 확인해줄 필요는 없다
+	* 원래 sha1는 hashing한 값을 data끝에 붙여서 보내주면, 그 값을 나중에 사용자가 직접 확인하는 것이다
+	* 그러니 이걸 확인하는 함수를 구현해서 매 packet마다 이를 확인해줄 필요가 없는 것이다
+
+3. ipad와 opad의 IV값이 랜덤하거나 서로 달라야하지 않나?
+	* 둘의 IV값이 랜덤해야하냐의 문제는 조금 더 알아봐야할 것 같다
+		* 랜덤하다고 생각해보면 sha1를 이용할때 key뿐만이 아니라 ipad와 opad도 같이 공유되어야함
+		* 실제로는 그렇지 않음
+		* static하게 사용하는게 원래도 맞을 것 같음
+	* 어차피 burden을 test를 하기위함이니 ipad와 opad의 IV값이 같은 것이 큰 문제가 되지 않음
+
+4. ~~hashing을 한번 진행한 data(20byte)를 다시 hashing할때 padding을 해서 64byte로 만들어 써야하니 코드 수정이 필요함~~
+	* 사실상 main인 부분
+	* 실제로 수정이 필요한 부분이며 64byte와 1514byte 각각의 packet size에 맞는 구현이 필요함
+
+<center> modified code : 64byte </center>
+
+![Alt_text](image/03.11_64b_len20.JPG)
+* len이 20일 경우 20만큼 뒤에 44(64 - 20)만큼 0으로 memset을 해줬다
+
+<center> modified code : 1514byte </center>
+
+![Alt_text](image/03.11_1514b_len20.JPG)
+* 64byte일때와 동일하게 진행을 해주었는데 차이점은 thread를 할당해준 것이다
+* 원래 44byte를 thread들이 나눠 맡아서 0으로 padding하게끔 해주려했으나 
+* 1514byte의 packet size의 경우 94개의 thread를 사용해 47(94 / 2)가 44보다 큰 점, 그리고 44로(또는 를) 나누어떨어지지 않는 점에 의해
+* 그냥 하나의 thread가 맡아서 처리하게끔 했다
+* Susoon_example에 study_ipsec.cu라는 파일로 저장했다
+	* 해당 파일은 원래 fancy에 있던 ipsec.cu에서 주석처리된 부분을 전부 날렸고, 현재 사용하지 않는 함수들도 다 날린 상태이다
+___
+
 
 * 뭔가 계속 정리가 안되는 느낌이었는데 타자로 직접치면서 확인하다보니 정리가 되었다
 * 머리속에 떠돌아다니는 생각들이 잡히지 않아서 github에도 못 올리고 있었는데 앞으로는 아예 github에 올리면서 공부를 하는 게 좋을 것 같다
