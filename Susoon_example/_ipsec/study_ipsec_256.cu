@@ -86,9 +86,9 @@ __global__ void nf_ipsec_256(struct pkt_buf *p_buf, int* pkt_cnt, unsigned int* 
 	__shared__ unsigned char aes_tmp[PPB][16*AES_T_NUM]; 
 	// IV : 64 * 16 =  1,024
 	// aes_tmp : 64 * 16 * 15 = 15,360
-	// ictx : 24 * 64 = 1,536
-	// octx : 24 * 64 = 1,536
-	//-------------------------- Total __shared__ mem Usage : 19,456 / 49,152 (48KB per TB)
+	// ictx : 4 * 64 = 256
+	// octx : 4 * 64 = 256
+	//-------------------------- Total __shared__ mem Usage : 16,896 / 49,152 (48KB per TB)
 
 	if(tid == TOTAL_T_NUM - 1){
 		START_RED
@@ -100,113 +100,111 @@ __global__ void nf_ipsec_256(struct pkt_buf *p_buf, int* pkt_cnt, unsigned int* 
 
 	while(true){ // Persistent Kernel (for every threads)
 		// 15-threads to be grouped. 
-		if(tid < PPB * AES_T_NUM){ // Beyond this idx could exceed "rx_buf" boundary.
 			//-------------------------- Multi threads Job --------------------------------------------
-			if(readNoCache(&p_buf->rx_buf_idx[tid/AES_T_NUM]) == chain_seq){
+		if(readNoCache(&p_buf->rx_buf_idx[tid/AES_T_NUM]) == chain_seq){
 
-				//-------------------------- Single threads Job --------------------------------------------
-				if(tid % AES_T_NUM == 0){ 
-					///////////////////// ESP Tailer, padlen, next-hdr /////////////////////////
+			//-------------------------- Single threads Job --------------------------------------------
+			if(tid % AES_T_NUM == 0){ 
+				///////////////////// ESP Tailer, padlen, next-hdr /////////////////////////
 #if PAD_LEN
-					int i;
-					for(i = 1; i <= PAD_LEN; i++)
-						p_buf->rx_buf[0x1000 * (tid/AES_T_NUM) + i] = 0; // padding
+				int i;
+				for(i = 1; i <= PAD_LEN; i++)
+					p_buf->rx_buf[0x1000 * (tid/AES_T_NUM) + i] = 0; // padding
 #endif		
-			
-					p_buf->rx_buf[0x1000 * (tid/AES_T_NUM) + PKT_SIZE - 4 + 6] = 6; // padlen 
+		
+				p_buf->rx_buf[0x1000 * (tid/AES_T_NUM) + PKT_SIZE - 4 + 6] = 6; // padlen 
 
-					p_buf->rx_buf[0x1000 * (tid/AES_T_NUM) + PKT_SIZE - 4 + 6 + 1] = IPPROTO_IPIP; // next-hdr (Meaning "IP within IP)
+				p_buf->rx_buf[0x1000 * (tid/AES_T_NUM) + PKT_SIZE - 4 + 6 + 1] = IPPROTO_IPIP; // next-hdr (Meaning "IP within IP)
 
-					/* For Reference...
-						 IPPROTO_IP = 0
-						 IPPROTO_ICMP = 1
-						 IPPROTO_IPIP = 4
-						 IPPROTO_TCP = 6
-						 IPPROTO_UDP = 17
-						 IPPROTO_ESP = 50
-					 */
-					atomicAdd(ctr, 1); // same "ctr" value for grouped 15-threads. (counter) AES-CTR Mode
-					IV[cur_tid][15] = *ctr & 0xFF;
-					IV[cur_tid][14] = (*ctr >> 8) & 0xFF; // CKJUNG, 1 Byte = 8bits means, Octal notation
-					IV[cur_tid][13] = (*ctr >> 16) & 0xFF;
-					IV[cur_tid][12] = (*ctr >> 24) & 0xFF;
-					for(int i = 0; i < 12; i++)
-						IV[cur_tid][i] = 0;
+				/* For Reference...
+					 IPPROTO_IP = 0
+					 IPPROTO_ICMP = 1
+					 IPPROTO_IPIP = 4
+					 IPPROTO_TCP = 6
+					 IPPROTO_UDP = 17
+					 IPPROTO_ESP = 50
+				 */
+				atomicAdd(ctr, 1); // same "ctr" value for grouped 15-threads. (counter) AES-CTR Mode
+				IV[cur_tid][15] = *ctr & 0xFF;
+				IV[cur_tid][14] = (*ctr >> 8) & 0xFF; // CKJUNG, 1 Byte = 8bits means, Octal notation
+				IV[cur_tid][13] = (*ctr >> 16) & 0xFF;
+				IV[cur_tid][12] = (*ctr >> 24) & 0xFF;
+				for(int i = 0; i < 12; i++)
+					IV[cur_tid][i] = 0;
 
-					// Copy our state into private memory
-					unsigned char temp, temp2;
-					unsigned char overflow = 0;
-					char tmp[16];
-					for(int i = 15; i != -1; i--) {
-						temp = d_nounce[i];
-						temp2 = IV[cur_tid][i];
-						IV[cur_tid][i] += temp + overflow;
-						overflow = ((int)temp2 + (int)temp + (int)overflow > 255);
-					}
+				// Copy our state into private memory
+				unsigned char temp, temp2;
+				unsigned char overflow = 0;
+				char tmp[16];
+				for(int i = 15; i != -1; i--) {
+					temp = d_nounce[i];
+					temp2 = IV[cur_tid][i];
+					IV[cur_tid][i] += temp + overflow;
+					overflow = ((int)temp2 + (int)temp + (int)overflow > 255);
+				}
 
-					AddRoundKey(IV[cur_tid], &d_key[0]);
+				AddRoundKey(IV[cur_tid], &d_key[0]);
 
-					for(int i = 1; i < 10; i++)
-					{
-						SubBytes(IV[cur_tid], d_sbox);
-						ShiftRows(IV[cur_tid]);
-						MixColumns(IV[cur_tid], d_GF2, tmp);
-						AddRoundKey(IV[cur_tid], &d_key[4 * i]);
-					}
+				for(int i = 1; i < 10; i++)
+				{
 					SubBytes(IV[cur_tid], d_sbox);
 					ShiftRows(IV[cur_tid]);
+					MixColumns(IV[cur_tid], d_GF2, tmp);
+					AddRoundKey(IV[cur_tid], &d_key[4 * i]);
+				}
+				SubBytes(IV[cur_tid], d_sbox);
+				ShiftRows(IV[cur_tid]);
 					AddRoundKey(IV[cur_tid], &d_key[4 * 10]);
-				}
-				__syncthreads();
-				//-------------------------- Multi threads Job --------------------------------------------
-				////////////////// Locating AES Encrypted parts into a pkt  ///////////////////////////////
-				for(int i = 0; i < 16; i++){
-					aes_tmp[cur_tid][((tid%AES_T_NUM)*16) + i] = p_buf->rx_buf[(0x1000 * (tid/AES_T_NUM)) + sizeof(struct ethhdr) + ((tid%AES_T_NUM) * 16) + i] ^ IV[cur_tid][i];
-				}
-				for(int i = 0; i < 16; i++){
-					p_buf->rx_buf[(0x1000 * (tid/AES_T_NUM)) + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct esphdr) + ((tid%AES_T_NUM) * 16) + i] = aes_tmp[cur_tid][((tid%AES_T_NUM)*16) + i]; 
-				}
-				__syncthreads();
+			}
+			__syncthreads();
+			//-------------------------- Multi threads Job --------------------------------------------
+			////////////////// Locating AES Encrypted parts into a pkt  ///////////////////////////////
+			for(int i = 0; i < 16; i++){
+				aes_tmp[cur_tid][((tid%AES_T_NUM)*16) + i] = p_buf->rx_buf[(0x1000 * (tid/AES_T_NUM)) + sizeof(struct ethhdr) + ((tid%AES_T_NUM) * 16) + i] ^ IV[cur_tid][i];
+			}
+			for(int i = 0; i < 16; i++){
+				p_buf->rx_buf[(0x1000 * (tid/AES_T_NUM)) + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct esphdr) + ((tid%AES_T_NUM) * 16) + i] = aes_tmp[cur_tid][((tid%AES_T_NUM)*16) + i]; 
+			}
+			__syncthreads();
 #if 1
-				//-------------------------- Single threads Job --------------------------------------------
-				if(tid % AES_T_NUM == 0){
-					//////////// Proto_type = ESP set! ///////////
-					p_buf->rx_buf[0x1000 * (tid/AES_T_NUM) + sizeof(struct ethhdr) + 9] = IPPROTO_ESP; // IPPROTO_ESP = 50
-					struct ethhdr* ethh;
-					struct iphdr* iph;
-					struct esphdr* esph;
+			//-------------------------- Single threads Job --------------------------------------------
+			if(tid % AES_T_NUM == 0){
+				//////////// Proto_type = ESP set! ///////////
+				p_buf->rx_buf[0x1000 * (tid/AES_T_NUM) + sizeof(struct ethhdr) + 9] = IPPROTO_ESP; // IPPROTO_ESP = 50
+				struct ethhdr* ethh;
+				struct iphdr* iph;
+				struct esphdr* esph;
 
-					ethh = (struct ethhdr *)&p_buf->rx_buf[0x1000 * (tid/AES_T_NUM)];
-					iph = (struct iphdr *)(ethh + 1);
-					esph = (struct esphdr *)((uint32_t *)iph + iph->ihl);
+				ethh = (struct ethhdr *)&p_buf->rx_buf[0x1000 * (tid/AES_T_NUM)];
+				iph = (struct iphdr *)(ethh + 1);
+				esph = (struct esphdr *)((uint32_t *)iph + iph->ihl);
 
-					// SPI (Security Parameter Index)
-					uint32_t spi = 1085899777;
-					HTONS32(spi);
+				// SPI (Security Parameter Index)
+				uint32_t spi = 1085899777;
+				HTONS32(spi);
 
-					////////// Set ESP header SPI value ///////////////////
-					memcpy(&esph->spi, &spi, 4);
-					atomicAdd(seq, 1);
+				////////// Set ESP header SPI value ///////////////////
+				memcpy(&esph->spi, &spi, 4);
+				atomicAdd(seq, 1);
 
-					//////////// Set ESP header SEQ value //////////
-					memcpy(&esph->seq, seq, 4);
-				}
-				__syncthreads();
+				//////////// Set ESP header SEQ value //////////
+				memcpy(&esph->seq, seq, 4);
+			}
+			__syncthreads();
 #endif
-					// CKJUNG, HMAC-SHA1 From here! /////////////////////////////
-					// RFC 2104, H(K XOR opad, H(K XOR ipad, text))
-					/**** Inner Digest ****/
-					// H(K XOR ipad, text) : 64 Bytes
-					sha1_kernel_global_256(&p_buf->rx_buf[(0x1000 * (tid/AES_T_NUM)) + sizeof(struct ethhdr) + sizeof(struct iphdr)], &ictx[cur_tid], extended, 64, (tid/AES_T_NUM));
-					/**** Outer Digest ****/
-					// H(K XOR opad, H(K XOR ipad, text)) : 20 Bytes
-					sha1_kernel_global_256(&(ictx[cur_tid].c_state[0]), &octx[cur_tid], extended, 20, (tid/AES_T_NUM));
-			
-				//-------------------------- Single threads Job --------------------------------------------
-				if(tid % AES_T_NUM == 0){
-					atomicAdd(&pkt_cnt[1], 1);	
-					p_buf->rx_buf_idx[tid/AES_T_NUM] = chain_seq+1;
-				}
+				// CKJUNG, HMAC-SHA1 From here! /////////////////////////////
+				// RFC 2104, H(K XOR opad, H(K XOR ipad, text))
+				/**** Inner Digest ****/
+				// H(K XOR ipad, text) : 64 Bytes
+				sha1_kernel_global_256(&p_buf->rx_buf[(0x1000 * (tid/AES_T_NUM)) + sizeof(struct ethhdr) + sizeof(struct iphdr)], &ictx[cur_tid], extended, 64, (tid/AES_T_NUM));
+				/**** Outer Digest ****/
+				// H(K XOR opad, H(K XOR ipad, text)) : 20 Bytes
+				sha1_kernel_global_256(&(ictx[cur_tid].c_state[0]), &octx[cur_tid], extended, 20, (tid/AES_T_NUM));
+	
+			//-------------------------- Single threads Job --------------------------------------------
+			if(tid % AES_T_NUM == 0){
+				atomicAdd(&pkt_cnt[1], 1);	
+				p_buf->rx_buf_idx[tid/AES_T_NUM] = chain_seq+1;
 			}
 		}
 		__syncthreads();

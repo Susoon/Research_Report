@@ -2,17 +2,16 @@
 #include "packet_man.h"
 #include "gdnio.h"
 
-#define TOTAL_T_NUM 16 * 31 * 32
+#define TOTAL_T_NUM 6 * 31 * 29
 #define AES_T_NUM 31
-#define PPB 32
+#define PPB 29
 #define HMAC_T_NUM 8
 #define PKT_SIZE 512
 #define PAD_LEN 0
 
-//SHKIM, 512B version 20.03.12
 __device__ void sha1_kernel_global_512(unsigned char *data, sha1_gpu_context *ctx, unsigned int *extended, int len, int pkt_idx)
 {
-	int thread_index = threadIdx.x%7;
+	int thread_index = threadIdx.x%94;
 	
 	if(thread_index >= HMAC_T_NUM)
 		return;
@@ -66,29 +65,35 @@ __device__ void sha1_kernel_global_512(unsigned char *data, sha1_gpu_context *ct
 
 	__syncthreads();
 	if(thread_index == 0){
-		for(t = 0; t < 2; t++) 
+		for(t = 0; t < HMAC_T_NUM; t++) 
 			sha1_gpu_process(ctx, (unsigned int*)&extended[pkt_idx * t * 80]);
 	}
 }
 
-//SHKIM, ipsec_512 ver. 20.03.12
+//CKJUNG, ipsec_512 ver.
 __global__ void nf_ipsec_512(struct pkt_buf *p_buf, int* pkt_cnt, unsigned int* ctr, unsigned char* d_nounce, unsigned int* d_key, unsigned char* d_sbox, unsigned char* d_GF2, int chain_seq, unsigned int* seq, unsigned int* extended)
 {
-	// <<< 16, 992 >>> threads. 
+	// <<< 6, 899 >>> threads. 
 	//	31 threads for 1 pkt. (508B pkt)
-	// 992 / 31 = 32, 1TB has 992 threads each and manages 32 pkts.
+	// 899 / 31 = 29, 1TB has 899 threads each and manages 31 pkts.
 	unsigned int tid = blockDim.x * blockIdx.x + threadIdx.x;
 	unsigned int cur_tid = threadIdx.x / AES_T_NUM;
-	// 16 x 992 = 15,872
-	// tid : 0 - 15,871 (15,872 threads)
+	// 6 x 899 = 5,304
+	// tid : 0 - 5,304 (5,304 threads)
 
 	__shared__ unsigned char IV[PPB][16];
 	__shared__ unsigned char aes_tmp[PPB][16*AES_T_NUM]; 
-	// IV : 32 * 16 =  512
-	// aes_tmp : 32 * 16 * 31 = 15,872
-	// ictx : 24 * 32 = 763
-	// octx : 24 * 32 = 763
-	//-------------------------- Total __shared__ mem Usage : 17,910 / 49,152 (48KB per TB)
+	__shared__ unsigned char rot_index; // This index is updated by "the last thread" of each TB to move forward to the NEXT 128 desc.
+	// rot_index (0 - 2): {0 x 171(0) ~ 2 x 171(342)} + 170  == 0 ~ 511
+	// IV : 29 * 16 =  464
+	// aes_tmp : 29 * 16 * 31 = 14,384
+	// ictx : 8 * 29 = 232
+	// octx : 8 * 29 = 232
+	// rot_index : 1
+	//-------------------------- Total __shared__ mem Usage : 15,313 / 49,152 (48KB per TB)
+
+	if(threadIdx.x == 0) // The first thread of EACH TB initialize rot_index(rotation_index) to "0". 
+		rot_index = 0;
 
 	if(tid == TOTAL_T_NUM - 1){
 		START_RED
@@ -100,22 +105,20 @@ __global__ void nf_ipsec_512(struct pkt_buf *p_buf, int* pkt_cnt, unsigned int* 
 
 	while(true){ // Persistent Kernel (for every threads)
 		// 31-threads to be grouped. 
-		if(tid < PPB * AES_T_NUM){ // Beyond this idx could exceed "rx_buf" boundary.
+		if(tid < 171*AES_T_NUM && (rot_index == 2 && tid < 171 * AES_T_NUM - 1)){ // Beyond this idx could exceed "rx_buf" boundary.
 			//-------------------------- Multi threads Job --------------------------------------------
-			if(readNoCache(&p_buf->rx_buf_idx[tid/AES_T_NUM]) == chain_seq){
+			if(readNoCache(&p_buf->rx_buf_idx[tid/AES_T_NUM + rot_index*171]) == chain_seq){
 
 				//-------------------------- Single threads Job --------------------------------------------
 				if(tid % AES_T_NUM == 0){ 
 					///////////////////// ESP Tailer, padlen, next-hdr /////////////////////////
-#if PAD_LEN
 					int i;
-					for(i = 1; i <= PAD_LEN; i++)
-						p_buf->rx_buf[0x1000 * (tid/AES_T_NUM) + i] = 0; // padding
-#endif		
-			
-					p_buf->rx_buf[0x1000 * (tid/AES_T_NUM) + PKT_SIZE - 4 + 6] = 6; // padlen 
+					for(i = 1; i <= 6; i++)
+						p_buf->rx_buf[0x1000 * (tid/AES_T_NUM + rot_index*171) + i] = 0; // padding
+					
+					p_buf->rx_buf[0x1000 * (tid/AES_T_NUM + rot_index*171) + 1510 + 6] = 6; // padlen 
 
-					p_buf->rx_buf[0x1000 * (tid/AES_T_NUM) + PKT_SIZE - 4 + 6 + 1] = IPPROTO_IPIP; // next-hdr (Meaning "IP within IP)
+					p_buf->rx_buf[0x1000 * (tid/AES_T_NUM + rot_index*171) + 1510 + 6 + 1] = IPPROTO_IPIP; // next-hdr (Meaning "IP within IP)
 
 					/* For Reference...
 						 IPPROTO_IP = 0
@@ -161,22 +164,22 @@ __global__ void nf_ipsec_512(struct pkt_buf *p_buf, int* pkt_cnt, unsigned int* 
 				//-------------------------- Multi threads Job --------------------------------------------
 				////////////////// Locating AES Encrypted parts into a pkt  ///////////////////////////////
 				for(int i = 0; i < 16; i++){
-					aes_tmp[cur_tid][((tid%AES_T_NUM)*16) + i] = p_buf->rx_buf[(0x1000 * (tid/AES_T_NUM)) + sizeof(struct ethhdr) + ((tid%AES_T_NUM) * 16) + i] ^ IV[cur_tid][i];
+					aes_tmp[cur_tid][((tid%AES_T_NUM)*16) + i] = p_buf->rx_buf[(0x1000 * (tid/AES_T_NUM + rot_index*171)) + sizeof(struct ethhdr) + ((tid%AES_T_NUM) * 16) + i] ^ IV[cur_tid][i];
 				}
 				for(int i = 0; i < 16; i++){
-					p_buf->rx_buf[(0x1000 * (tid/AES_T_NUM)) + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct esphdr) + ((tid%AES_T_NUM) * 16) + i] = aes_tmp[cur_tid][((tid%AES_T_NUM)*16) + i]; 
+					p_buf->rx_buf[(0x1000 * (tid/AES_T_NUM + rot_index*171)) + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct esphdr) + ((tid%AES_T_NUM) * 16) + i] = aes_tmp[cur_tid][((tid%AES_T_NUM)*16) + i]; 
 				}
 				__syncthreads();
 #if 1
 				//-------------------------- Single threads Job --------------------------------------------
 				if(tid % AES_T_NUM == 0){
 					//////////// Proto_type = ESP set! ///////////
-					p_buf->rx_buf[0x1000 * (tid/AES_T_NUM) + sizeof(struct ethhdr) + 9] = IPPROTO_ESP; // IPPROTO_ESP = 50
+					p_buf->rx_buf[0x1000 * (tid/AES_T_NUM + rot_index*171) + sizeof(struct ethhdr) + 9] = IPPROTO_ESP; // IPPROTO_ESP = 50
 					struct ethhdr* ethh;
 					struct iphdr* iph;
 					struct esphdr* esph;
 
-					ethh = (struct ethhdr *)&p_buf->rx_buf[0x1000 * (tid/AES_T_NUM)];
+					ethh = (struct ethhdr *)&p_buf->rx_buf[0x1000 * (tid/AES_T_NUM + rot_index*171)];
 					iph = (struct iphdr *)(ethh + 1);
 					esph = (struct esphdr *)((uint32_t *)iph + iph->ihl);
 
@@ -197,15 +200,19 @@ __global__ void nf_ipsec_512(struct pkt_buf *p_buf, int* pkt_cnt, unsigned int* 
 					// RFC 2104, H(K XOR opad, H(K XOR ipad, text))
 					/**** Inner Digest ****/
 					// H(K XOR ipad, text) : 64 Bytes
-					sha1_kernel_global_512(&p_buf->rx_buf[(0x1000 * (tid/AES_T_NUM)) + sizeof(struct ethhdr) + sizeof(struct iphdr)], &ictx[cur_tid], extended, 64, (tid/AES_T_NUM));
+					sha1_kernel_global_512(&p_buf->rx_buf[(0x1000 * (tid/AES_T_NUM + rot_index*171)) + sizeof(struct ethhdr) + sizeof(struct iphdr)], &ictx[cur_tid], extended, 64, (tid/AES_T_NUM + rot_index*171));
 					/**** Outer Digest ****/
 					// H(K XOR opad, H(K XOR ipad, text)) : 20 Bytes
-					sha1_kernel_global_512(&(ictx[cur_tid].c_state[0]), &octx[cur_tid], extended, 20, (tid/AES_T_NUM));
+					sha1_kernel_global_512(&(ictx[cur_tid].c_state[0]), &octx[cur_tid], extended, 20, (tid/AES_T_NUM + rot_index*171));
 			
 				//-------------------------- Single threads Job --------------------------------------------
 				if(tid % AES_T_NUM == 0){
 					atomicAdd(&pkt_cnt[1], 1);	
-					p_buf->rx_buf_idx[tid/AES_T_NUM] = chain_seq+1;
+					p_buf->rx_buf_idx[tid/AES_T_NUM + rot_index*171] = chain_seq+1;
+					if(tid/AES_T_NUM == 170)
+						rot_index += 1;
+					if(rot_index == 3)
+						rot_index = 0;
 				}
 			}
 		}
