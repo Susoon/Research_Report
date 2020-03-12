@@ -13,6 +13,9 @@
 * ~~gpu SHA code 확인해서 fancy의 SHA code랑 비교하기~~
   * ~~openssl sha 구조 확인하기~~
   * ~~fancy의 sha가 gpgpu의 sha와 구조적으로 동일한지 확인하기~~
+* ipsec packet size별로 구현해놓은 것들 잘 구현되었는지 확인하기
+	* Thread Block 수와 thread 수를 할당한 양이 과도한 양은 아닌지
+	* Shared Memory를 과도하게 사용하는 것은 아닌지
 ---
 
 ## 03/12 현재상황
@@ -27,9 +30,89 @@
 * 찬규형의 github Research 내용을 참고하여 각 packet size별로 몇개의 thread가 필요한지 등을 보면서 구현중이다
 * 구현하면서 64 byte와 1514 byte에 맞게 숫자로 주어져있던 값들을 macro를 통해 보기 쉽게 수정중이다
 	* e.g. 1514 byte 버전에서 94 -> AES\_T\_NUM (AES를 위한 Thread Number)\
-* 현재는 128byte 버전을 구현중이고, thread 할당하는 부분만 좀 신경쓰면 나머지 부분들은 copy and paste로 쉽게 구현할 수 있을 것 같다
+
+#### 구현완료
+
+* 모든 packet size에 대한 구현을 끝냈다
+* 128, 256, 512 byte의 경우 함수 내용은 동일하며 macro의 값만 다르다
+* 1024, 1514 byte의 경우 위의 size들과 함수 내용에서 rot\_index가 존재한다는 점을 제외하면 함수 내용은 동일하며 macro의 값만 다르다
+* 64byte를 제외한 나머지의 경우 SHA1 알고리즘에 2개 이상의 thread를 사용하므로 64byte의 경우와 함수 내용이 조금 다르다
+	* sha\_kernel\_global함수를 호출할 때 pkt\_idx값을 넘겨주어 어떤 packet을 처리해야하는지 알려준다
+* 또한 128byte 이상의 size를 가진 packet들은 SHA1처리를 해야하는 data의 크기가 block의 크기보다 크므로 block\_index를 지정해준다
+* 각 size별로 packet당 필요한 thread의 수가 다르기 때문에 각 size에 맞는 thread 수를 할당해주었다
+* 찬규형의 Research github을 참고하여 각 숫자를 정해주었다
+
+<center> ipsec macro : 64 byte </center>
+
+![Alt_text](image/03.12_64_ipsec_macro.JPG)
+
+* 하나의 packet당 3개의 thread를 필요로하므로 총 4 \* 3 \* 128(1516)개의 thread를 사용한다
+* 한 Thread Block당 384개의 thread가 할당되며, 총 4개의 Thread Block을 사용한다
+* 총 thread 수가 28,672개보다 작으므로 descriptor 전체를 한번의 kernel 호출로 처리할 수 있다
 
 
+<center> ipsec macro : 128 byte </center>
+
+![Alt_text](image/03.12_128_ipsec_macro.JPG)
+
+* 하나의 packet당 7개의 thread를 필요로하므로 총 4 \* 7 \* 128(3584)개의 thread를 사용한다
+* 한 Thread Block당 896개의 thread가 할당되며, 총 4개의 Thread Block을 사용한다
+* 총 thread 수가 28,672개보다 작으므로 역시 descriptor 전체를 한번의 kernel 호출로 처리할 수 있다
+
+<center> ipsec macro : 256 byte </center>
+
+![Alt_text](image/03.12_256_ipsec_macro.JPG)
+
+* 하나의 packet당 15개의 thread를 필요로하므로 총 8 \* 15 \* 64(7680)개의 thread를 사용한다
+* 한 Thread Block당 960개의 thread가 할당되며, 총 8개의 Thread Block을 사용한다
+* 총 thread 수가 28,672개보다 작으므로 descriptor 전체를 한번의 kernel 호출로 처리할 수 있다
+* 하지만 하나의 Thread Block이 처리해주는 packet의 수가 64개로 반으로 줄었다
+
+<center> ipsec macro : 512 byte </center>
+
+![Alt_text](image/03.12_512_ipsec_macro.JPG)
+
+* 하나의 packet당 31개의 thread를 필요로하므로 총 16 \* 31 \* 32(15,872)개의 thread를 사용한다
+* 한 Thread Block당 992개의 thread가 할당되며, 총 16개의 Thread Block을 사용한다
+* 총 thread 수가 28,672개보다 작으므로 descriptor 전체를 한번의 kernel 호출로 처리할 수 있다
+* 하지만 하나의 Thread Block이 처리해주는 packet의 수가 32개로 다시 반으로 줄었다
+
+<center> ipsec macro : 1024 byte </center>
+
+![Alt_text](image/03.12_1024_ipsec_macro.JPG)
+
+* 하나의 packet당 63개의 thread를 필요로하므로 총 16 \* 63 \* 16(16,128)개의 thread를 사용한다
+* 한 Thread Block당 1,008개의 thread가 할당되며, 총 16개의 Thread Block을 사용한다
+* 1024 byte부터는 한번의 kernel 호출로 descriptor 전체를 처리할 수 없다
+	* 현재 1개의 Thread Block당 16개의 packet을 처리해주며 16개의 Thread Block을 사용하므로 총 16 * 16(256)개의 packet을 처리한다
+	* 따라서 descriptor 전체를 처리하려면 2번의 kernel 호출이 필요하다
+* 이 때문에 1514byte버전에 찬규형이 짜놓으신 rot_index를 0 ~ 1 사이에서 변화시키며 처리하도록 했다
+
+<center> ipsec macro : 1514 byte </center>
+
+![Alt_text](image/03.12_1514_ipsec_macro.JPG)
+
+* 하나의 packet당 94개의 thread를 필요로하므로 총 13 \* 94 \* 10(12,220)개의 thread를 사용한다
+* 한 Thread Block당 940개의 thread가 할당되며, 총 13개의 Thread Block을 사용한다
+* 1514 byte도 역시 한번의 kernel 호출로 descriptor 전체를 처리할 수 없다
+	* 현재 1개의 Thread Block당 10개의 packet을 처리해주며 13개의 Thread Block을 사용하므로 총 10 * 13(130)개의 packet을 처리한다
+		* 실제로는 128개 단위로 나누어 처리해 Thread Block 하나당 2개의 thread는 사용하지 않는다
+	* 따라서 descriptor 전체를 처리하려면 4번의 kernel 호출이 필요하다
+* 1514byte에서의 rot_index는 찬규형이 짜놓으신 것을 그대로 사용하여 rot_index가 0 ~ 3 사이에서 변화한다
+
+___
+
+* 구현과 관련하여 확인해야할 부분이 남아있다
+
+1. Thread Block 수
+	* 256byte보다 작은 size의 packet들에 대해서는 thread 수에 문제가 없을 듯하다
+	* 하지만 512, 1024byte의 size의 packet들의 경우 16개의 Thread Block을 사용하는데 이렇게 많이 사용해도 되는지는 잘 모르겠다
+
+2. Shared Memory
+	* Shared Memory의 사용량을 고려하지 않았다
+	* 찬규형이 구현해놓으신 64byte와 1514byte의 버전에 48K보다 작은가를 확인하는 부분이 있었다
+	* 이 부분을 보고 48K 미만이면 괜찮을 것이라는 판단을 해 일단 자유롭게 할당해놓은 상태이다
+	* Shared Memory에 대해 알아보고 수정해야할 수도 있다
 
 ___
 
