@@ -10,10 +10,29 @@
   * ~~polling으로 64B, 128B 추가 측정하여 data 뽑기~~
   * ~~3-3) batch delay 부분 수정~~
   * ~~graph로 쓸만한 data 선별하여 graph 추가하기~~
-* gpu SHA code 확인해서 fancy의 SHA code랑 비교하기
+* ~~gpu SHA code 확인해서 fancy의 SHA code랑 비교하기~~
   * ~~openssl sha 구조 확인하기~~
-  * fancy의 sha가 gpgpu의 sha와 구조적으로 동일한지 확인하기
+  * ~~fancy의 sha가 gpgpu의 sha와 구조적으로 동일한지 확인하기~~
 ---
+
+## 03/12 현재상황
+
+* gpgpu의 sha 구조와 fancy의 sha 구조를 확인해봄
+* 적절히 변형된 것 같음
+	* data의 길이가 random하지 않다는 점을 이용해서 우리가 사용하기에 적절하게 코드를 변형시킨 것 같음
+
+### nf\_ipsec\_N
+
+* N byte 버전의 ipsec을 구현중이다
+* 찬규형의 github Research 내용을 참고하여 각 packet size별로 몇개의 thread가 필요한지 등을 보면서 구현중이다
+* 구현하면서 64 byte와 1514 byte에 맞게 숫자로 주어져있던 값들을 macro를 통해 보기 쉽게 수정중이다
+	* e.g. 1514 byte 버전에서 94 -> AES\_T\_NUM (AES를 위한 Thread Number)\
+* 현재는 128byte 버전을 구현중이고, thread 할당하는 부분만 좀 신경쓰면 나머지 부분들은 copy and paste로 쉽게 구현할 수 있을 것 같다
+
+
+
+___
+
 ## 03/11 현재상황
 
 ### OPENSSL SHA 구조 확인
