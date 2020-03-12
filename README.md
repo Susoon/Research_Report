@@ -35,7 +35,7 @@ ___
 
 * 구현과 관련하여 확인해야할 부분이 남아있다
 
-1. Thread Block 수
+1. ~~Thread Block 수~~
 	* 256byte보다 작은 size의 packet들에 대해서는 thread 수에 문제가 없을 듯하다
 	* 하지만 512, 1024byte의 size의 packet들의 경우 16개의 Thread Block을 사용하는데 이렇게 많이 사용해도 되는지는 잘 모르겠다
 
@@ -47,6 +47,49 @@ ___
 	* Shared Memory는 충분하다
 		* 한 Thread Block당 사용할 수 있는 Shared Memory의 양은 48K임
 		* 모든 size의 경우에서 48K를 넘는 Shared Memory를 사용하지 않음
+___
+
+#### 구현 - 2차 수정후
+
+* Thread Block에 대한 값을 다시 수정하였다
+1. 찬규형이 gdnio를 돌릴때 rx\_kernel과 tx\_kernel에 각각 sm을 1개씩 할당하여 사용하다보니 ~~최대 사용 가능 sm의 수가 12개~~였다
+	* 그래서 12개 이상을 사용하는 1514byte의 경우도 Thread Block의 개수를 줄여야했다
+2. 512, 1024 byte의 경우들의 thread 수를 조정해야했다
+	* 1번과 동일한 이유로 Thread Block의 개수를 줄여야했다
+3. 각 packet size별로 Shared Memory를 계산한 것을 수정해야했다
+	* Thread Block의 수의 변화도 있고, sha1\_gpu\_context 구조체의 size도 알아내야했다
+4. 표에 오타가 있었다
+	* 첫번째 표의 두번째 칸은 AES에 필요한 thread 수가 아니라 HMAC에 필요한 thread 수였다
+	* 재업로드한 표에는 제대로 나와있으니 상관없다
+5. 512, 1024, 1514 byte의 경우에 p\_buf의 범위를 벗어나는 thread를 관리해주는 부분이 필요하다
+	* 512 byte의 경우를 예로 들자면,
+	* sha1\_kernel\_global 커널을 3번 호출해야 512개의 packet을 처리할 수 있다
+	* 이를 위해 커널에 Thread Block당 174개의 thread를 할당했다
+	* 그렇게 되면, 174 * 3(522)개의 thread group이 생긴다
+	* 522 - 512 = 10개의 thread group이 잉여 group이 되어 이 group들이 p\_buf의 범위 밖의 부분을 건들지 못하게 해야한다
+	* 이를 if문을 통해 조절해주었다
+
+<center> ipsec table : thread </center>
+
+![Alt_text](image/03.12_ipsec_table1.JPG)
+
+![Alt_text](image/03.12_ipsec_table2.JPG)
+
+* 위의 두 표는 thread 수에 대한 정보를 나타낸다
+* 512byte 이상의 경우에서 Thread Block의 수를 줄였다
+* 1514byte의 경우 최대 Thread Block 수인 12개를 사용한다
+	* Kernel 호출 횟수는 4번으로 유지되었다
+	* 아슬아슬했다....
+* 그 외의 변화로는 Thread Block당 thread 수의 data를 추가한 것밖에 없다
+
+<center> ipsec table : Shared Memory </center>
+
+![Alt_text](image/03.12_ipsec_table_sm.JPG)
+
+* 위의 표는 Shared Memory에 대한 정보를 나타낸다
+* 각 packet size별로 Shared Memory에 할당되는 변수의 size를 기록해두었다
+* 모두 48K보다 작다
+
 ___
 
 #### 구현 - 1차 수정후
