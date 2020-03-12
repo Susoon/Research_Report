@@ -133,7 +133,6 @@ __device__ void sha1_gpu_process (sha1_gpu_context *ctx, uint32_t W[80])
 #define K 0x6ED9EBA1
 
 	P( A, B, C, D, E, W[20] );
-	
 	P( E, A, B, C, D, W[21] );
 	P( D, E, A, B, C, W[22] );
 	P( C, D, E, A, B, W[23] );
@@ -187,7 +186,6 @@ __device__ void sha1_gpu_process (sha1_gpu_context *ctx, uint32_t W[80])
 
 #define F(x,y,z) (x ^ y ^ z)
 #define K 0xCA62C1D6
-
 
 	P( A, B, C, D, E, W[60] );
 	P( E, A, B, C, D, W[61] );
@@ -244,6 +242,8 @@ __device__ void sha1_kernel_global_1514(unsigned char *data, sha1_gpu_context *c
 	/*
 	 * Extend 32 block byte block into 80 byte block.
 	 */
+
+//sh_kim 20.03.11 : when data length is 20byte, we need padding
 	if(len == 20 && threadIdx.x = 0)
 	{
 		memset(data + len - 1, 0, 44);
@@ -296,6 +296,8 @@ __device__ void sha1_kernel_global(unsigned char *data, sha1_gpu_context *ctx, u
 	/*
 	 * Extend 32 block byte block into 80 byte block.
 	 */
+
+//sh_kim 20.03.11 : when data length is 20byte, we need padding
 	if(len == 20)
 	{
 		memset(data + len - 1, 0, 44);
