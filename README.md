@@ -14,8 +14,9 @@
   * ~~openssl sha 구조 확인하기~~
   * ~~fancy의 sha가 gpgpu의 sha와 구조적으로 동일한지 확인하기~~
 * ipsec packet size별로 구현해놓은 것들 잘 구현되었는지 확인하기
-	* Thread Block 수와 thread 수를 할당한 양이 과도한 양은 아닌지
-	* Shared Memory를 과도하게 사용하는 것은 아닌지
+	* ~~Thread Block 수와 thread 수를 할당한 양이 과도한 양은 아닌지~~
+	* ~~Shared Memory를 과도하게 사용하는 것은 아닌지~~
+	* 위의 두 내용을 잘 적용하였는지 확인
 ---
 
 ## 03/12 현재상황
@@ -30,8 +31,58 @@
 * 찬규형의 github Research 내용을 참고하여 각 packet size별로 몇개의 thread가 필요한지 등을 보면서 구현중이다
 * 구현하면서 64 byte와 1514 byte에 맞게 숫자로 주어져있던 값들을 macro를 통해 보기 쉽게 수정중이다
 	* e.g. 1514 byte 버전에서 94 -> AES\_T\_NUM (AES를 위한 Thread Number)\
+___
 
-#### 구현완료
+* 구현과 관련하여 확인해야할 부분이 남아있다
+
+1. Thread Block 수
+	* 256byte보다 작은 size의 packet들에 대해서는 thread 수에 문제가 없을 듯하다
+	* 하지만 512, 1024byte의 size의 packet들의 경우 16개의 Thread Block을 사용하는데 이렇게 많이 사용해도 되는지는 잘 모르겠다
+
+2. ~~Shared Memory~~
+	* Shared Memory의 사용량을 고려하지 않았다
+	* 찬규형이 구현해놓으신 64byte와 1514byte의 버전에 48K보다 작은가를 확인하는 부분이 있었다
+	* 이 부분을 보고 48K 미만이면 괜찮을 것이라는 판단을 해 일단 자유롭게 할당해놓은 상태이다
+	* Shared Memory에 대해 알아보고 수정해야할 수도 있다
+	* Shared Memory는 충분하다
+		* 한 Thread Block당 사용할 수 있는 Shared Memory의 양은 48K임
+		* 모든 size의 경우에서 48K를 넘는 Shared Memory를 사용하지 않음
+___
+
+#### 구현 - 1차 수정후
+
+* 찬규형에게 구현한 코드를 검사맡은 후의 1차 수정이다
+* 수정해야했던 부분들은 다음과 같다
+	1. 현재 찬규형이 사용하고 있는 P4000의 경우 sm이 14개라 Thread Block을 최대 14개까지 사용할 수 있다
+		* 512, 1024 byte의 경우 16개의 Thread Block을 사용 중이었으므로 이를 줄여야한다
+	2. ictx와 octx의 size가 (HMAC에 필요한 thread 수) * (Thread Block당 처리하는 packet 수)가 되어야한다
+		* 현재 ictx와 octx의 선언이 없는 곳도 있음
+		* 확인 후 수정해야함
+
+* Thread Block 수와 thread 수를 다음과 같이 변경하였다
+
+<center> Summary of ipsec thread </center>
+
+![Alt_text](image/03.12_ipsec_excel1.JPG)
+
+![Alt_text](image/03.12_ipsec_excel2.JPG)
+
+* 첫번째 표는 각 size별로 packet당 필요한 thread의 수와 내가 정해준 Thread Block당 처리하는 packet 수, Thread Block의 수를 정리해놓은 것이다
+* 두번째 표는 첫번째 표의 값들에 의해 정해진 Kernel당 총 thread 수와, Kernel당 처리하는 packet 수, Kernel의 rotation 횟수이다.
+* 64, 128, 1514 byte의 경우는 수정 전과 동일하다
+* 256, 512 byte의 경우 사용 가능한 Thread Block의 수가 줄면서, Kernel을 1회 호출하였을 때 처리할 수 있는 packet의 수가 줄었다
+* 따라서 이를 위해 3번의 Kernel 호출을 통해 512개의 packet을 처리할 수 있도록 구현하였다
+	* 512byte의 경우 Kernel당 처리 packet 수가 174라고 되어있지만 실제로는 171개이며, 마지막 Thread Block에서는 170개만 처리한다
+	* 따라서 171 * 2 + 170 = 512이므로 3회의 Kernel 호출로 512개의 packet이 처리가능하다
+	* 1024byte의 경우 Kernel당 처리 packet 수가 176이라고 되어있지만 실제로는 512byte와 동일하게 171개이며, 마지막 Thread Block에서는 170개만 처리한다
+	* 따라서 총 3회의 Kernel 호출로 512개의 packet이 처리가능하다
+* 이와같이 thread의 수와 Thread Block의 수를 변경함에 따라 내부적인 구조의 수정도 필요하다
+	* Kernel 1회 호출당 할당되는 thread의 수와 실제로 packet을 nf처리하는 thread의 수가 다르므로 이 부분을 수정해주어야한다
+
+
+___
+
+#### 구현 - 수정전
 
 * 모든 packet size에 대한 구현을 끝냈다
 * 128, 256, 512 byte의 경우 함수 내용은 동일하며 macro의 값만 다르다
@@ -86,7 +137,7 @@
 * 1024 byte부터는 한번의 kernel 호출로 descriptor 전체를 처리할 수 없다
 	* 현재 1개의 Thread Block당 16개의 packet을 처리해주며 16개의 Thread Block을 사용하므로 총 16 * 16(256)개의 packet을 처리한다
 	* 따라서 descriptor 전체를 처리하려면 2번의 kernel 호출이 필요하다
-* 이 때문에 1514byte버전에 찬규형이 짜놓으신 rot_index를 0 ~ 1 사이에서 변화시키며 처리하도록 했다
+* 이 때문에 1514byte버전에 찬규형이 짜놓으신 rot\_index를 0 ~ 1 사이에서 변화시키며 처리하도록 했다
 
 <center> ipsec macro : 1514 byte </center>
 
@@ -98,21 +149,7 @@
 	* 현재 1개의 Thread Block당 10개의 packet을 처리해주며 13개의 Thread Block을 사용하므로 총 10 * 13(130)개의 packet을 처리한다
 		* 실제로는 128개 단위로 나누어 처리해 Thread Block 하나당 2개의 thread는 사용하지 않는다
 	* 따라서 descriptor 전체를 처리하려면 4번의 kernel 호출이 필요하다
-* 1514byte에서의 rot_index는 찬규형이 짜놓으신 것을 그대로 사용하여 rot_index가 0 ~ 3 사이에서 변화한다
-
-___
-
-* 구현과 관련하여 확인해야할 부분이 남아있다
-
-1. Thread Block 수
-	* 256byte보다 작은 size의 packet들에 대해서는 thread 수에 문제가 없을 듯하다
-	* 하지만 512, 1024byte의 size의 packet들의 경우 16개의 Thread Block을 사용하는데 이렇게 많이 사용해도 되는지는 잘 모르겠다
-
-2. Shared Memory
-	* Shared Memory의 사용량을 고려하지 않았다
-	* 찬규형이 구현해놓으신 64byte와 1514byte의 버전에 48K보다 작은가를 확인하는 부분이 있었다
-	* 이 부분을 보고 48K 미만이면 괜찮을 것이라는 판단을 해 일단 자유롭게 할당해놓은 상태이다
-	* Shared Memory에 대해 알아보고 수정해야할 수도 있다
+* 1514byte에서의 rot\_index는 찬규형이 짜놓으신 것을 그대로 사용하여 rot\_index가 0 ~ 3 사이에서 변화한다
 
 ___
 
