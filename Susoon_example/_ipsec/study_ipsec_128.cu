@@ -84,11 +84,13 @@ __global__ void nf_ipsec_128(struct pkt_buf *p_buf, int* pkt_cnt, unsigned int* 
 
 	__shared__ unsigned char IV[PPB][16];
 	__shared__ unsigned char aes_tmp[PPB][16*AES_T_NUM]; 
+	__shared__ sha1_gpu_context ictx[PPB];
+	__shared__ sha1_gpu_context octx[PPB];
 	// IV : 128 * 16 =  2,048
 	// aes_tmp : 128 * 16 * 7 = 14,336
-	// ictx : 2 * 128 = 256
-	// octx : 2 * 128 = 256
-	//-------------------------- Total __shared__ mem Usage : 16,896 / 49,152 (48KB per TB)
+	// ictx : 24 * 128 = 3,072
+	// octx : 24 * 128 = 3,072
+	//-------------------------- Total __shared__ mem Usage : 22,528 / 49,152 (48KB per TB)
 
 	if(tid == TOTAL_T_NUM - 1){
 		START_RED

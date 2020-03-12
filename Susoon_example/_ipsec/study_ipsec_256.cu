@@ -66,7 +66,7 @@ __device__ void sha1_kernel_global_256(unsigned char *data, sha1_gpu_context *ct
 
 	__syncthreads();
 	if(thread_index == 0){
-		for(t = 0; t < 2; t++) 
+		for(t = 0; t < HMAC_T_NUM; t++) 
 			sha1_gpu_process(ctx, (unsigned int*)&extended[pkt_idx * t * 80]);
 	}
 }
@@ -84,11 +84,13 @@ __global__ void nf_ipsec_256(struct pkt_buf *p_buf, int* pkt_cnt, unsigned int* 
 
 	__shared__ unsigned char IV[PPB][16];
 	__shared__ unsigned char aes_tmp[PPB][16*AES_T_NUM]; 
+	__shared__ sha1_gpu_context ictx[PPB];
+	__shared__ sha1_gpu_context octx[PPB];
 	// IV : 64 * 16 =  1,024
 	// aes_tmp : 64 * 16 * 15 = 15,360
-	// ictx : 4 * 64 = 256
-	// octx : 4 * 64 = 256
-	//-------------------------- Total __shared__ mem Usage : 16,896 / 49,152 (48KB per TB)
+	// ictx : 24 * 128 = 3,072
+	// octx : 24 * 128 = 3,072
+	//-------------------------- Total __shared__ mem Usage : 22,528 / 49,152 (48KB per TB)
 
 	if(tid == TOTAL_T_NUM - 1){
 		START_RED

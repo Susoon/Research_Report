@@ -2,9 +2,9 @@
 #include "packet_man.h"
 #include "gdnio.h"
 
-#define TOTAL_T_NUM 13 * 94 * 10
+#define TOTAL_T_NUM 13 * 94 * 11
 #define AES_T_NUM 94
-#define PPB 10
+#define PPB 11
 #define HMAC_T_NUM 24
 #define PKT_SIZE 1514
 #define PAD_LEN 6
@@ -65,7 +65,7 @@ __device__ void sha1_kernel_global_1514(unsigned char *data, sha1_gpu_context *c
 
 	__syncthreads();
 	if(thread_index == 0){
-		for(t = 0; t < 24; t++) 
+		for(t = 0; t < HMAC_T_NUM; t++) 
 			sha1_gpu_process(ctx, (unsigned int*)&extended[pkt_idx * t * 80]);
 	}
 }
@@ -73,24 +73,26 @@ __device__ void sha1_kernel_global_1514(unsigned char *data, sha1_gpu_context *c
 //CKJUNG, ipsec_1514 ver.
 __global__ void nf_ipsec_1514(struct pkt_buf *p_buf, int* pkt_cnt, unsigned int* ctr, unsigned char* d_nounce, unsigned int* d_key, unsigned char* d_sbox, unsigned char* d_GF2, int chain_seq, unsigned int* seq, unsigned int* extended)
 {
-	// <<< 13, 940 >>> threads. 
+	// <<< 12, 1034 >>> threads. 
 	//	94 threads for 1 pkt. (1510B pkt)
-	// 940 / 94 = 10, 1TB has 940 threads each and manages 10 pkts.
+	// 1034 / 94 = 11, 1TB has 940 threads each and manages 11 pkts.
 	unsigned int tid = blockDim.x * blockIdx.x + threadIdx.x;
 	unsigned int cur_tid = threadIdx.x / AES_T_NUM;
-	// 13 x 940 = 12,220
-	// tid : 0 - 12,219 (12,220 threads)
+	// 12 x 1034 = 12,220
+	// tid : 0 - 12,407 (12,408 threads)
 
 	__shared__ unsigned char IV[PPB][16];
 	__shared__ unsigned char aes_tmp[PPB][16*AES_T_NUM]; 
+	__shared__ sha1_gpu_context ictx[PPB];
+	__shared__ sha1_gpu_context octx[PPB];
 	__shared__ unsigned char rot_index; // This index is updated by "the last thread" of each TB to move forward to the NEXT 128 desc.
 	// rot_index (0 - 3): {0 x 128(0) ~ 3 x 128(384)} + 127  == 0 ~ 511
-	// IV : 10 * 16 =  160
-	// aes_tmp : 10 * 16 * 94 = 15,040
-	// ictx : 24 * 10 = 240
-	// octx : 24 * 10 = 240
+	// IV : 11 * 16 =  176
+	// aes_tmp : 11 * 16 * 94 = 16,544
+	// ictx : 24 * 11 = 264
+	// octx : 24 * 11 = 264
 	// rot_index : 1
-	//-------------------------- Total __shared__ mem Usage : 15,681 / 49,152 (48KB per TB)
+	//-------------------------- Total __shared__ mem Usage : 17,249 / 49,152 (48KB per TB)
 
 	if(threadIdx.x == 0) // The first thread of EACH TB initialize rot_index(rotation_index) to "0". 
 		rot_index = 0;

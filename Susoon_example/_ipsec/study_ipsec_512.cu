@@ -83,14 +83,16 @@ __global__ void nf_ipsec_512(struct pkt_buf *p_buf, int* pkt_cnt, unsigned int* 
 
 	__shared__ unsigned char IV[PPB][16];
 	__shared__ unsigned char aes_tmp[PPB][16*AES_T_NUM]; 
+	__shared__ sha1_gpu_context ictx[PPB];
+	__shared__ sha1_gpu_context octx[PPB];
 	__shared__ unsigned char rot_index; // This index is updated by "the last thread" of each TB to move forward to the NEXT 128 desc.
 	// rot_index (0 - 2): {0 x 171(0) ~ 2 x 171(342)} + 170  == 0 ~ 511
 	// IV : 29 * 16 =  464
 	// aes_tmp : 29 * 16 * 31 = 14,384
-	// ictx : 8 * 29 = 232
-	// octx : 8 * 29 = 232
+	// ictx : 24 * 29 = 696
+	// octx : 24 * 29 = 696
 	// rot_index : 1
-	//-------------------------- Total __shared__ mem Usage : 15,313 / 49,152 (48KB per TB)
+	//-------------------------- Total __shared__ mem Usage : 16,240 / 49,152 (48KB per TB)
 
 	if(threadIdx.x == 0) // The first thread of EACH TB initialize rot_index(rotation_index) to "0". 
 		rot_index = 0;

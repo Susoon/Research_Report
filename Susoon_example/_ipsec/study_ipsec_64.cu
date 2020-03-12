@@ -70,6 +70,7 @@ __global__ void nf_ipsec_64(struct pkt_buf *p_buf, int* pkt_cnt, unsigned int* c
 
 	__shared__ unsigned char IV[PPB][16];
 	__shared__ unsigned char aes_tmp[PPB][16*AES_T_NUM]; 
+	__shared__ sha1_gpu_context ictx[PPB];
 	__shared__ sha1_gpu_context octx[PPB];
 	// IV : 128 * 16 =  2,048 
 	// aes_tmp : 128 * 16 * 3 = 6,144
