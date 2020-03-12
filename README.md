@@ -52,7 +52,7 @@ ___
 #### 구현 - 2차 수정후
 
 * Thread Block에 대한 값을 다시 수정하였다
-1. 찬규형이 gdnio를 돌릴때 rx\_kernel과 tx\_kernel에 각각 sm을 1개씩 할당하여 사용하다보니 ~~최대 사용 가능 sm의 수가 12개~~였다
+1. 찬규형이 gdnio를 돌릴때 rx\_kernel과 tx\_kernel에 각각 sm을 1개씩 할당하여 사용하다보니 **최대 사용 가능 sm의 수가 12개**였다
 	* 그래서 12개 이상을 사용하는 1514byte의 경우도 Thread Block의 개수를 줄여야했다
 2. 512, 1024 byte의 경우들의 thread 수를 조정해야했다
 	* 1번과 동일한 이유로 Thread Block의 개수를 줄여야했다
