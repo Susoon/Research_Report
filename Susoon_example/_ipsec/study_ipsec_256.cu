@@ -36,7 +36,7 @@ __device__ void sha1_kernel_global_256(unsigned char *data, sha1_gpu_context *ct
 	 */
 
 //sh_kim 20.03.11 : when data length is 20byte, we need padding
-	if(len == 20 && threadIdx.x = 0)
+	if(len == 20 && threadIdx.x == 0)
 	{
 		memset(data + len - 1, 0, 44);
 	}
@@ -114,9 +114,9 @@ __global__ void nf_ipsec_256(struct pkt_buf *p_buf, int* pkt_cnt, unsigned int* 
 					p_buf->rx_buf[0x1000 * (tid/AES_T_NUM) + i] = 0; // padding
 #endif		
 		
-				p_buf->rx_buf[0x1000 * (tid/AES_T_NUM) + PKT_SIZE - 4 + 6] = 6; // padlen 
+				p_buf->rx_buf[0x1000 * (tid/AES_T_NUM) + (PKT_SIZE - 4) + PAD_LEN] = PAD_LEN; // padlen 
 
-				p_buf->rx_buf[0x1000 * (tid/AES_T_NUM) + PKT_SIZE - 4 + 6 + 1] = IPPROTO_IPIP; // next-hdr (Meaning "IP within IP)
+				p_buf->rx_buf[0x1000 * (tid/AES_T_NUM) + (PKT_SIZE - 4) + PAD_LEN + 1] = IPPROTO_IPIP; // next-hdr (Meaning "IP within IP)
 
 				/* For Reference...
 					 IPPROTO_IP = 0
@@ -203,6 +203,11 @@ __global__ void nf_ipsec_256(struct pkt_buf *p_buf, int* pkt_cnt, unsigned int* 
 				// H(K XOR opad, H(K XOR ipad, text)) : 20 Bytes
 				sha1_kernel_global_256(&(ictx[cur_tid].c_state[0]), &octx[cur_tid], extended, 20, (tid/AES_T_NUM));
 	
+			//-------------------------- Multi threads Job --------------------------------------------
+			// Attach 20-bytes HMAC-SHA authentication digest to packet.
+			if(tid % AES_T_NUM < 3)
+				memcpy(&p_buf->rx_buf[0x1000 * (tid/AES_T_NUM) + (PKT_SIZE - 4) + 30 + ((tid%AES_T_NUM) * 8)], &(octx[cur_tid].c_state[((tid%AES_T_NUM)*8)]), 8);
+			__syncthreads();
 			//-------------------------- Single threads Job --------------------------------------------
 			if(tid % AES_T_NUM == 0){
 				atomicAdd(&pkt_cnt[1], 1);	

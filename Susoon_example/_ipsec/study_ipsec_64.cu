@@ -95,8 +95,8 @@ __global__ void nf_ipsec_64(struct pkt_buf *p_buf, int* pkt_cnt, unsigned int* c
 			//__syncthreads();
 #if 1
 			if(tid % AES_T_NUM == 0){
-				p_buf->rx_buf[0x1000 * (tid/AES_T_NUM) + PKT_SIZE - 4] = 0; // padlen 
-				p_buf->rx_buf[0x1000 * (tid/AES_T_NUM) + PKT_SIZE - 4 + 1] = IPPROTO_IPIP; // next-hdr (Meaning "IP within IP)
+				p_buf->rx_buf[0x1000 * (tid/AES_T_NUM) + (PKT_SIZE - 4)] = 0; // padlen 
+				p_buf->rx_buf[0x1000 * (tid/AES_T_NUM) + (PKT_SIZE - 4) + 1] = IPPROTO_IPIP; // next-hdr (Meaning "IP within IP)
 				/* For Reference...
 					 IPPROTO_IP = 0
 					 IPPROTO_ICMP = 1
