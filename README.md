@@ -17,7 +17,55 @@
 	* ~~Thread Block 수와 thread 수를 할당한 양이 과도한 양은 아닌지~~
 	* ~~Shared Memory를 과도하게 사용하는 것은 아닌지~~
 	* 위의 두 내용을 잘 적용하였는지 확인
+* nids 공부하기
 ---
+## 03/13 현재상황
+
+* 1514 byte의 경우에서 Thread Block 할당 계산을 잘못했어서 고쳤다
+	* 1개의 Thread Block당 1034개의 thread를 할당했는 데, 최대치를 1048로 착각해서 넣은 듯 하다
+* 변경 결과는 아래의 표에 기록되어있다
+
+<center> ipsec table : Thread </center>
+
+![Alt_text](image/03.13_ipsec_thread_table1.JPG)
+
+![Alt_text](image/03.13_ipsec_thread_table2.JPG)
+
+* 1514 byte부분을 노랗게 표시해두었다
+* 1개의 Thread Block에서 처리하는 packet의 수를 9개로 줄이고 Kernel 호출 횟수를 5회로 늘였다
+* 512개의 packet을 무리없이 처리할 수 있게 되었다
+
+<center> ipsec table : Shared Memory </center>
+
+![Alt_text](image/03.13_ipsec_sm_table.JPG)
+
+* octx의 memory계산이 잘못되어 수정했고, 1514byte부분을 위의 내용에 맞게 변경했다
+
+* 다만 좀 걸리는 부분은 thread 낭비와 더 늘어나고 복잡해진 if문의 조건이다
+
+```
+if(tid < 108*AES_T_NUM && (rot_index == 4 && tid < 108 * AES_T_NUM - 28))
+```
+* 위의 내용이 rx\_buf의 boundary를 넘기지 않기 위해 thread를 제한하는 if문이다
+* Kernel을 한번 호출할 때 thread가 108 * 94(846)개 이상 사용되지 말아야하면서
+* 마지막 rotation때는 28개의 thread가 사용되면 안된다
+* 여기서 thread의 낭비가 꽤 크다는 느낌을 받는다
+* 하지만 현재 상황상 사용할 수 있는 sm의 조건에 맞췄을 때 최소의 thread 낭비이다
+* 사실 저기서 Kernel 1회 호출당 처리하는 packet의 수를 103개정도로 줄이면
+* 마지막 rotation때 3개의 thread만 버려주면 된다
+* 그래도 사실상 낭비되는 thread의 수는 동일하다
+
+<center> HMAC trailer appending </center>
+
+![Alt_text](image/03.13_hmac_append_1024.JPG)
+
+* 위의 code는 hamc trailer를 붙여주기위한 코드이다
+	* 1024 byte의 기준의 코드이다
+* 일단 임시방편으로 3개의 thread만 사용되도록 코드를 만들어두었다
+* 이는 fancy code에서는 주석처리로 가려져있었다는 점에서 문제가 있지 않을까라는 추측을 하고 있다
+* 수정이 필요할 듯 하다
+
+___
 
 ## 03/12 현재상황
 
