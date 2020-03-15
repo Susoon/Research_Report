@@ -19,6 +19,34 @@
 	* 위의 두 내용을 잘 적용하였는지 확인
 * nids 공부하기
 ---
+## 03/15 현재상황
+
+* ipsec을 수정할때 확인해야하는 부분을 정리해보았다
+
+1. HMAC의 경우 64byte의 경우를 제외하고는 2개 이상의 thread가 하나의 packet을 봐야하므로 이를 관리해주는 부분이 필요함
+2. HMAC에 사용하는 thread를 제외하고는 sha1\_kernel\_global 함수에서 return시켜서 array boundary 외의 부분을 건드리는 일이 없도록 해야한다
+3. n개의 thread(128byte의 경우 2개의 thread)가 하나의 packet만을 볼 수 있도록 packet index를 지정해서 packet의 위치를 알려줘야함
+4. n개의 thread가 하나의 packet을 **나누어** 볼 수 있도록 e\_index와 thread\_index를 지정해서 각자 맡을 위치를 알려줘야함
+5. 64byte의 경우 ictx를 n개의 thread가 보기 때문에 그만큼 칸을 만들어줘야함
+	* 여기서 생기는 의문이 ictx를 n개의 칸으로 나누어서 SHA1을 진행하는데, 그럼 이를 합쳐주는 부분은 어디에 있는가
+6. sha1\_kernel\_global에 parameter를 넘겨줄때, ictx, octx, p\_buf의 index에 thread번호를 잘 할당해줘야함
+7. HMAC을 한 부분을 뒤에 붙여줄 때 3개의 thread만 일을 하게끔 해줘야함
+8. 512byte 이상의 size의 packet의 경우 rotation을 돌면서 Kernel을 여러번 호출해줘야 512개의 packet을 모두 볼 수 있음
+	* 이를 위해 확인해줘야할 것들이 있음
+	1. array의 boundary를 넘어가는 부분이 없는지
+	2. rot\_index의 증가가 매 Kernel 호출마다 이루어지는지
+
+* 위의 부분을 확인할때, 정리가 되어있지 않아서 빼먹는 부분이 있는 것 같아서 정리해둠
+* 5번의 의문점은 일단 읽어보고 찬규형한테 물어봐야할듯함
+---
+
+* nids 공부를 하고있는데, snort를 깔아서 코드를 볼려했으나 nids부분이 명확하게 나누어져있지 않은 느낌....
+* github에 다른 nids 코드를 찾아보고 있는데 snort와 비슷한 느낌을 받음
+* 찬규형이 참고한 code를 찾고 싶은데 아직 찾지 못함
+* 일단 code를 찾으면서 fancy의 nids 코드를 읽어봐야할듯함
+
+
+---
 ## 03/13 현재상황
 
 * 1514 byte의 경우에서 Thread Block 할당 계산을 잘못했어서 고쳤다
