@@ -28,7 +28,8 @@
 3. n개의 thread(128byte의 경우 2개의 thread)가 하나의 packet만을 볼 수 있도록 packet index를 지정해서 packet의 위치를 알려줘야함
 4. n개의 thread가 하나의 packet을 **나누어** 볼 수 있도록 e\_index와 thread\_index를 지정해서 각자 맡을 위치를 알려줘야함
 5. 64byte의 경우 ictx를 n개의 thread가 보기 때문에 그만큼 칸을 만들어줘야함
-	* 여기서 생기는 의문이 ictx를 n개의 칸으로 나누어서 SHA1을 진행하는데, 그럼 이를 합쳐주는 부분은 어디에 있는가
+	* ~~여기서 생기는 의문이 ictx를 n개의 칸으로 나누어서 SHA1을 진행하는데, 그럼 이를 합쳐주는 부분은 어디에 있는가~~
+	* packet을 한 개를 보는 게 아니니 당연히 여러개의 octx가 나오고 이를 각각의 packet에 붙여주는것....
 6. sha1\_kernel\_global에 parameter를 넘겨줄때, ictx, octx, p\_buf의 index에 thread번호를 잘 할당해줘야함
 7. HMAC을 한 부분을 뒤에 붙여줄 때 3개의 thread만 일을 하게끔 해줘야함
 8. 512byte 이상의 size의 packet의 경우 rotation을 돌면서 Kernel을 여러번 호출해줘야 512개의 packet을 모두 볼 수 있음
