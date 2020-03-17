@@ -19,6 +19,53 @@
 	* 위의 두 내용을 잘 적용하였는지 확인
 * nids 공부하기
 ---
+## 03/17 현재상황
+* 찬규형이 forwarding해준 메일을 보면서 공부중이다
+
+---
+### packet이 nids를 거치는 과정
+
+1. port와 protocol을 확인한다
+	* src port가 80, protocol이udp, dst port가 any라고 가정하자
+2. 해당 정보에 부합하는 확인해야할 rule이 rule set에 있는지 확인
+	* 1차 search
+	* 각 protocol별, src와 dst에 대한 port Group이 있음
+		* 현재 가정내에선 UDP src라는 group이 있음
+	* 각 port Group은 1 ~ 65535까지의 port를 관리해줌
+	* 여기서 해당하는 port를 찾아가서 확인
+		* 80번 port를 찾아가서 확인
+3. rule set에 있다면 packet이 옳은 rule에 부합하는지 확인
+	* 2차 search
+	* Trie를 통해 Aho-Corasick algorithm을 적용
+	* MPSE가 사용됨
+	* 이 과정에서는 MPSE == TRIE == Aho-Corasick algorithm인 느낌
+		* 사실 MPSE는 길이가 가장 긴 pattern을 사용하는 TRIE 구조라서 완전히 같진 않음
+
+4. rule에 맞는 packet이라면 RTN을 확인해서 port를 확인해줌
+5. Snort Event Queue를 통해 각 case에 맞는 handler로 전달됨
+
+---
+### nids의 구현
+
+* github에 있는 cuda Aho-Corasick 코드를 확인해야할 듯함
+* 2차원 배열을 통해 Trie를 대체하는 과정을 확인해야함
+
+---
+#### 세부 구현
+
+1. cudaMallocPitch와 cudaMemcpy2D 
+	* cudaMallocPitch는 n개의 칸을 가진 배열의 포인터를 m개 가진 배열을 만들어서 n * m개의 칸을 가진 행렬을 만드는 방식
+		* 실제로 사용되는 메모리칸은 n * m + n개이다
+	* cudaMemcpy2D는 n * m개의 2차원 배열을 host -> device로 통째로 복사해줌
+		* 여기서도 devicepitch라는 포인터가 사용되는 데 그 이유는??
+	* memcpy와 malloc의 차이를 제외하고 보면 배열 포인터의 배열이냐 배열이냐의 차이인듯하다
+	* **중요한건 contiguous하게 memory가 할당되느냐!**
+	* 이에 관련된 것은 알아봐야함
+
+2. texture memory 사용
+	* 이부분은 메일을 더 읽어봐야함
+
+---
 ## 03/15 현재상황
 
 * ipsec을 수정할때 확인해야하는 부분을 정리해보았다
