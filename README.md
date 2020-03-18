@@ -19,6 +19,67 @@
 	* 위의 두 내용을 잘 적용하였는지 확인
 * nids 공부하기
 ---
+## 03/18 현재상황
+
+* nids에 대한 공부를 하면서 fancy의 nids 코드를 해석하는 중이다
+* 정리가 안되는 느낌이 들어 정리를 해보았다
+* 해결되지 않은 의문점들은 코드흐름 후에 있다
+
+---
+### 코드 흐름
+
+#### initialize\_nids
+
+* initialize\_nids 함수는 이름과 동일하게 nids를 위한 초기화과정이 담긴다
+* 초기화에는 rule set을 가져와 이를 Trie에 담는 것도 포함된다
+* Trie에 담는 과정은 다음과 같다
+	1. rule set 파일을 읽어와 이를 parsing하여 data를 뽑아내다
+		* data에는 dst인지 src인지, port번호는 몇번인지, state는 어떠한지에 대해 담겨있다
+		* dst / src와 port에 대한 정보를 알려주고, state의 수(depth)를 알려준다
+		* (현재 state) : (이전 state) data(int) data(char)의 형태로 state의 정보가 저장되어있다
+	2. Failure Link를 이어준다
+		* 해당 port의 Failure Link의 정보를 담는 배열을 -1로 초기화한다
+		* 0번째 열의 값들(root node)의 Failure Link를 0으로 지정해 root의 Failure Link가 root로 이어지게 한다
+		* root의 child node를 queue에 저장해두고, queue를 pop 시키면서 child node들의 Failure Link를 모두 이어준다
+		* Failure Link를 이어준다는 것은 해당 지점에서 Failure이 일어났을때 어디로 이어질 것인가, 즉, 같은 값을 가지는 node이면서 child node를 가지는 값을 찾아서 이어준다는 것이다
+	3. Output node를 지정해준다
+		* 사실 이 과정은 2번의 Failure Link를 이어주면서 같이 진행된다
+		* 해당 지점을 거친 pattern이 어디에 있는 node에서 끝나는지를 저장해주는 것이다
+		* 아직 완벽하게 이해가 되지 않은부분이다
+	4. Trie에 값들을 대입해준다
+* 위의 과정을 rule set에 있는 모든 port에 대해 마치면 이들을 cudaMemcpy로 gpu에 넘겨준다
+	* 위의 Trie와 Failure Link, Output을 담는 array는 2차원 배열인데, 이를 cudaMemcpy2D나 cudaMallocPitch로 넘겨주지 않는다
+	* cudaMallocPitch의 형태를 본따서 넘겨준다
+	* gpu에allocation된 memory를 접근할 pointer를 담을 배열을 만들어 각각의 pointer에 cudaMalloc을 해준다
+	* 결국 device pointer 배열을 만들어 이를 이용해 처리하는 방식이다
+* gpu에 위의 데이터들을 다 넘겨주고 나면 nids Kernel을 호출한다
+
+#### nids
+
+* rule set에서 뽑아온 data들은 모두 대문자이므로, 대문자로의 변환을 위해 사용할 xlatcase 배열을 만든다
+* lookup2D함수를 통해 받아온 packet의 port에 해당하는 Trie에서 packet의 pattern이 있는지 Failure Link를 이어가며 찾아본다
+* 찾은 후 output 배열에서 값을 찾아와 매칭이 된건지 판단하여 이를 ret에 저장한다
+* 위의 과정을 반복한다
+
+---
+### 의문점
+
+* Aho-Corasick 알고리즘의 이해도가 좀 떨어진다
+	* 단순히 Trie를 사용한 알고리즘 정도로 생각했다가 세부적인 알고리즘의 이해를 놓쳤다
+* nids Kernel에 대한 이해도가 떨어진다
+	* Aho-Corasick 알고리즘에 대한 이해도 부족이 영향을 미친듯하다
+	* 흐름은 이해를 했지만 수정을 위한 세부적인 이해도가 떨어진다
+	* Aho-Corasick 알고리즘을 이해하고 다시 읽어봐야할 것 같다
+* trie와 failure, output에 저장되는 값에 대한 이해도가 떨어진다
+	* 각 배열에 -1, failure등의 값들을 대입하는데 이 값들의 의미를 모르니 nids Kernel에 대한 이해도가 떨어지게 된다
+* 위의 내용을 해결하면 수정을 해야하는데 이때 thread의 할당에 대해 고민을 해봐야겠다
+	* 몇개의 thread가 필요할지 감이 잡히지 않는다
+	* 각 thread가 일정한 size를 나눠 맡으면서 진행하는 것 같은데 size를 나누는 기준은 찬규형이 forwarding해주신 메일에서도 마무리가 되지 않았다
+	* gpu thread warp에 대한 실험을 하셨는데 이 실험에 대한 결과가 더 필요하다
+	* 사실 메일의 내용을 보니 가용한 thread를 적절히 분배하면 될 것 같긴 하다
+		
+
+---
 ## 03/17 현재상황
 * 찬규형이 forwarding해준 메일을 보면서 공부중이다
 
