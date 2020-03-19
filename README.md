@@ -18,6 +18,69 @@
 	* ~~Shared Memory를 과도하게 사용하는 것은 아닌지~~
 	* 위의 두 내용을 잘 적용하였는지 확인
 * nids 공부하기
+  * ~~Aho-Corasick 알고리즘 공부하기~~
+  * nids Kernel 코드 뜯어보기
+    * Aho-Corasick 알고리즘이 어떻게 적용되었는지 확인하기
+  * state로 저장해주는 값들의 의미 알아보기
+  * thread 분배 생각해보기
+---
+
+## 03/19 현재상황
+
+* Aho-Corasick에 대한 이해를 도와준 블로그 링크이다
+
+![Aho-Corasick Algorithm](https://m.blog.naver.com/kks227/220992598966)
+
+
+
+* Aho-Corasick 알고리즘은 다음의 과정을 통해 진행된다
+
+**1. 주어진 data들을 Trie에 담는다**
+
+![Alt_text](image/03.19_Aho_Corasick_Trie.png)
+
+	* 위 링크의 블로그에서 보여준 사진이다
+	* W라는 data set에 있는 he, she, his, hers를 Trie에 담아서 표현해준다
+* 이때 he, she, his, hers가 완성되는 지점은 빨갛게 표시되어있는데 저 부분들이 Output Link가 된다
+
+**2. Failure Link를 이어준다**
+
+![Alt_text](image/03.19_Aho_Corasick_Failure_link.png)
+
+* 위의 사진은 S=shis라는 string을 test해보기 위해서 Failure Link를 추가한 그림이다
+* sh까지 test했을때 가장 밑의 줄의 s->h의 과정을 거치다가 다음 글자인 i로 가기위해 두번째 줄의 h의 값을 가진 node로 이동한다
+* 이러한 방식으로 하나씩 Failure Link를 추가해준다
+* KMP알고리즘에서의 Failure 함수와 동일한 알고리즘의 방식으로 추가해주는 것이다
+* 이 과정은 data를 Trie에 추가해주는 과정에 같이 진행된다
+* 즉, **input data가 아닌 기존에 가지고 있던 data**를 사용해서 추가해주는 것이다
+* 위의 예시에선 S=shis라는 input data를 이용해 Failure Link를 보였지만 실제로는 그렇지 않다
+
+**3. Output Link를 지정해준다**
+
+* 실제로 Link를 지정해준다기보단 Output node를 지정해주는 것이다
+* **이 node를 마지막 node로 가지는 string data가 있다**라는 의미이다
+* Failure Link를 통해 이동할 수 있는 지점까지 모두 포함해준다
+
+**4. Input data를 matching한다**
+
+* 모든 Link를 이어주었다면 Input data를 matching해본다
+* Failure Link를 타고 이어가다가 Output Link를 만나면 가장 최근에 matching되었던 문자부터 Output Link까지의 문자를 matching된 문자열로 인식한다
+
+![Alt_text](image/03.19_Aho_Corasick_Failure.png)
+
+* 위의 사진은 이 전에 있던 예시와 다른 예시이다
+* S = adadac를 input data로 받아 matching해본다고 가정하자
+* 두번째 줄의 node를 타고 a -> d -> a -> d -> a까지 매칭한다
+* 그 다음 a -> c를 매칭하기 위해서 2번째 줄의 3번째 a(파란색 노드)로 Failure Link를 타고 이동한다
+* c를 값으로 가지는 child node가 없기 때문에 다시 Failure Link를 타고 두번째 줄의 첫번째 a(초록색 노드)로 Failure Link를 타고 이동한다
+* a -> c로 이동할 수 있는 link가 있으므로 a -> c를 매칭시키고 끝낸다
+
+---
+
+* Aho-Corasick 알고리즘이 이해가 되었다
+* 하지만 code를 구현하거나 수정하기 위해서 기존의 Aho-Corasick code를 뜯어볼 필요가 있는 것 같다
+* cpu code를 먼저 이해하고 나면, cuda code는 Trie대신 2차원 배열을 사용한다는 점만 유의하면서 읽으면 쉽게 이해될 듯하다
+
 ---
 ## 03/18 현재상황
 
@@ -153,7 +216,6 @@
 * github에 다른 nids 코드를 찾아보고 있는데 snort와 비슷한 느낌을 받음
 * 찬규형이 참고한 code를 찾고 싶은데 아직 찾지 못함
 * 일단 code를 찾으면서 fancy의 nids 코드를 읽어봐야할듯함
-
 
 ---
 ## 03/13 현재상황
@@ -306,7 +368,6 @@ ___
 	* 따라서 총 3회의 Kernel 호출로 512개의 packet이 처리가능하다
 * 이와같이 thread의 수와 Thread Block의 수를 변경함에 따라 내부적인 구조의 수정도 필요하다
 	* Kernel 1회 호출당 할당되는 thread의 수와 실제로 packet을 nf처리하는 thread의 수가 다르므로 이 부분을 수정해주어야한다
-
 
 ___
 
