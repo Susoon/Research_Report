@@ -29,7 +29,7 @@
 
 * Aho-Corasick에 대한 이해를 도와준 블로그 링크이다
 
-![Aho-Corasick Algorithm](https://m.blog.naver.com/kks227/220992598966)
+[Aho-Corasick Algorithm](https://m.blog.naver.com/kks227/220992598966)
 
 
 
