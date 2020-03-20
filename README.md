@@ -17,12 +17,118 @@
 	* ~~Thread Block 수와 thread 수를 할당한 양이 과도한 양은 아닌지~~
 	* ~~Shared Memory를 과도하게 사용하는 것은 아닌지~~
 	* 위의 두 내용을 잘 적용하였는지 확인
-* nids 공부하기
+* ~~nids 공부하기~~
   * ~~Aho-Corasick 알고리즘 공부하기~~
-  * nids Kernel 코드 뜯어보기
-    * Aho-Corasick 알고리즘이 어떻게 적용되었는지 확인하기
-  * state로 저장해주는 값들의 의미 알아보기
-  * thread 분배 생각해보기
+  * ~~nids Kernel 코드 뜯어보기~~
+    * ~~Aho-Corasick 알고리즘이 어떻게 적용되었는지 확인하기~~
+  * ~~state로 저장해주는 값들의 의미 알아보기~~
+  * ~~thread 분배 생각해보기~~
+  * Aho-Corasick의 Trie와 Failure Link 구성하는 부분 구현확인하기
+* dpdk mempool 공부하기
+---
+
+## 03/20 현재상황
+
+* nids에 대한 공부는 끝났다
+
+1. Aho-Corasick 알고리즘이 nids Kernel에 어떻게 적용되었는가
+   * thread마다 각자 16byte의 payload를 처리할 의무를 가진다
+   * 각 thread들이 각자 맡은 부분의 payload를 Trie에 검색해보면서 matching되는 rule이 있는지 확인해본다
+   * 사실 initialize\_nids에서 Trie와 Failure Link, Output Link를 다 만들어줘서 nids 커널에서는 거창한 무언가가 있는건 아니다
+   * Trie와 Failure Link를 타고 matching하는 것만 한다
+   * 다만 문제점은 thread들이 payload를 분할하여 관리하다보니 **분할된 구역에 걸쳐있는 rule**들이 검색이 안된다
+     * 아래에 해결책 제시했음
+2. state로 저장해주는 값이 무엇인가
+   * -1 : 빈 칸이므로 여기서는 값을 찾을 수 없다는 의미
+   * 0 : root node
+   * n(자연수) : n의 Depth를 가지는 node ( == n번째 node)
+
+3. thread 분배는 어떻게 할 것인가
+   * 사실상 ipsec과 동일한 방식으로 thread를 분배해주면된다
+   * 동일하게 16byte씩 관할하기 때문이다
+   * 다만 추가된 알고리즘(1번에서 제시된 문제의 해결책)에 의해서 발생하는 overhead가 크면 각 thread가 관할하는 byte의 수가 줄어야할 수도 있다
+
+---
+
+### 분할된 구역에 걸쳐있는 rule들의 검색
+
+* thread들이 payload를 나눠서 병렬적으로 검색을 하기 때문에 위에서 설명한 바와 같이 분할된 구역에 걸쳐있는 rule들은 검색이 안된다
+  * e.g.) |(0) a b c d r u|(1) l e s e f g|
+  * rule set 안에 "rules"라는 rule이 있고 각 thread가 6byte씩 관할하며 |를 기준으로 thread가 관할하는 memory 구역을 구분하며 (n)은 n번째 thread가 관할하는 구역을 지칭한다고 가정하자
+  * 0번 thread는 u까지 확인하고 1번 thread는 l부터 확인하게 되므로 "rules"라는 rule은 0번과 1번 thread 모두 확인할 수 없게 된다
+* 이 문제를 해결하기위해 코드를 조금 수정했다
+
+
+
+<center> original code </center>
+
+
+
+![Alt_text](image/03.20_aho_corasick_thread_problem_origin.JPG)
+
+* 기존 code에서는 각 thread가 배정받은 payload_len/NIDS_THPERPKT(16bytes) 만큼만 확인한다
+
+
+
+<center> modfied code </center>
+
+
+
+![Alt_text](image/03.20_aho_corasick_thread_problem_solved.JPG)
+
+* 수정된 code에서는 while문의 조건을 true로 주어 내부에서 조건이 만족되지 않는한 무한 loop를 돌게 했다
+* 다른 부분은 동일하게 주고, 내부에 loop 종료 조건을 추가해주었다
+* lookup을 마친 현재의 node가 root node라면 Trie 내에서 search할 수 있는 모든 node를 탐색을 마친 후 새로운 string을 시작해야하는 상태이다
+* 이 상태에서 현재 보고 있는 문자가 관할 메모리 구역 외에 있다는 것은, 관할 메모리 구역에서 시작된 string은 rule set과 모두 matching해보았다는 이야기가 된다
+* 따라서 이 때 flag를 true로 주고 Output Link를 확인한 후 break로 빠져나간다
+
+___
+
+### 수정한 code에 대한 분석
+
+* 이 code가 완벽하게 모든 rule을 확인할 수 있을까에 대한 의문이 조금 남는다
+
+1. packet에 포함된 모든 rule을 찾아내는가
+   * 찬규형과 얘기해보았을때, A B C D E라는 rule과 B C D라는 rule이 있고, packet에 A B C D K라는 부분이 있으면, A B C D E라는 rule을 검색하다가 matching에 실패하게되니 다시 B부터 확인하여 B C D라는 rule을 찾아야하지 않냐라는 질문을 하셨다
+   * 원래는 Aho-Corasick 알고리즘이 Trie를 쓴다는 특성덕분에 Trie를 구성할 때, A B C D E라는 branch에서 B C D라는 rule을 위해 D에, 그리고  A B C D E라는 rule을 위해 E에 모두 Output Link가 찍혀있을 것이라고 생각했다
+   * 그런데 A B C D E는 A부터 시작하고, B C D는 B부터 시작하는데 D에도 Output Link가 찍혀있을까?
+   * 이 부분은 추후에 nids를 돌려보면서 확인해봐야할듯하다
+* **해결됨** -> rule matching problem solution 참고
+   
+2. Trie를 타다가 root로 다시 돌아왔을때, Output Link를 확인해야하는가
+   * root는 시작점이라는 것을 제외하고는 아무 의미가 없는 node이다
+   * 그러면 여기서 Output Link를 확인하지 말고 그냥 while문을 탈출시키는게 더 좋지 않을까?
+
+* 위의 의문점들은 논문 정리가 끝나면 다시 제대로 확인해봐야할 것 같다
+
+---
+
+### rule matching problem solution
+
+* Aho-Corasick 알고리즘의 특성상 Failure Link를 따라간 node는 그냥 같은 값(위의 예제에서는 D)을 가지는 node가 아니다
+* 위의 예제를 통해 Failure Link를 설명하자면
+  * A B C D E라는 string은 B C D 라는 string을 substring으로 가진다
+  * 그렇기 때문에 A B C D E의 D가 B C D의 D로 연결되는 것이다
+  * 만약 F C D라는 string이 또 하나의 rule로 rule set에 존재한다고 하더라도
+  * A B C D E의 node들은 F C D와 Failure Link로 이어지지 않는다
+  * 아래의 Trie를 보면 A B C D E와 F C D를 이어주는 Failure Link가 없다
+
+<center> Aho-Corasick Trie Example </center>
+
+
+
+![Alt_text](image/03.20_aho_corasick_trie.JPG)
+
+* 따라서 nids 커널에서는 input값(payload)를 받으면 그냥 Trie와 Failure Link를 따라가주기만하면 그 안에 포함된 모든 rule을 matching할 수 있다
+* 대신 initialize\_nids 함수에서 Trie와 Failure Link를 만들때 이러한 부분까지 고려해서 구현해야한다
+  * 이는 snort와 cuda Aho-Corasick 코드를 확인해서 비교해봐야함
+
+* 위의 Flash Player의 링크를 남겨둔다
+
+[Aho-Corasick Player](http://blog.ivank.net/aho-corasick-algorithm-in-as3.html)
+
+
+
 ---
 
 ## 03/19 현재상황
@@ -39,8 +145,9 @@
 
 ![Alt_text](image/03.19_Aho_Corasick_Trie.png)
 
-	* 위 링크의 블로그에서 보여준 사진이다
-	* W라는 data set에 있는 he, she, his, hers를 Trie에 담아서 표현해준다
+* 위 링크의 블로그에서 보여준 사진이다
+* W라는 data set에 있는 he, she, his, hers를 Trie에 담아서 표현해준다
+
 * 이때 he, she, his, hers가 완성되는 지점은 빨갛게 표시되어있는데 저 부분들이 Output Link가 된다
 
 **2. Failure Link를 이어준다**
