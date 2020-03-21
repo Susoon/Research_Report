@@ -12,7 +12,7 @@
 //SHKIM, 128B version 20.03.12
 __device__ void sha1_kernel_global_256(unsigned char *data, sha1_gpu_context *ctx, unsigned int *extended, int len, int pkt_idx)
 {
-	int thread_index = threadIdx.x%7;
+	int thread_index = threadIdx.x%AES_T_NUM;
 	
 	if(thread_index >= HMAC_T_NUM)
 		return;

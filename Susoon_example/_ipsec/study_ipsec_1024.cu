@@ -11,7 +11,7 @@
 
 __device__ void sha1_kernel_global_1024(unsigned char *data, sha1_gpu_context *ctx, unsigned int *extended, int len, int pkt_idx)
 {
-	int thread_index = threadIdx.x%94;
+	int thread_index = threadIdx.x%AES_T_NUM;
 	
 	if(thread_index >= HMAC_T_NUM)
 		return;
@@ -199,15 +199,15 @@ __global__ void nf_ipsec_1024(struct pkt_buf *p_buf, int* pkt_cnt, unsigned int*
 				}
 				__syncthreads();
 #endif
-					// CKJUNG, HMAC-SHA1 From here! /////////////////////////////
-					// RFC 2104, H(K XOR opad, H(K XOR ipad, text))
-					/**** Inner Digest ****/
-					// H(K XOR ipad, text) : 64 Bytes
-					sha1_kernel_global_1024(&p_buf->rx_buf[(0x1000 * (tid/AES_T_NUM + rot_index*171)) + sizeof(struct ethhdr) + sizeof(struct iphdr)], &ictx[cur_tid], extended, 64, (tid/AES_T_NUM + rot_index*171));
-					/**** Outer Digest ****/
-					// H(K XOR opad, H(K XOR ipad, text)) : 20 Bytes
-					sha1_kernel_global_1024(&(ictx[cur_tid].c_state[0]), &octx[cur_tid], extended, 20, (tid/AES_T_NUM + rot_index*171));
-			
+				// CKJUNG, HMAC-SHA1 From here! /////////////////////////////
+				// RFC 2104, H(K XOR opad, H(K XOR ipad, text))
+				/**** Inner Digest ****/
+				// H(K XOR ipad, text) : 64 Bytes
+				sha1_kernel_global_1024(&p_buf->rx_buf[(0x1000 * (tid/AES_T_NUM + rot_index*171)) + sizeof(struct ethhdr) + sizeof(struct iphdr)], &ictx[cur_tid], extended, 64, (tid/AES_T_NUM + rot_index*171));
+				/**** Outer Digest ****/
+				// H(K XOR opad, H(K XOR ipad, text)) : 20 Bytes
+				sha1_kernel_global_1024(&(ictx[cur_tid].c_state[0]), &octx[cur_tid], extended, 20, (tid/AES_T_NUM + rot_index*171));
+		
 			//-------------------------- Multi threads Job --------------------------------------------
 			// Attach 20-bytes HMAC-SHA authentication digest to packet.
 			if(tid % AES_T_NUM < 3)
@@ -217,11 +217,15 @@ __global__ void nf_ipsec_1024(struct pkt_buf *p_buf, int* pkt_cnt, unsigned int*
 				if(tid % AES_T_NUM == 0){
 					atomicAdd(&pkt_cnt[1], 1);	
 					p_buf->rx_buf_idx[tid/AES_T_NUM + rot_index*171] = chain_seq+1;
-					if(tid/AES_T_NUM == 255)
+
+					if(tid/AES_T_NUM == 170)
 						rot_index += 1;
-					if(rot_index == 3)
-						rot_index = 0;
 				}
+				//SHKIM 20.03.15
+				//Add Last thread of Last rotation condition	
+				__syncthreads();
+				if(rot_index == 2 && tid == 171 * AES_T_NUM - 1 - 1)
+				    rot_index = 0;
 			}
 		}
 		__syncthreads();

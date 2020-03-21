@@ -11,7 +11,7 @@
 
 __device__ void sha1_kernel_global_1514(unsigned char *data, sha1_gpu_context *ctx, unsigned int *extended, int len, int pkt_idx)
 {
-	int thread_index = threadIdx.x%94;
+	int thread_index = threadIdx.x%AES_T_NUM;
 	
 	if(thread_index >= HMAC_T_NUM)
 		return;
@@ -216,13 +216,19 @@ __global__ void nf_ipsec_1514(struct pkt_buf *p_buf, int* pkt_cnt, unsigned int*
 				if(tid % AES_T_NUM == 0){
 					atomicAdd(&pkt_cnt[1], 1);	
 					p_buf->rx_buf_idx[tid/AES_T_NUM + rot_index*108] = chain_seq+1;
+
+					//SHKIM 20.03.15
+					//Add Last thread of Last rotation condition	
 					if(tid/AES_T_NUM == 107)
 						rot_index += 1;
-					if(rot_index == 5)
-						rot_index = 0;
 				}
+				//SHKIM 20.03.15
+				//Add Last thread of Last rotation condition	
+				__syncthreads();
+				if(rot_index == 4 && tid == 108 * AES_T_NUM - 28 - 1)
+					rot_index += 1;
 			}
 		}
-		__syncthreads();
+	    __syncthreads();
 	}
 }

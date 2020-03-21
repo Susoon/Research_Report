@@ -188,11 +188,11 @@ __global__ void nf_ipsec_64(struct pkt_buf *p_buf, int* pkt_cnt, unsigned int* c
 			}
 #endif
 			__syncthreads();
-			//-------------------------- Multi threads Job --------------------------------------------
+			//-------------------------- Multi threads Job -------------------------------
 			// Attach 20-bytes HMAC-SHA authentication digest to packet.
 			memcpy(&p_buf->rx_buf[0x1000 * (tid/AES_T_NUM) + 90 + ((tid%AES_T_NUM) * 8)], &(octx[cur_tid].c_state[((tid%AES_T_NUM)*8)]), 8);
 			__syncthreads();
-			//-------------------------- Single threads Job --------------------------------------------
+			//-------------------------- Single threads Job ------------------------------
 			if(tid % AES_T_NUM == 0){
 				atomicAdd(&pkt_cnt[1], 1);	
 				p_buf->rx_buf_idx[tid/AES_T_NUM] = chain_seq+1;

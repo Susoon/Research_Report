@@ -194,14 +194,14 @@ __global__ void nf_ipsec_128(struct pkt_buf *p_buf, int* pkt_cnt, unsigned int* 
 			}
 			__syncthreads();
 #endif
-				// CKJUNG, HMAC-SHA1 From here! /////////////////////////////
-				// RFC 2104, H(K XOR opad, H(K XOR ipad, text))
-				/**** Inner Digest ****/
-				// H(K XOR ipad, text) : 64 Bytes
-				sha1_kernel_global_128(&p_buf->rx_buf[(0x1000 * (tid/AES_T_NUM)) + sizeof(struct ethhdr) + sizeof(struct iphdr)], &ictx[cur_tid], extended, 64, (tid/AES_T_NUM));
-				/**** Outer Digest ****/
-				// H(K XOR opad, H(K XOR ipad, text)) : 20 Bytes
-				sha1_kernel_global_128(&(ictx[cur_tid].c_state[0]), &octx[cur_tid], extended, 20, (tid/AES_T_NUM));
+			// CKJUNG, HMAC-SHA1 From here! /////////////////////////////
+			// RFC 2104, H(K XOR opad, H(K XOR ipad, text))
+			/**** Inner Digest ****/
+			// H(K XOR ipad, text) : 64 Bytes
+			sha1_kernel_global_128(&p_buf->rx_buf[(0x1000 * (tid/AES_T_NUM)) + sizeof(struct ethhdr) + sizeof(struct iphdr)], &ictx[cur_tid], extended, 64, (tid/AES_T_NUM));
+			/**** Outer Digest ****/
+			// H(K XOR opad, H(K XOR ipad, text)) : 20 Bytes
+			sha1_kernel_global_128(&(ictx[cur_tid].c_state[0]), &octx[cur_tid], extended, 20, (tid/AES_T_NUM));
 			__syncthreads();
 			//-------------------------- Multi threads Job --------------------------------------------
 			// Attach 20-bytes HMAC-SHA authentication digest to packet.
