@@ -31,6 +31,8 @@
 * fancy 코드의 Aho-Corasick Trie와 Failure Link를 구성하는 부분을 확인했다
 * 결론을 먼저 말하자면 **문제가 없다**
 * 일단 github상에 있는 Aho-Corasick 코드를 CPU버전, GPU버전 모두 확인하였고, 그 외에 구글링해서 나오는 코드들도 확인을하였다
+  * fancy의 code와 비교할때에는 구글링해서 나온 code(CPU버전)을 사용했다
+  * 알고리즘을 가장 직설적으로 표현한 code이기 때문이다
 * 코드를 비교했을때 문제되는 부분이 없었다
 * 계속 마음에 걸리던 부분이 **알고리즘 상으로도 문제가 없는가**였다
 	* 이는 fancy의 코드뿐만이아니라 다른 코드들을 보면서도 들었던 생각이었다
@@ -38,6 +40,168 @@
 
 ---
 ### Aho-Corasick Algorithm Failure Link 생성 과정
+
+* Failure Link를 이어주는 부분의 코드를 보다가 의문점이 생겼다
+* Aho-Corasick Algorithm을 제대로 작동시키려면 **Failure Link을 잘 이어줘야한다**
+  * 잘 이어준다는 것은 Failure Link를 이어줬을때, data set에 있는 string을 만들 수 있는 node로 이어져야한다는 것이다
+  * 아래의 Example Trie를 참고
+
+
+
+<center> Example Trie </center>
+
+
+
+![Alt_text](image/03.21_aho_corasick_failure_graph.JPG)
+
+* a b c d e의 c는 b c d의 c로 이어지지만, k o c a w의 c는 b c d의 c로 이어지지 않는다
+* 그 이유는 a b c d e의 경우, b c d가 a b c d 로 이어지면서 b c d자체가 data set에 있기 때문이다
+* k o c a w의 경우는, k o c d e라는 string이 input으로 들어왔다고 가정해보자
+* k o c d e는 이 string이 가지는 어떠한 substring도 data set에 없다
+* 그래서 당연히 c d e라는 string이 가지는 어떠한 substring도 data set에 없다
+* 그러니 k o c d e의 c에서 Trie 내의 c라는 값을 가지는 다른 node로 이동한다고 해도 data set에 속한 string을 만들 수 없다
+* 그래서 이어주지 않는다
+
+
+
+* 그러면 현재 코드가 Failure Link를 잘 이어주고 있는가를 확인해야한다
+* 먼저 비교확인을 위해 참고한 fancy코드가 아닌 다른 코드를 확인해보자
+
+
+
+<center> Failure Link code : Googling </center>
+
+
+
+![Alt_text](image/03.21_aho_corasick_failure_googling.JPG)
+
+* 위의 코드는 구글링을 하여 찾아낸 Aho-Corasick 코드 중 Failure Link를 구성하는 부분만 발췌한 것이다
+* Trie라는 구조체를 만들어 node로 활용하고, queue를 사용하여 Failure Link를 이어주었다
+* Aho-Corasick 알고리즘을 착실히 따라가면서 만든 코드이다
+* go는 현재 node의 child node에 대한 정보를 담고 있는 배열이다
+* code를 보면 current node를 이용해 Faiilure Link를 찾지만 결국 이 과정을 통해 찾은 Failure Link는 next node(child node)를 위한 것이다
+  * **이를 기억해두자!!**
+* a부터 z까지의 알파벳을 확인하므로 26개의 경우를 확인하며 child node들의 Failure Link를 이어준다
+
+* 의문점이 생긴 부분은 **else의 내부의 while문 부분**이다
+* 현재 node의 Failure Link가 이어진 node를 dest라 선언한다
+* while문에서 dest가 root가 아니면서, child node가 있을때까지 Failure Link를 따라간다
+* next의 Failure Link를 정해줘야하므로 dest -> go로 한칸 더 가준다
+* 의문점은 **그냥 Failure Link만 따라가는데 적절한 node에 Failure Link를 이어줄 수 있는가**이다
+* 이는 3가지의 경우로 나누어서 생각해봐야한다
+
+
+
+#### 1. 현재 node의 depth가 1 이하인 경우
+
+* 이 경우에 속하는 경우는 root node인 경우와 root node의 직속 child node인 경우이다
+* 두가지의 경우 모두 Failure Link를 root node로 이어주므로 따로 큰 설명이 필요없다
+
+
+
+#### 2.  현재 node의 depth가 2인 경우
+
+* 이 경우에는 Failure Link로 갈 수 있는 node가 depth가 1인 node로 정해져있다
+  * root node로 간다는 것은 더 이상 갈 수 있는 곳이 없었다는 뜻이므로 생략한다
+* 그리고 그 node는 무조건 1개이다
+
+* 그 이유는 Failure Link는 **현재 node의 depth보다 depth가 작은 node로만** 이어질 수 있고, depth 1인 node는 **Trie의 특성상** 알파벳당 1개이기 때문이다
+* 그래서 depth가 1인 node가 없으면 root node로 Failure Link가 이어지고, 있다면 depth가 1인 node로 이어진다
+* 그러면 여기서 확실히 해야하는 것은, **depth가 1인 node로 이어지는 것이 정당한가**이다
+* **결론부터 말하자면 정당하다**
+* 이를 이해하려면 위에서 Failure Link를 이어주려면 Failure Link를 이어서 만든 string이 data set에 있는가에 대해서 생각을 해봐야한다
+* 위의 Example Trie를 다시보자
+
+![Alt_text](image/03.21_aho_corasick_failure_graph.JPG)
+
+* 위의 Trie를 보면 a b c d e의 b가 b c d의 b로 이어지고 있는데, 이 경우가 현재 node의 depth가 2인 경우이다
+* 이 경우를 보면, a b c d e의 b는 b c d의 b로 Failure Link를 이어주게 되면, data set에 있는 b로 시작하는 string 중에 하나는 만들 수 있는 가능성이 있다
+  * depth가 1인 node 중에 b가 있으면 그 뒤가 어찌됐든간에 **아무튼 b로 시작하는 string이 data set에 있다**
+  * 실제로 못 만들더라도, 일단 b로 시작하는 string이 data set에 존재하니 이어주는 것이다
+
+#### 3. 현재 node의 depth가 2보다 큰 경우
+
+* 이 경우에는 현재 node 이전까지 이어준 Failure Link는 모두 잘 이어줬다는 가정이 필요하다
+  * 1번, 2번의 경우에서 현재 node의 depth가 0 ~ 2인 경우를 증명하였으므로 충분히 가정할 수 있다
+  * 수학적 귀납법을 사용한다....ㅎ 
+* 현재 node의 depth를 n이라 가정했을 때, 이 경우에는 Failure Link로 갈 수 있는 node는 depth가 n 미만인 모든 node이다
+  * root node는 1번의 경우와 동일한 이유로 생략한다
+
+* 그 이유는 1번의 경우와 동일하다
+* 1번의 경우와 다른 점은, depth가 m(0 < m < n)인 node가 여러개일 수 있으며, 그 node로 이어진다고 하더라도 data set에 있는 string을 만들 수 없을 수도 있다는 것이다
+* depth가 m인 node가 여러개일 수 있다는 점은 자명하다
+* depth가 m인 node로 이어진다고 하더라도 data set에 있는 string을 만들 수 없을 수 있는 이유는 현재 node의 직전 node때문이다
+* 위의 Example Trie를 다시보자
+
+![Alt_text](image/03.21_aho_corasick_failure_graph.JPG)
+
+* k o c a w의 c가 b c d의 c로 이어지지 않는 경우가 바로 위에서 설명한 경우이다
+* 서두에 간략히 설명을 했는데, k o c a w의 c에서 b c d의 c로 이어진다고해서 data set에 있는 string을 만들 수 없다
+* k o c a w의 c가 b c d의 c로 이어졌다고 가정하자
+* 그렇게 되면 k o c d라는 input string이 들어왔을 때, k o c에서 b c d의 c로 이어지게 되고, 그러면 k o c d라는 string은 data set에 없지만 b c d에서 d에 있는 output link를 만나서 **data set에 있는 string(b c d)를 만났다**라고 카운트하게 된다
+* 이를 방지하기 위해 k o c a w에서의 c는 b c d의 c로 이어지면 안된다
+* 그렇다면 위의 code가 이를 반영하고 있는지가 중요하다
+  * **즉, 단순히 Failure Link를 따라가기만 하면서 이어줄 Failure Link를 찾아도 되는가이다**
+* 이도 당연히 **정당하다**
+* 그 이유는 위에서 말한 기억해두자고한 부분에서 나온다
+
+
+
+<center> Failure Link code : Googling </center>
+
+
+
+![Alt_text](image/03.21_aho_corasick_failure_googling.JPG)
+
+* code를 보면 current node를 이용해 Faiilure Link를 찾지만 결국 이 과정을 통해 찾은 Failure Link는 next node(child node)를 위한 것이다
+* 이 부분을 기억해두자고 했는데 이 부분이 key point가 된다
+* 또 하나의 key point는 현재의 경우를 서술한 초반부에 이야기한 현재의 node 이전에 이어준 Failure Link가 모두 잘 이어졌다는 가정이다
+* 가정에 의해, current node의 Failure Link는 잘 이어져있다
+* 그렇다면, current node의 Failure Link를 따라가면 data set에 있는 string을 만들 수 있다
+* 그래서 current node의 Failure Link를 따라가서 현재 node의 값을 가진 child node가 있는지 확인을 하고 있다면 이를 next node의 Failure Link로 이어주는 것이다
+* 만약 현재 node의 값을 가진 child node가 없다면 dest가 root node라는 것이기 때문에 그냥 dest(= root node)를 next node의 Failure Link로 이어주면 된다
+* 요약하자면 **data set에 있는 string을 만들 수 있음이 확실한 parent node의 Failure Link를 이용하자**이다
+
+
+
+* 위의 3가지 경우에 의해 Failure Link를 따라가기만 해도 적절한 node에 Failure Link를 이어줄 수 있다
+
+---
+
+### fancy의 code 알고리즘에 부합하는가
+
+* Google에 있는 code가 알고리즘에 부합하는지 확인했으니 fancy의 code가 알고리즘에 부합하는지도 확인해보아야한다
+
+* fancy의 code를 확인해보자
+
+
+
+<center> Failure Link code : fancy </center>
+
+
+
+![Alt_text](image/03.21_aho_corasick_failure_fancy.JPG)
+
+* 우리가 확인해야할 점은 2가지이다
+
+1. Failure Link를 잘 따라가는가
+2. 현재 node의 Failure Link를 확인하기위해 이전 node의 Failure Link를 사용하는가
+
+* 위의 두 문제는 다음을 통해 증명할 수 있다
+* 먼저 failure에 현재 node의 다음 node의 Failure Link를 대입한다
+  * state에 현재 node의 다음 node의 위치가 담겨있다
+* while문을 보면, failure에 대입된 값의 state가 존재하는지(-1이면 존재하지 않음) 확인하면서 Failure Link를 따라간다
+  * 구글링한 code에서의 dest -> go[i]와 같은 역할
+  * **Failure link를 잘 따라간다는 증거**
+* while문을 빠져나오게 됐다는 것은, state가 존재한다는 것이다
+  * 그것이 root node이든지 아니든지
+  * root node의 state는 root node이므로
+* 이를 arr\[state\]\[ch\]의 위치의 node의 Failure Link에 대입해준다
+  * 현재 node의 다음 node의 다음 node
+  * 현재 node의 다음 node의 Failure Link로 현재 node의 다음 node의 다음 node의 Failure Link를 찾아주었으므로 이는 **이전 node의 Failure Link를 사용하여 현재 node의 Failure Link를 확인하는가**에 대한 증거가 된다
+    * 말이 좀 어렵지만 두 node가 Parent-Child 관계라는 것을 의미한다
+* 이렇게 되면 root node의 state를 가져왔어도 넣어주고, 아니라면 적절한 Failure Link를 넣어준다
+* 따라서 **fancy의 Failure Link를 구성하는 code는 정당하다**
 
 
 
@@ -109,7 +273,7 @@ ___
    * 그런데 A B C D E는 A부터 시작하고, B C D는 B부터 시작하는데 D에도 Output Link가 찍혀있을까?
    * 이 부분은 추후에 nids를 돌려보면서 확인해봐야할듯하다
 * **해결됨** -> rule matching problem solution 참고
-   
+  
 2. Trie를 타다가 root로 다시 돌아왔을때, Output Link를 확인해야하는가
    * root는 시작점이라는 것을 제외하고는 아무 의미가 없는 node이다
    * 그러면 여기서 Output Link를 확인하지 말고 그냥 while문을 탈출시키는게 더 좋지 않을까?
