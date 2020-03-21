@@ -23,10 +23,25 @@
     * ~~Aho-Corasick 알고리즘이 어떻게 적용되었는지 확인하기~~
   * ~~state로 저장해주는 값들의 의미 알아보기~~
   * ~~thread 분배 생각해보기~~
-  * Aho-Corasick의 Trie와 Failure Link 구성하는 부분 구현확인하기
+  * ~~Aho-Corasick의 Trie와 Failure Link 구성하는 부분 구현확인하기~~
 * dpdk mempool 공부하기
 ---
+## 03/21 현재상황
 
+* fancy 코드의 Aho-Corasick Trie와 Failure Link를 구성하는 부분을 확인했다
+* 결론을 먼저 말하자면 **문제가 없다**
+* 일단 github상에 있는 Aho-Corasick 코드를 CPU버전, GPU버전 모두 확인하였고, 그 외에 구글링해서 나오는 코드들도 확인을하였다
+* 코드를 비교했을때 문제되는 부분이 없었다
+* 계속 마음에 걸리던 부분이 **알고리즘 상으로도 문제가 없는가**였다
+	* 이는 fancy의 코드뿐만이아니라 다른 코드들을 보면서도 들었던 생각이었다
+	* 이 부분에 대해서 아래에 자세히 서술했다
+
+---
+### Aho-Corasick Algorithm Failure Link 생성 과정
+
+
+
+---
 ## 03/20 현재상황
 
 * nids에 대한 공부는 끝났다
