@@ -26,6 +26,171 @@
   * ~~Aho-Corasick의 Trie와 Failure Link 구성하는 부분 구현확인하기~~
 * dpdk mempool 공부하기
 ---
+## 03/23 현재상황
+
+* dpdk mempool을 공부중이다
+
+---
+
+### 요약
+
+* rte\_eth\_rx\_burst는 결국 ixgbe\_recv\_pkts를 호출한다
+* ixgbe\_recv\_pkts에서 실제로 packet을 가져오는 일은 rte\_mbuf\_raw\_alloc이 한다
+* rte\_mbuf\_raw\_alloc은 결국 \_\_mempool\_generic\_get을 호출한다
+* \_\_mempool\_generic\_get이 packet을 가져오는 과정은 다음과 같이 진행된다
+  1. rte\_mempool에 저장된 rte\_mempool\_cache에 packet이 있는지 확인 후 있으면 가져온다
+  2. cache에 packet이 없다면 rx\_ring에서 dequeue시켜 packet을 가져온다
+* 각 함수들의 호출과 호출의 flow 과정에서 무수한 pointer들의 요청이....
+  * GPU상에서 packet을 가져오는 우리는 이런 과정으로 불러올 수 없다
+
+---
+
+### 세부 호출 흐름과 과정
+
+* 10G NIC의 경우 rte\_eth\_rx\_burst를 호출하면 rte\_eth\_dev구조체 변수인 dev의 field변수로 들어가있는 함수 포인터 rx\_pkt\_burst를 호출한다
+
+
+
+<center> rx_pkt_burst call (in rte_ethdev.h) </center>
+
+
+
+![Alt_text](image/03.23_rx_pkt_burst_call.JPG)
+
+
+
+* rx_pkt_burst는 eth\_ixgbe\_dev\_init함수 내에서 ixgbe\_recv\_pkts라는 값이 대입된다
+
+
+
+<center> Substitute ixgbe_recv_pkts (in ixgbe_ethdev.c) </center>
+
+
+
+![Alt_text](image/03.23_ixgbe_recv_pkts_call_in_eth_ixgbe_dev_init.JPG)
+
+
+
+* **rte\_eth\_rx\_burst를 호출했을 때 실제로 호출되는 함수는 ixgbe\_recv\_pkts라는 뜻이다**
+* 다음은 ixgbe\_recv\_pkts의 원형이다
+
+
+
+<center> ixgbe_recv_pkts </center>
+
+
+
+![Alt_text](image/03.23_ixgbe_recv_pkts.JPG)
+
+
+
+* 이 함수가 하는 일은 당연히 mempool에서 packet을 꺼내와서 rx_pkts라는 rte_mbuf 배열에 하나씩 달아주는 것이다
+* 그 과정은 다음과 같다
+* 먼저 mempool에서 packet을 꺼내오게 하기위해 rte\_mbuf\_raw\_alloc를 호출한다
+
+
+
+<center> Call of rte_mbuf_raw_alloc </center>
+
+
+
+![Alt_text](image/03.23_rte_mbuf_raw_alloc_call_in_ixgbe_recv_pkts.JPG)
+
+* rte\_mbuf\_raw\_alloc은 rte\_mempool\_get을 호출한다
+
+
+
+<center> Call of rte_mempool_get (in rte_mbuf.h) </center>
+
+
+
+![Alt_text](image/03.23_rte_mempool_get_call.JPG)
+
+* rte\_mempool\_get은 rte\_mempool\_get\_bulk를 호출한다
+
+
+
+<center> Call of rte_mempool_get_bulk (in rte_mempool.h)</center>
+
+
+
+![Alt_text](image/03.23_rx_mempool_get_bulk_call.JPG)
+
+* rte\_mempool\_get\_bulk는 rte\_mempool\_generic\_get을 호출한다
+
+
+
+<center> Call of rte_mempool_generic_get (in rte_mempool.h) </center>
+
+
+
+![Alt_text](image/03.23_rte_mempool_generic_get_call.JPG)
+
+* rte\_mempool\_generic\_get은 다시 \_\_mempool\_generic\_get을 호출한다
+
+
+
+<center>Call of __mempool_generic_get (in rte_mempool.h)</center>
+
+
+
+![Alt_text](image/03.23__mempool_generic_get_call.JPG)
+
+* **그렇게 rte\_mbuf\_raw\_alloc은 결국 \_\_mempool\_generic\_get을 호출한 셈이 된다**
+* 아래는 \_\_mempool\_generic\_get의 함수의 원형이다
+
+
+
+<center>__mempool_generic_get</center>
+
+
+
+![Alt_text](image/03.23__mempool_generic_get.JPG)
+
+* **이 함수가 하는 일은 rte\_mempool에 저장되어 있는 packet을 불러오는 것이다**
+* 그런데 rte\_mempool에 있는 packet을 계속 접근해서 가져오게 되면 여러개의 lcore들이 하나의 공간을 계속 접근하게 된다
+* 이렇게 되면 race problem을 처리하기위한 overhead가 발생하여 dpdk는 cache를 사용한다
+* rte\_mempool\_cache라는 구조체에 있는 packet을 먼저 꺼내와서 넘겨주고, cache 안에 packet이 없을 경우에 rx\_queue에서 packet을 꺼내와서 넘겨준다
+* 여기서 cache라는 것은 각 lcore마다 존재한다
+* 실제 lcore의 cache에 저장되는 값을 말하는 것은 아니다
+* lcore들이 packet을 가장 먼저 저장하는 곳을 말한다
+
+
+
+<center> dpdk mempool cache </center>
+
+
+
+![Alt_text](image/03.23_dpdk_mempool_cache.jpg)
+
+
+
+* 위의 그림처럼 각 core들이 cache에 packet을 계속 저장해주고, 이들을 mempool에 옮겨주는 작업을 해준다
+* 이때, mempool에 과도한 접근을 막기위해서 cache에 있는 packet을 먼저 꺼내주게된다
+* cache에 packet이 없을 경우에만, rte\_ring으로 가서 packet을 꺼내서 가져온다
+* rte\_ring에서 packet을 가져오는 것은 rte\_mempool\_ops\_dequeue\_bulk라는 함수를 호출하여 가져온다
+
+
+
+<center> rte_mempool_ops_dequeue_bulk </center>
+
+
+
+![Alt_text](image/03.23_rte_mempool_ops_dequeue_bulk_call_in__mempool_generic_get.JPG)
+
+* 이 함수는 따라들어가도 mp(rte\_mempool 구조체)안에 있는 ring에서 obj\_table에 직접 넣어주는 일밖에 안하므로 함수 호출 flow는 생략한다
+* 이렇게 꺼내온 packet(rte_mbuf 구조체 형식)에 packet의 data들을 채워 넣어주고 nb\_rx를 증가시켜준다
+* 지정된 batch값만큼 packet을 받았거나, state error를 발견하거나, rte\_mbuf\_raw\_alloc을 통한 mbuf 할당이 실패했을때, packet을 가져오는 cycle하나를 끝낸다
+* 이렇게 rte\_eth\_rx\_burst의 함수의 역할은 끝이난다
+
+---
+
+### 남은 일
+
+* fancy의 rx\_kernel은 어떠한 과정을 통해 packet을 가져오는지 확인할 필요가 있다
+* 이를 dpdk의 mempool이 packet을 호출해오는 과정과 비교하여 **정확히 어떠한 부분이 다르고, 왜 다를 수 밖에 없었는지**에 대해서 정리를 해보아야한다
+
+---
 ## 03/21 현재상황
 
 * fancy 코드의 Aho-Corasick Trie와 Failure Link를 구성하는 부분을 확인했다

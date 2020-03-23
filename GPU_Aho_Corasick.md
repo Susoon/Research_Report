@@ -144,7 +144,7 @@
 
 
 
-![Alt_text](C:/Users/김수환/AppData/Local/Packages/CanonicalGroupLimited.Ubuntu18.04onWindows_79rhkp1fndgsc/LocalState/rootfs/home/add/work/Research_Report/image/03.20_aho_corasick_thread_problem_origin.JPG)
+![Alt_text](image/03.20_aho_corasick_thread_problem_origin.JPG)
 
 * 기존 code에서는 각 thread가 배정받은 payload_len/NIDS_THPERPKT(16bytes) 만큼만 확인한다
 
@@ -154,7 +154,7 @@
 
 
 
-![Alt_text](C:/Users/김수환/AppData/Local/Packages/CanonicalGroupLimited.Ubuntu18.04onWindows_79rhkp1fndgsc/LocalState/rootfs/home/add/work/Research_Report/image/03.20_aho_corasick_thread_problem_solved.JPG)
+![Alt_text](image/03.20_aho_corasick_thread_problem_solved.JPG)
 
 * 수정된 code에서는 while문의 조건을 true로 주어 내부에서 조건이 만족되지 않는한 무한 loop를 돌게 했다
 * 다른 부분은 동일하게 주고, 내부에 loop 종료 조건을 추가해주었다
@@ -177,7 +177,7 @@
 
 
 
-![Alt_text](C:/Users/김수환/AppData/Local/Packages/CanonicalGroupLimited.Ubuntu18.04onWindows_79rhkp1fndgsc/LocalState/rootfs/home/add/work/Research_Report/image/03.21_aho_corasick_failure_graph.JPG)
+![Alt_text](image/03.21_aho_corasick_failure_graph.JPG)
 
 * a b c d e의 c는 b c d의 c로 이어지지만, k o c a w의 c는 b c d의 c로 이어지지 않는다
 * 그 이유는 a b c d e의 경우, b c d가 a b c d 로 이어지면서 b c d자체가 data set에 있기 때문이다
@@ -198,7 +198,7 @@
 
 
 
-![Alt_text](C:/Users/김수환/AppData/Local/Packages/CanonicalGroupLimited.Ubuntu18.04onWindows_79rhkp1fndgsc/LocalState/rootfs/home/add/work/Research_Report/image/03.21_aho_corasick_failure_googling.JPG)
+![Alt_text](image/03.21_aho_corasick_failure_googling.JPG)
 
 * 위의 코드는 구글링을 하여 찾아낸 Aho-Corasick 코드 중 Failure Link를 구성하는 부분만 발췌한 것이다
 * Trie라는 구조체를 만들어 node로 활용하고, queue를 사용하여 Failure Link를 이어주었다
@@ -237,7 +237,7 @@
 * 이를 이해하려면 위에서 Failure Link를 이어주려면 Failure Link를 이어서 만든 string이 data set에 있는가에 대해서 생각을 해봐야한다
 * 위의 Example Trie를 다시보자
 
-![Alt_text](C:/Users/김수환/AppData/Local/Packages/CanonicalGroupLimited.Ubuntu18.04onWindows_79rhkp1fndgsc/LocalState/rootfs/home/add/work/Research_Report/image/03.21_aho_corasick_failure_graph.JPG)
+![Alt_text](image/03.21_aho_corasick_failure_graph.JPG)
 
 * 위의 Trie를 보면 a b c d e의 b가 b c d의 b로 이어지고 있는데, 이 경우가 현재 node의 depth가 2인 경우이다
 * 이 경우를 보면, a b c d e의 b는 b c d의 b로 Failure Link를 이어주게 되면, data set에 있는 b로 시작하는 string 중에 하나는 만들 수 있는 가능성이 있다
@@ -260,7 +260,7 @@
 * depth가 m인 node로 이어진다고 하더라도 data set에 있는 string을 만들 수 없을 수 있는 이유는 현재 node의 직전 node때문이다
 * 위의 Example Trie를 다시보자
 
-![Alt_text](C:/Users/김수환/AppData/Local/Packages/CanonicalGroupLimited.Ubuntu18.04onWindows_79rhkp1fndgsc/LocalState/rootfs/home/add/work/Research_Report/image/03.21_aho_corasick_failure_graph.JPG)
+![Alt_text](image/03.21_aho_corasick_failure_graph.JPG)
 
 * k o c a w의 c가 b c d의 c로 이어지지 않는 경우가 바로 위에서 설명한 경우이다
 * 서두에 간략히 설명을 했는데, k o c a w의 c에서 b c d의 c로 이어진다고해서 data set에 있는 string을 만들 수 없다
@@ -278,7 +278,7 @@
 
 
 
-![Alt_text](C:/Users/김수환/AppData/Local/Packages/CanonicalGroupLimited.Ubuntu18.04onWindows_79rhkp1fndgsc/LocalState/rootfs/home/add/work/Research_Report/image/03.21_aho_corasick_failure_googling.JPG)
+![Alt_text](image/03.21_aho_corasick_failure_googling.JPG)
 
 * code를 보면 current node를 이용해 Faiilure Link를 찾지만 결국 이 과정을 통해 찾은 Failure Link는 next node(child node)를 위한 것이다
 * 이 부분을 기억해두자고 했는데 이 부분이 key point가 된다
@@ -307,7 +307,7 @@
 
 
 
-![Alt_text](C:/Users/김수환/AppData/Local/Packages/CanonicalGroupLimited.Ubuntu18.04onWindows_79rhkp1fndgsc/LocalState/rootfs/home/add/work/Research_Report/image/03.21_aho_corasick_failure_fancy.JPG)
+![Alt_text](image/03.21_aho_corasick_failure_fancy.JPG)
 
 * 우리가 확인해야할 점은 2가지이다
 
