@@ -25,7 +25,243 @@
   * ~~thread 분배 생각해보기~~
   * ~~Aho-Corasick의 Trie와 Failure Link 구성하는 부분 구현확인하기~~
 * dpdk mempool 공부하기
+  * dpdk mempool과 cache line이 어떻게 사용되는지 확인
+  * dpdk에서 descriptor와 doorbell이 어떻게 align되어있는지 확인
+  * dpdk에서 packet 저장방식이 contiguous한지 확인
 ---
+## 03/25 현재상황
+
+* dpdk mempool에 대한 추가 조사를 하고 있다
+
+---
+
+### 1. dpdk mempool과 cache line이 어떻게 사용되는지 확인
+
+* 이 부분은 아직 제대로 알아낸 것이 없다
+* 개념적으로는 알아낸 packet의 rx과정은 다음과 같다
+  1. 각 lcore들이 packet을 받아서 rte_mempool_cache라는 구조체에 담아준다
+  2. rte_mempool_cache에 더 이상 담을 수 없으면 rx queue에 담아준다
+     * rte_mempool_ops라는 구조체에 있는 dequeue라는 함수 포인터를 사용한다
+     * dequeue 함수는 어떠한 드라이버를 사용하냐에 따라 다른 함수가 대입된다
+     * 10G NIC의 드라이버인 ixgbe의 경우 대입되는 함수를 찾지 못했다
+  3. packet을 받아서 application에게 넘겨주기 위해 rte_mempool_cache를 먼저 참조한다
+  4. cache에서 꺼내올 packet이 없다면 rx queue에서 packet을 꺼내온다
+* 위의 과정이 100% 정확하다고 확신할 수는 없으나 대략적인 함수의 흐름과 dpdk 홈페이지의 document를 확인한 결과 80%이상 맞는 것 같다
+* 직접적인 함수 call flow를 찾지 못해 아직 해결하지 못했다
+
+---
+
+### 2. dpdk에서 descriptor와 doorbell이 어떻게 aligned되어있는지 확인
+
+* 이 부분에 대해서는 먼저 짚고 넘어가야할 것이 있다
+* aligned라는 키워드의 역할이다
+* packed라는 키워드와 혼동이 있어 개념을 확인해보았다
+
+---
+
+#### aligned and packed test
+
+* aligned는 **\_\_attribute\_\_((aligned(n)))**의 형태로 사용되며 n에 align할 byte의 단위가 대입된다
+* n은 2의 제곱수 형태만 가능하며 생략하여 aligned로만 써도 된다
+* 구조체를 nbyte를 기준으로 끊어서 저장해주는 역할을 한다
+  * 구조체에 접근할때 몇 byte 단위로 건너뛰며 접근할지를 정해주는 것이다
+
+
+
+<center> aligned example </center>
+
+
+
+![Alt_text](image/03.25_structure_aligned.png)
+
+* 위의 사진에서 packed는 없다고 생각하자
+  * 위의 예시처럼 사용하면 있으나마나이기 때문에 그냥 그림만 보면 된다
+* packed는 **\_\_attribute\_\_((packed))**의 형태로 사용된다
+  * 괄호는 하나만 써도 된다
+* aligned를 하게 되면 위의 사진처럼 padding이 생기게되는데 이런 padding없이 contiguous하게 할당되도록하는 것이 packed이다
+  * 위의 예시처럼 packed를 사용하면 있으나마나인 이유
+  * 위의 예시는 4byte단위로 끊어서 저장(aligned)하게 하고 4byte단위로 packing해서 빈공간이 그대로 남아있다
+  * 4byte단위로 packing했다는 것은 4byte보다 작은 단위에서는 padding을 없애지 않겠다는 뜻
+  * 위의 예시는 pragma라는 키워드를 통해서 packing하는 단위를 지정해준 것이고 보통 1byte기준으로 packing하므로 padding을 아예 없애주게 된다
+* 이런 부분이 실제로 어떻게 저장되는지 보기 위해서 실험을 하나 해보았다
+
+
+
+<center> aligned and packed test structure </center>
+
+
+
+![Alt_text](image/03.25_aligned_packed_test_structure.JPG)
+
+* 위와 같은 field를 가지는 structure를 선언했다
+* 위와 같이 field를 준 이유는 다음과 같다
+  1. char a다음 double b를 두어 packed를 사용하지 않으면 7byte의 padding이 생기게 하기 위함
+  2. double c 다음 char d를 두어 1번과 유사한 효과를 기대함
+  3. struct안에 double e와 double f를 준 이유는 이 둘이 합쳐서 하나의 16byte의 data로 인식될 가능성이 있는지 확인하기 위해서
+* 동일한 field를 가지는 structure를 다수 만들었는데, 이들의 차이점은 다음과 같다
+  * 위의 사진처럼 아무런 조건도 주지 않은 일반 structure
+  * aligned만 8byte로 준 경우
+  * aligned만 16byte로 준 경우
+  * byte를 지정하지 않고 aligned만 사용한 경우
+  * aligned 없이 packed만 준 경우
+  * aligned를 8byte로 주고 packed를 준 경우
+  * aligned를 16byte로 주고 packed를 준 경우
+  * byte를 지정하지 않고 aligned만 사용하고 packed를 준 경우
+  * packed는 모두 1byte 단위로 지정해주었다
+* 이러한 조건으로 실험한 이유는 다음과 같다
+  1. word의 크기가 8byte이므로 8byte로 aligned 시킨 것과 그보다 큰 16byte로 aligned 시킨 것의 비교가 필요하다고 추측했다
+  2. 8byte보다 작은 크기의 aligned는 test하지 않은 이유는 현재 원하는 data가 cache size인 64byte의 경우에 대한 것이기 때문이다
+  3. byte를 지정하지 않고 aligned만을 사용한 경우에는 조건을 주지 않을 경우와 어떻게 다른지 확인하기 위해서
+* output data로는 구조체의 총 size와 각 field 변수들의 pointer 위치를 시작 위치를 0으로 보았을 때 몇 byte 뒤에 있는지를 출력하게 하였다
+
+
+
+<center> aligned and packed test result : total size </center>
+
+
+
+![Alt_text](image/03.25_aligned_packed_test_result.JPG)
+
+* 위의 사진은 구조체의 총 size만을 먼저 출력한 것이다
+
+
+
+<center> aligned and packed test result of not packed : total size and individual field's location </center>
+
+
+
+![Alt_text](image/03.25_aligned_packed_test_result_not_packed.JPG)
+
+* 위의 사진은 packed를 주지 않은 구조체들의 총 size와 각 field들의 위치를 나타낸 것이다
+* packed를 주지 않은 구조체들의 경우 모두 총 size와 field들의 위치가 동일한 것을 확인할 수 있다
+  * 그 이유는 아래의 결과를 이용해 추측할 수 있다
+
+
+
+<center> aligned and packed test result of packed : total size and individual field's location </center>
+
+
+
+![Alt_text](image/03.25_aligned_packed_test_result_packed.JPG)
+
+* 위의 사진은 packed까지 준 구조체들의 총 size와 각 field들의 위치를 나타낸 것이다
+* 이번 결과에서는 구조체의 총 size는 다양하게 나왔으나 각 field들의 위치는 동일하게 나왔다
+* 다음은 각 case에 따른 결과 분석이다
+
+1. packed만 준 경우
+   * 해당 경우에서는 packed의 조건만 주어졌기 때문에 1byte단위로 묶이게 된다
+   * 따라서 padding이 모두 사라져 가장 작은 size인 34byte만을 차지함을 알 수 있다
+2. aligned(8)과 packed를 준 경우
+   * field들의 위치는 packed만 준 경우와 동일하지만 구조체의 총 size는 다르다
+   * 그 이유는 마지막 field 변수인 f가 26번째 위치에서 8byte를 차지하는데 이렇게 되면 32byte(4 * 8byte)를 넘어간다
+   * aligned를 8byte단위로 하라는 조건을 주었으므로 남은 2byte를 위해 8byte를 할당해주어 40byte를 사용하게 되는 것이다
+3. aligned(16)과 packed를 준 경우
+   * 위의 2번 경우와 동일하다
+   * 동일한 이유에 의해서 32byte를 넘어가는 마지막 field 변수 f를 위해서 16byte를 할당해주어 48byte를 사용하게 된 것이다
+4. byte의 조건 없이 aligned와 packed를 준 경우
+   * 이 경우는 충분히 생각해볼 여지가 있다
+   * 총 size가 aligned(16)과 동일하다
+   * 실험 전에는 byte의 조건 없이 aligned만 주게되면 기본 aligned 단위인 8byte 단위로 align할 것이라 추측했다
+   * 그렇게 되면 aligned(8)을 준 경우와 동일하게 나와야한다
+   * 하지만 결과는 달랐고, 따라서 이에 대해선 추가적으로 조사해보았다
+
+
+
+<center> aligned without condition of byte </center>
+
+
+
+![Alt_text](image/03.25_aligned_doc.JPG)
+
+* 위의 문서는 gcc  gnu의 공식 문서 중 aligned에 관한 부분이다
+* 우리가 필요한 부분만 요약하자면 **구조체가 가지는 field 중 가장 큰 size의 data type의 size를 단위로 사용한다**이다
+* 그럼 우리가 실험한 구조체에서 가장 큰 size를 가지는 data type은 무엇일까
+* 다시 구조체를 확인해보자
+
+
+
+<center> aligned and packed test structure </center>
+
+
+
+![Alt_text](image/03.25_aligned_packed_test_structure.JPG)
+
+* 서두에 구조체의 field변수들을 이렇게 둔 이유 중에 structure를 만든 이유를 서술했었다
+* 그 이유는 struct안에 double e와 double f가 합쳐서 하나의 16byte의 data로 인식될 가능성이 있는지 확인하기 위해서이다
+
+* 위의 실험결과와 gnu의 공식 문서를 통해 double e와 double f를 가지고 있는 구조체가 하나의 data type으로 인식되었다는 것을 알 수 있다
+* 실험 결과는 다음과 같다
+
+---
+
+#### aligned and packed test analysis
+
+1. aligned의 경우 **기준이 되는 byte * n(임의의 숫자)**만큼 구조체의 size를 맞춰준다
+2. packed의 경우 기존의 추측과 동일하게 1byte단위로 잘 묶어준다
+3. **field 변수 중 구조체 변수가 있는 경우 구조체 전체가 하나의 data로 인식된다**
+4. aligned에 기준이 되는 byte를 주지 않을 경우 field 변수 중 가장 큰 size를 가지는 data type을 기준으로 aligned한다
+
+---
+
+* 다시 돌아와서 dpdk에서 descriptor와 doorbell이 어떻게 aligned 되어있는지에 대해서 이야기해보자
+* doorbell의 경우는 아직 확인하지 못했다
+* descriptor의 경우 rte\_mempool\_cache 구조체처럼 \_\_rte\_cache\_aligned 매크로를 통해 직접적으로 cache size로 aligned 되어있지는 않지만 모두 64byte를 기준으로 aligned 되어있다
+
+* 그 이유에 대해서는 아직 정확하게는 파악되지 않았지만 아래의 사진으로부터 유추해보았을때 cpu cache size에 맞춘 것으로 보인다
+
+
+
+<center> aligned size comment </center>
+
+
+
+![Alt_text](image/03.25_rte_mbuf_align_description.JPG)
+
+* cacheline과 동일한 layout을 위해 8byte로 align되게끔 강제했다고 한다
+* 이는 rte\_mbuf구조체 내에 buffer의 물리적 address를 담고 있는 union에 대한 설명이다
+
+---
+
+### 3. dpdk에서 packet이 contiguous하게 저장되는가
+
+* 이는 아직 완벽하게 확인되지는 않았다
+* 추측상으로는 **각 buffer가 저장되는 곳은 contiguous하지 않고 이를 가리키는 pointer가 저장되는 곳이 contiguous하다**
+* 이러한 추측을 한 이유는 다음과 같다
+
+
+
+<center> asignment of packets </center>
+
+
+
+![Alt_text](image/03.25_asign_pkts_ixgbe_recv_pkts.JPG)
+
+* 위의 사진을 보면 obj\_table를 이동하면서 cache\_objs의 값을 하나씩 대입하고 있다
+
+* 여기서 cache_objs는 NIC에서 받아온 packet을 저장해둔 rte\_mempool\_cache 구조체의 포인터 변수이다
+* obj\_table은 rte\_mbuf 구조체의 더블포인터 변수로 application에 넘겨주기 위해 packet을 저장하는 곳이다
+* 이를 보면 실제 packet을 넘겨주지 않고 packet의 buffer의 포인터를 넘겨준다는 것을 알 수 있다
+* 또한 이 buffer들이 contiguous하게 할당된 공간에 있는 것도 아니다
+* 필요할때마다 그냥 할당해서 넘겨준다
+* 아직 완벽히 파악하진 못했지만 위의 코드와 dpdk의 홈페이지에 있는 문서에 서술된 packet의 분할 저장 등을 통해 pointer만 contiguous하게 저장하고 실제 buffer들은 각자 저장된다고 추측했다
+
+
+
+<center> dpdk document example </center>
+
+
+
+![Alt_text](image/03.25_dpdk_rte_mbuf.jpg)
+
+* 위의 사진은 하나의 packet을 여러개의 segment로 나누어 저장하는 dpdk의 packet 처리 과정을 보여준 것이다
+* dpdk는 packet을 일정한 크기의 구조체로 나누어 저장한다
+* segment 사이를 포인터로 연결해 이동하며 packet을 관리한다
+* 결국 dpdk의 packet관리에 대한 추측은 chained linked list array이다
+
+
+
+---
+
 ## 03/23 현재상황
 
 * dpdk mempool을 공부중이다
