@@ -29,6 +29,126 @@
   * dpdk에서 descriptor와 doorbell이 어떻게 align되어있는지 확인
   * dpdk에서 packet 저장방식이 contiguous한지 확인
 ---
+## 03/26 현재상황
+
+* dpdk에서 message buffer를 제외한 나머지 구조체들이 어떻게 aligned 되어있는지 확인중이다
+* 일단 descriptor들은 aligned되어있지 않다
+  * 03/25일자의 기록에서는 aligned되어있다고 기록했으나 잘못된 정보이다
+  * 64byte단위로 나누어 떨어지는 크기의 size를 가지지만 64byte단위로 aligned되어 있지는 않다
+
+
+
+<center> descriptor structure example </center>
+
+
+
+![Alt_text](image/03.24_ixgbe_adv_rx_desc.JPG)
+
+* 위의 사진은 ixgbe에 사용되는 rx의 descriptor의 advanced 버전이다
+  * 일반 버전은 따로 보이지 않고, dpdk의 이전 버전에서 사용하던 것의 advanced 버전이거나 기존 linux에서 사용하는 descriptor의 advanced 버전으로 추측된다
+* 위의 descriptor를 보면 aligned되어있지 않음을 알 수 있다
+* 다른 descriptor들도 aligned되어있지 않았다
+  * image에서 03.24일자에 저장된 파일들을 보면 발견한 descriptor들의 코드가 저장되어있다
+* rte\_mbuf와 rte\_mempool을 제외한 구조체 중 aligned되어있는 구조체가 어떤 것이 있는지 찾아보았다
+  * 모든 구조체를 찾아본 것은 아니며, rte\_mempool.h에 있는 구조체를 위주로 찾아보았다
+
+
+
+<center> structure rte_kni_mbuf (in rte_kni_common.h)</center>
+
+
+
+![Alt_text](image/03.26_rte_kni_mbuf_in_rte_kni_common.JPG)
+
+* 위의 구조체는 rx로 받은 packet들을 처리해서 app으로 옮겨주는 kni kernel thread에서 사용되는 구조체이다
+* 구조체 전체가 aligned되어 있지는 않지만 일부 변수들이 aligned되어있음을 확인할 숫 있다
+
+* 아래의 구조체들은 모두 rte\_mempool.h에 있는 구조체이다
+
+
+
+<center> structure rte_mempool_debug_stats </center>
+
+
+
+![Alt_text](image/03.26_rte_mempool_debug_stats_in_rte_mempool.JPG)
+
+
+
+<center> structure rte_mempool_ops </center>
+
+![Alt_text](image/03.26_rte_mempool_ops.JPG)
+
+
+
+<center> structure rte_mempool_memhdr </center>
+
+
+
+![Alt_text](image/03.26_rte_mempool_memhdr.JPG)
+
+
+
+<center> structure rte_mempool_objhdr </center>
+
+
+
+![Alt_text](image/03.26_rte_mempool_objhdr.JPG)
+
+
+
+* 위의 구조체들은 모두 rte\_mempool.h에 있는 구조체들이다
+  * 몇개 더 있으나 생략하고 aligned된 것 2개, aligned 되지 않은 것 2개만 가져왔다
+* 각각 확인해보면 aligned된 것도 있고 되지 않은 것도 있다
+* 각각 가지고 있는 field 변수와 구조체의 이름을 통해 추측해보았을때, **lcore에 직접 호출되는 구조체인가** 에 따라 aligned를 해주는 듯 하다
+* 아래의 사진들은 dpdk의 document에서 발췌한 사진들이다
+
+
+
+<center> dpdk Mempool diagram </center>
+
+
+
+![Alt_text](image/03.23_dpdk_mempool_cache.jpg)
+
+* 위의 사진은 dpdk의 mempool에 대한 diagram이다
+
+
+
+<center> dpdk mbuf flow diagram </center>
+
+
+
+![Alt_text](image/03.26_dpdk_mbuf_flow.png)
+
+
+
+* 위의 사진은 dpdk에서 mbuf의 flow에 대한 diagram이다
+* 두 사진을 잘 살펴보면 하나의 사진으로 합칠 수 있다는 것을 알 수 있다
+  * mempool diagram에서 lcore가 mbuf flow diagram부분
+  * mbuf flow diagram에서 mempool이 mempool diagram부분
+* 그렇다면 여기서 두 사진에 모두 사용되는 구조체가 어떤것일까를 추측해보면
+  1. rte\_mbuf
+  2. rte\_mempool
+  3. rte\_mempool\_ops
+* 등이 있다
+  * 이외의 것들은 아직 찾지 못함
+* 위의 구조체들은 모두 **cache line의 크기로 aligned 되어있다!!**
+* 또한 제일 처음 제시한 rte\_kni\_mbuf의 경우 lcore에서 사용되지만 구조체 전체가 aligned 되어 있지 않다
+* 하지만 buf\_addr과 second cache line이라는 주석 밑의 pad3라는 변수는 aligned 되어 있다
+* buf\_addr은 일반적으로 buffer의 다음 segment를 가리키는 pointer이거나 일반 buffer를 가리키는 pointer이다
+* pad3라는 변수는 주석에서 cache line이라고 아예 설명해주고 있다
+* 이러한 사실을 미루어보았을때, **lcore에서 직접 호출되는 구조체** 의 경우에 aligned 해주는 것이 아닌가라는 추측이 가능하다
+  * aligned해주는 것도 \_\_rte\_cache\_aligned이니 cache를 통해 lcore에게 가야해서 그런 것 같다
+
+
+
+
+
+
+
+---
+
 ## 03/25 현재상황
 
 * dpdk mempool에 대한 추가 조사를 하고 있다
@@ -206,7 +326,9 @@
 * 다시 돌아와서 dpdk에서 descriptor와 doorbell이 어떻게 aligned 되어있는지에 대해서 이야기해보자
 * doorbell의 경우는 아직 확인하지 못했다
 * descriptor의 경우 rte\_mempool\_cache 구조체처럼 \_\_rte\_cache\_aligned 매크로를 통해 직접적으로 cache size로 aligned 되어있지는 않지만 모두 64byte를 기준으로 aligned 되어있다
-
+  * 잘못된 정보이다
+  * 03/26일자를 기준으로 수정됨
+  * 03/26일자 기록 참고
 * 그 이유에 대해서는 아직 정확하게는 파악되지 않았지만 아래의 사진으로부터 유추해보았을때 cpu cache size에 맞춘 것으로 보인다
 
 
