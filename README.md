@@ -61,7 +61,7 @@
 
 #### aligned and packed test
 
-* aligned는 **\_\_attribute\_\_((aligned(n)))**의 형태로 사용되며 n에 align할 byte의 단위가 대입된다
+* aligned는 **\_\_attribute\_\_((aligned(n)))** 의 형태로 사용되며 n에 align할 byte의 단위가 대입된다
 * n은 2의 제곱수 형태만 가능하며 생략하여 aligned로만 써도 된다
 * 구조체를 nbyte를 기준으로 끊어서 저장해주는 역할을 한다
   * 구조체에 접근할때 몇 byte 단위로 건너뛰며 접근할지를 정해주는 것이다
@@ -76,7 +76,7 @@
 
 * 위의 사진에서 packed는 없다고 생각하자
   * 위의 예시처럼 사용하면 있으나마나이기 때문에 그냥 그림만 보면 된다
-* packed는 **\_\_attribute\_\_((packed))**의 형태로 사용된다
+* packed는 **\_\_attribute\_\_((packed))** 의 형태로 사용된다
   * 괄호는 하나만 써도 된다
 * aligned를 하게 되면 위의 사진처럼 padding이 생기게되는데 이런 padding없이 contiguous하게 할당되도록하는 것이 packed이다
   * 위의 예시처럼 packed를 사용하면 있으나마나인 이유
