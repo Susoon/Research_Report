@@ -196,7 +196,7 @@
 
 #### aligned and packed test analysis
 
-1. aligned의 경우 **기준이 되는 byte * n(임의의 숫자)**만큼 구조체의 size를 맞춰준다
+1. aligned의 경우 **기준이 되는 byte * n(임의의 숫자)** 만큼 구조체의 size를 맞춰준다
 2. packed의 경우 기존의 추측과 동일하게 1byte단위로 잘 묶어준다
 3. **field 변수 중 구조체 변수가 있는 경우 구조체 전체가 하나의 data로 인식된다**
 4. aligned에 기준이 되는 byte를 주지 않을 경우 field 변수 중 가장 큰 size를 가지는 data type을 기준으로 aligned한다
