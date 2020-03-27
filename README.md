@@ -29,6 +29,148 @@
   * dpdk에서 descriptor와 doorbell이 어떻게 align되어있는지 확인
   * dpdk에서 packet 저장방식이 contiguous한지 확인
 ---
+## 03/27 현재상황
+
+* cache line으로 aligned하는 이유에 대해서 공부중이다 
+* 그 이유는 여러가지가 있다
+  1. Memory False Sharing을 막기위해서
+  2. zero-size array를 활용하기 위해서
+* 아래에 자세한 설명을 첨부한다
+
+---
+
+### 1. Memory False Sharing
+
+* 먼저 아래의 rte\_ring 구조체를 보자
+
+
+
+<center> rte_ring </center>
+
+
+
+![Alt_text](image/03.27_rte_ring.JPG)
+
+* 위의 구조체를 보면 전체 구조체에 대해선 \_\_rte\_cache\_aligned를 해주지 않았지만 대부분의 field에 대해서 각각 aligned해준 것을 확인할 수 있다
+* 여기서 가장 주의깊게 확인해야할 부분은 **char pad** 에 대한 부분이다
+* 각 pad마다 주석으로 empty cache line이라고 기록되어 있어 이 부분의 의미에 대해서 찾아보았다
+* 그 결과 찾은 개념이 **Memory False Sharing** 이다
+
+* Memory False Sharing의 개념은 다음과 같다
+  * 병렬처리를 위해 서로다른 thread가 존재할때를 가정한다
+    * thread 1과 thread 2가 사용되고 있다고 가정한다
+  * thread 1과 thread 2가 같은 메모리 구역을 caching하여 cache에 저장해둔 상태에서 
+  * thread 1이 thread 2가 사용하는 메모리 구역을 건드리지 않고 thread 2는 thread 1이 사용하는 메모리 구역을 건드리지 않는다고 가정하자
+    * cache size만큼 memory 구역을 공유하지만 실제로 서로의 memory 구역을 침범하지는 않는 상태
+  * 이렇게 되면 실제로 각 thread가 caching해간 cache부분의 memory를 Main Memory에 갱신해주지 않아도 되지만 process입장에서는 이러한 사실을 몰라 무조건적으로 갱신해주게 된다
+  * 이러한 과정을 Memory False Sharing이라고 한다
+    * 실제로는 공유하고 있지 않지만 **cache size에 의해 공유하는 것처럼 보이는 것** 을 말한다
+* Memory False Sharing의 가장 대표적인 해결책은 **각 Thread가 사용하는 memory의 위치를 충분히 떨어뜨려 놓는 것** 이다
+* 충분히 떨어뜨려 놓는다의 기준은 당연히 cache line size만큼 떨어뜨려 놓는 것일 것이다
+* 개념을 참고한 사이트
+  * [Memory False Sharing](https://yongho1037.tistory.com/511)
+  * [False Sharing - Wikipedia](https://en.wikipedia.org/wiki/False_sharing)
+
+* 그렇다면 dpdk에서 Memory False Sharing이 일어날 가능성이 있을까
+
+* dpdk는 multi core기능을 제공하기 때문에 당연하다
+* multi core기능을 제공하므로, Memory False Sharing에 대한 대비도 필요한 것이다
+
+---
+
+### 2. Zero-Size array
+
+* zero-size array는 **int array[0]** 의 형태로 사용하는 array를 말한다
+  * 말 그대로 component가 하나도 없는, size가 0인 array이다
+* 이러한 형태로 사용했을 때 가지는 특징은 다음과 같다
+  * 일반 포인터와 달리 const pointer의 특성을 가진다
+  * 배열의 특성을 가져, size에 대한 정보를 담고 있게 된다
+    * sizeof(array)를 하면 0이 나옴
+  * 위의 것들을 제외한 일반 pointer의 특성들을 모두 가진다
+    * pointer이므로
+* 배열인데 size가 0이라면 어떠한 data도 대입하면 안 된다
+  * 실제로는 가능하지만, 대입을 하게 되면 out of range 에러가 발생할 수 있다
+* 그렇다면 zero-size array는 왜 사용할까
+* 그 이유는 다음의 사진에 나와있다
+
+
+
+<center> Description of zero-size array </center>
+
+
+
+![Alt_text](image/03.27_zero_size_array_description.JPG)
+
+* 내용을 요약하자면
+  1. dynamic한 size의 배열을 구조체 내에서 사용할 수 있다
+  2. system call을 구현할 경우, user level에서 malloc등으로 할당한 memory는 kernel level에서 접근이 불가능한데, zero-size array를 사용하면 kernel level에 가서 memory를 할당하므로 kernel level에서 자유롭게 접근이 가능하다
+* 이러한 강점을 사용하려면, zero-size array의 pointer의 자리에 data를 넣을 수 있는 충분한 자리를 비워줘야한다
+
+
+
+<center> zero-size array in dpdk </center>
+
+
+
+![Alt_text](image/03.27_rte_table_hash_in_rte_table_hash_cuckoo.JPG)
+
+* 위의 사진은 rte\_table\_hash\_cuckoo.c 파일 내에 있는 rte\_table\_hash 구조체이다
+* 마지막 field를 보면 memory라는 이름으로 zero-size array가 선언되어 있고, 이를 \_\_rte\_cache\_aligned로 align해주고 있다
+* 이렇게 되면, rte\_table\_hash의 마지막 부분에는 memory변수를 위한 64byte가 빈 공간으로 남아있게 된다
+* 이를 이용해 memory 변수에 data를 64byte까지 대입해줄 수 있게 된다
+* 이 외에도 zero-size array를 사용할 수 있는 방안은 또 있다
+* Marker로써의 활용이다
+
+
+
+<center> MARKER declare </center>
+
+
+
+![Alt_text](image/03.27_marker.JPG)
+
+
+
+<center> MARKER example </center>
+
+
+
+![Alt_text](image/03.27_rte_mbuf_marker.JPG)
+
+* 위의 첫번째 사진을 보면 MARKER라는 이름의 zero-size array를 선언해주고 있음을 확인할 수 있다
+* 두번째 사진에서는 이를 활용한 것을 확인할 수 있다
+* rte\_mbuf에서 MARKER를 활용한 이유는, **rte\_mbuf 구조체의 크기가 커서** 이다
+* rte\_mbuf 구조체의 크기가 크고 code의 길이도 길어 접근성을 용이하게 하기위해 zero-size array를 사용한다
+* 위의 사진에서처럼 활용하게 될 경우, struct rte\_mbuf 변수 mbuf에서 mbuf.cacheline0를 호출하여 buf\_addr 변수를 포함한 64byte의 메모리 공간을 활용할 수 있게 된다
+  * 그래서 field의 이름도 cacheline이다
+* 정리하자면, **zero-size array 변수의 호출로 64byte만큼의 구조체 memory를 호출해 활용할 수 있게 된다**
+* 이에 대한 예시는 다음과 같다
+
+
+
+<center> Declaration of rx_descriptor_fields1 </center>
+
+
+
+![Alt_text](image/03.27_rx_descriptor_fields.JPG)
+
+
+
+<center> Usage of rx_descriptor_fields1 </center>
+
+
+
+![Alt_text](image/03.27_use_of_rx_descriptor_fields1.JPG)
+
+* 위의 첫번째 사진은 rx\_mbuf 구조체 내에 zero-size array 자료형인 MARKER 변수 rx\_descriptor\_fields1의 선언을 보여주고 있다
+* 두번째 사진은 avf\_rxtx\_vec\_sse.c파일 내에서 이 rx\_descriptor\_fields1변수의 활용한 것을 보여주고 있다
+* rx\_descriptor\_fields1변수를 이용해 memory적인 접근으로 pkt\_len, data\_len, vlan\_tci와 hash의 offset값을 가져오고 있다
+* 이러한 방식으로 zero-size array를 활용할 수 있다
+
+
+
+---
+
 ## 03/26 현재상황
 
 * dpdk에서 message buffer를 제외한 나머지 구조체들이 어떻게 aligned 되어있는지 확인중이다
