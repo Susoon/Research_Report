@@ -29,6 +29,252 @@
   * dpdk에서 descriptor와 doorbell이 어떻게 align되어있는지 확인
   * dpdk에서 packet 저장방식이 contiguous한지 확인
 ---
+## 03/30 현재상황
+
+* virtual address와 physical address를 처리해주는 코드를 확인하고 있다
+* 코드와 개념이 너무 어려워서 아직 계속 읽어보는 중이다
+* 이때까지 읽고 이해한 부분과 남아 있는 의문점에 대해 정리하기 위해서 기록을 남긴다
+* 먼저 virtual address와 physical address를 처리해주는 개념적인 부분을 확인해보자
+
+---
+
+### IOVA(I/O Virtual Address)
+
+* dpdk에는 EAL(Environment Abstraction Layer)라는 layer가 있다
+* 이는 dpdk가 address를 어떻게 관리하고, driver를 어떻게 작동하는가 등, low level의 세부 사항들을 user가 신경쓰지 않고 dpdk를 사용할 수 있도록 기능을 제공한다
+* EAL에는 IOVA를 관리하는 부분이 있는데 이 부분이 우리가 관심을 가지고 있는 VA와 PA의 관리를 담당하고 있다
+*  intel 홈페이지의 문서를 통해 어떻게 관리하고 있는지 알아보자
+
+
+
+<center> DPDK document for IOVA mode </center>
+
+
+
+![Alt_text](image/03.30_dpdk_doc_iova_mode.JPG)
+
+* 위의 글은 intel 홈페이지에서 dpdk를 설명한 문서 중 IOVA에 관한 글 일부이다
+* 위의 내용을 요약하자면 다음과 같다
+  * IO operation을 user space에서 관리할 수 있게 하기 위해 IOVA라는 Virtual Address를 제공한다
+  * DPDK는 physical address와 IOVA를 구분하지 않고 IOVA로 통일하여 사용한다
+    * physical address를 직접 사용할지, virtual address를 통해 사용할지를 abstraction시키겠다는 의미
+  * Physical Address를 IOVA로 사용하는 경우와, Virtual Address를 IOVA에 match시켜 사용할지를 구분하여 사용한다
+    * IOVA as PA와 IOVA as VA로 나뉜다
+* 결국 IOVA라는 address 체계를 제공하여, 실제로 사용되는 address가 physical address든지 virtual address든지 IOVA만을 사용하여 manipulation할 수 있게 해주겠다는 뜻이다
+* 아래는 IOVA as PA와 IOVA as VA에 대한 설명이다
+
+---
+
+#### IOVA as PA
+
+* Physical Address를 IOVA로 사용하는 경우는 말 그대로 Physical Address를 그대로 IOVA로 사용하겠다는 뜻이다
+* 이렇게 되면 IOVA를 통해 접근한 memory 구역은 실제 H.W.의 memory 구역이다
+
+
+
+<center> Example of PA as IOVA </center>
+
+
+
+![Alt_text](image/03.30_IOVA_as_PA_mode.png)
+
+* 위의 사진처럼 IOVA를 가져오게 되면 Physical Address를 바로 가져오게 되고, 이를 Virtual Address에서 접근하여 사용한다
+  * 사실상 기존 address 접근 체계와 동일하게 되는것
+* 그렇다면 기존 address 접근 체계와 동일한 체계를 왜 따로 제공하는가
+* 그 이유는 DPDK는 user space에 있기 때문이다
+* user space에서 실행되는 DPDK가 Physically contiguous area를 직접 할당하고 사용하기 위해 제공해주는 것이다
+
+* 이렇게 되면 DPDK가 모든 hardware를 대상으로 작동할 수 있게 된다는 장점이 생긴다
+  * IOMMU가 필요 없다는 뜻
+  * IOMMU란 IO device의 DMA의 사용과 Main Memory 접속을 관리하는 메모리 관리 장치이다
+  * IOVA as VA의 내용으로 미루어보았을때, IOMMU가 있든 없든 사용할 수 있다는 뜻인 것 같다
+  * IOMMU가 Virtual Address로 Physical Address를 접근할 수 있게 해주는데, 이를 DPDK가 해결해주기 때문인 듯하다
+* 단점은 2가지가 있다
+  1. Physical Address의 접근과 관리를 위한 root 권한 필요
+  2. Physical Memory에 fragment되어있으면 Virtual Address가 그 영향을 직격으로 맞게 된다
+* 1번 단점은 자명하므로 생략한다
+* 2번 단점의 경우는 다음의 그림을 보면 쉽게 이해할 수 있다
+
+
+
+<center> IOVA as PA fragmentation </center>
+
+
+
+![Alt_text](image/03.30_IOVA_as_PA_mode_frag.png)
+
+* 위의 사진처럼 Physical Area가 다 잘게 쪼개져있으면, Vitual Area도 동일하게 쪼개져있어 contiguous한 공간을 할당하기 어렵게 된다
+  * 극단적인 경우로 모든 Physical Area가 다 fragmented되어있으면 DPDK initialize가 실패한다고 한다
+* 이에 대한 해결책은 DPDK도 아직 연구중에 있다고 하며,  Huge Page를 사용하면 fragmentation의 영향을 덜 받는다고설명한다
+
+---
+
+#### IOVA as VA
+
+* 이 경우는 Physical Address와 IOVA가 분리된 경우이다
+* Physical Address를 contiguous하게 Virtual Address(IOVA)에 mapping하고 이를 Virtual Address가 접근하여 사용하는 방식이다
+
+
+
+<center> Example of IOVA as VA </center>
+
+
+
+![Alt_text](image/03.30_IOVA_as_VA_mode.png)
+
+* 위의 사진을 보면 Physical area의 segment들을 모아서 IOVA 공간에 contiguous하게 붙여서 mapping한 후, 이를 Virtual Address가 접근하여 사용하는 것을 확인할 수 있다
+* 이 경우의 장점은 IOVA as PA의 단점을 해결해준다는 것이다
+  1. root 권한이 필요 없음
+  2. Physical Area가 fragmented되어 있어도 Virtual Address는 쉽게 contiguous한 공간을 찾을 수 있음
+* 반면 단점은 IOVA as VA의 장점을 포기한 것이다
+  * IOVA as VA를 사용할 수 없는 하드웨어가 존재한다
+  * 즉, IOMMU가 필요한 하드웨어가 존재한다
+* IOVA as VA를 사용할 수 없는 하드웨어의 종류는 다음과 같다
+
+
+
+<center> Cases that need IOMMU </center>
+
+
+
+![Alt_text](image/03.30_IOMMU_needed.JPG)
+
+---
+
+### DPDK codes about IOVA
+
+* DPDK 코드에서 IOVA에 관한 부분을 찾아보았다
+* 함수들의 call flow만 대략적으로 파악한 상태이며 각 함수들이 어떠한 방법으로 IOVA를 관리하는지에 대해서는 이해하지 못했다
+
+
+
+<center> rte_pktmbuf_pool_create call in fancy </center>
+
+
+
+![Alt_text](image/03.30_fancy_dpdk_rte_pktmbuf_pool_create.JPG)
+
+* 위의 코드는 fancy에 있는 dpdk 코드이다
+* rte\_pktmbuf\_pool\_create 함수를 호출하여 mbuf\_pool을 초기화하는 것을 확인할 수 있다
+
+
+
+<center> rte_pktmbuf_pool_create </center>
+
+
+
+![Alt_text](image/03.30_rte_pktmbuf_pool_create.JPG)
+
+* rte\_pktmbuf\_pool\_create함수는 rte\_pktmbuf\_pool\_create\_by\_ops를 호출한다
+
+
+
+<center> rte_pktmbuf_pool_create_by_ops </center>
+
+
+
+![Alt_text](image/03.30_rte_pktmbuf_pool_create_by_ops.JPG)
+
+* rte\_pktmbuf\_pool\_create\_by\_ops함수이다
+* 이 함수의 내부에는 다음과 같은 코드가 있다
+
+
+
+<center> rte_pktmbuf_pool_create_by_ops body </center>
+
+
+
+![Alt_text](image/03.30_rte_pktmbuf_pool_create_by_ops_body.JPG)
+
+* rte\_pktmbuf\_pool\_init으로 mempool을 초기화한다
+* rte\_mempool\_populate\_default를 통해 IOVA 버전(IOVA as PA or IOVA as VA)에 맞는 IOVA값을 지정해준다
+* rte\_mempool\_obj\_iter를 이용해 rte\_pktmbuf\_init을 반복 실행시켜 mbuf를 초기화해준다
+
+
+
+<center> rte_pktmbuf_pool_init </center>
+
+
+
+![Alt_text](image/03.30_rte_pktmbuf_pool_init.JPG)
+
+* 위의 함수가 mempool을 초기화해주는 함수이다
+* 아직 세부 내용은 이해하지 못했다
+
+
+
+<center> rte_mempool_populate_default </center>
+
+
+
+![Alt_text](image/03.30_rte_mempool_populate_default.JPG)
+
+* 위의 함수는 IOVA 버전에 따른 address 할당을 담당하고 있다
+* pageshift를 사용하여 관리하는 듯 하지만 아직 세부적인 내용 파악은 하지 못했다
+
+
+
+<center> rte_mempool_obj_iter </center>
+
+
+
+![Alt_text](image/03.30_rte_mempool_obj_iter.JPG)
+
+* 위 함수는 특정 함수를 반복실행해주는 함수이다
+* rte\_pktmbuf\_init이 반복실행된다
+* 여기서 obj가 rte\_mempool\_objhdr의 크기만큼 움직이며 실행되는데, 이 이유를 잘 모르겠다
+  * 아래의 rte\_pktmbuf\_init부분 참고
+
+
+
+<center> rte_pktmbuf_init </center>
+
+
+
+![Alt_text](image/03.30_rte_pktmbuf_init.JPG)
+
+* rte\_pktmbuf\_init 함수이다
+* opaque\_arg와 i의 경우 함수 내부에서 사용되지 않지만 rte\_mempool\_obj\_iter 함수의 호출방식에 의해 매개변수 형식만 담겨있다
+  * 그래서 \_\_attribute\_\_((unused))가 붙었다
+  * 이는 compiler에게 이 변수는 선언되었지만 참조하지 않을 것이라는 것을 알린다
+* 첫번째 의문점은 91번째 줄의 memset에 있다
+* mbuf\_size만큼 0으로 setting을 해주는데, mbuf\_size는 rte\_mbuf 구조체의 크기에 priv\_size를 더해준 값이다
+* priv\_size는 message buffer의 private data의 크기이다
+  * private data가 무엇인지는 알아보아야한다
+* 그럼 결국 **rte\_mbuf의 구조체의 크기보다도 더 큰 크기를 0으로 setting** 해주는 것이다
+* 그런데 rte\_mempool\_obj_iter 함수에서는  rte\_mempool\_objhdr의 크기만큼만 움직인다
+* 그럼 **header부분을 제외한 나머지 부분들은 다 0으로 비워지게 되는 것 아닌가** 가 의문점이다
+* 두번째 의문점은 다음의 내용에 의해 생긴 의문점이다
+* 함수 내에서 95번째 줄을 보면 rte\_mbuf 변수인 m의 buf\_iova 변수에 값을 대입하는 부분이 있다
+* 여기서 rte\_mempool\_virt2iova라는 함수를 호출한다
+
+
+
+<center> rte_mempool_virt2iova </center>
+
+
+
+![Alt_text](image/03.30_rte_mempool_virt2iova.JPG)
+
+* 이 함수는 elt(caller에서의 rte\_mbuf변수 m)에서 rte\_mempool\_objhdr 구조체의 크기만큼 뒤로 가서 iova값을 꺼내온 후 반환해준다
+* 결국 의미상으로는 message buffer의 header부분에 저장되어 있는 iova값을 반환해주는 것이다
+* 여기서 의문점은  **rte\_mbuf 변수의 포인터에서 rte\_mempool\_objhdr 구조체의 크기만큼 값을 빼준다고해서 message buffer의 header가 나오는가** 이다
+* 결국 모든 의문점들은 **rte\_mbuf와 rte\_mempool 구조체에서 pointer arithmetic에 의해 움직였을 때 해당 field가 나오는 가** 로 이어진다
+
+---
+
+### 확인이 필요한 것들
+
+* 위의 내용들을 통해 확인해야할 부분들이 조금 구체화되었다
+  1. rte\_pktmbuf\_pool\_init 함수 내용 이해
+  2. rte\_mempool\_populate\_default 함수 내용 이해
+  3. rte\_mbuf와 rte\_mempool 구조체의 pointer arithmetic 부분 이해
+* 이 내용들을 이해하고 나면 IOVA에 대한 실마리가 조금 잡힐 것 같다
+
+
+
+---
+
 ## 03/27 현재상황
 
 * cache line으로 aligned하는 이유에 대해서 공부중이다 
