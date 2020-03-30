@@ -271,6 +271,7 @@
   3. rte\_mbuf와 rte\_mempool 구조체의 pointer arithmetic 부분 이해
 * 이 내용들을 이해하고 나면 IOVA에 대한 실마리가 조금 잡힐 것 같다
 * 다음은 DPDK의 IOVA의 개념을 위해 참고한 intel의 dpdk document 사이트이다
+
 [DPDK_DOC_IOVA](https://software.intel.com/en-us/articles/memory-in-dpdk-part-2-deep-dive-into-iova)
 
 
