@@ -45,7 +45,7 @@ all: dpdk_gpu_test
 #all compile
 dpdk_gpu_test: sh_handler.o dpdk.o main.o
 	@g++ -o $@ -m64 -pthread\
- -I/home/susoon/work/dpdk-stable-18.11.2/lib/librte_eal/linux/eal/include\
+ -I$(RTE_SDK)/lib/librte_eal/linux/eal/include\
   -march=native -DRTE_MACHINE_CPUFLAG_SSE -DRTE_MACHINE_CPUFLAG_SSE2\
  -DRTE_MACHINE_CPUFLAG_SSE3 -DRTE_MACHINE_CPUFLAG_SSSE3 -DRTE_MACHINE_CPUFLAG_SSE4_1\
  -DRTE_MACHINE_CPUFLAG_SSE4_2 -DRTE_MACHINE_CPUFLAG_AES\
@@ -55,11 +55,11 @@ dpdk_gpu_test: sh_handler.o dpdk.o main.o
  -DRTE_MACHINE_CPUFLAG_AVX2\
   -I/home/susoon/work/Research_Report/Susoon_example/sh_test/dpdk_with_gpu/build/include\
  -DRTE_USE_FUNCTION_VERSIONING\
- -I/home/susoon/work/dpdk-stable-18.11.2/x86_64-native-linuxapp-gcc/include\
- -include /home/susoon/work/dpdk-stable-18.11.2/x86_64-native-linuxapp-gcc/include/rte_config.h\
+ -I$(RTE_SDK)/$(RTE_TARGET)/include\
+ -include $(RTE_SDK)/$(RTE_TARGET)/include/rte_config.h\
  -D_GNU_SOURCE $^ $(CUDA_LIBPATH) $(CUDA_INC) $(INC)\
  -L/usr/local/cuda/lib64 -lcudart -lcuda\
- -L/home/susoon/work/dpdk-stable-18.11.2/x86_64-native-linuxapp-gcc/lib\
+ -L$(RTE_SDK)/$(RTE_TARGET)/lib\
  -Wl,-lrte_flow_classify -Wl,--whole-archive -Wl,-lrte_pipeline\
  -Wl,--no-whole-archive -Wl,--whole-archive -Wl,-lrte_table\
  -Wl,--no-whole-archive -Wl,--whole-archive -Wl,-lrte_port\
@@ -99,7 +99,7 @@ dpdk_gpu_test: sh_handler.o dpdk.o main.o
  -Wl,-lrte_pmd_opdl_event -Wl,-lrte_bus_ifpga\
  -Wl,--no-whole-archive -Wl,-lrt -Wl,-lm -Wl,-lnuma -Wl,-ldl -Wl,-export-dynamic\
  -L/home/susoon/work/Research_Report/Susoon_examples/sh_test/dpdk_with_gpu/build/lib\
- -L/home/susoon/work/dpdk-stable-18.11.2/x86_64-native-linuxapp-gcc/lib\
+ -L$(RTE_SDK)/$(RTE_TARGET)/lib\
  -Wl,--as-needed -Wl,-Map=dpdk_gpu_test.map -Wl,--cref	
 	$(BUILD) dpdk_with_gpu
 	@mv *.o $(LIB_DIR)
@@ -113,7 +113,7 @@ sh_handler.o: $(SRC_DIR)/sh_handler.cu
 #dpdk compile
 $(APP): $(SRC_DIR)/dpdk.c
 	@gcc -w -Wp,-MD,./.dpdk.o.d.tmp -m64 -pthread\
- -I/home/susoon/work/dpdk-stable-18.11.2/lib/librte_eal/linux/eal/include\
+ -I$(RTE_SDK)/lib/librte_eal/linux/eal/include\
   -march=native -DRTE_MACHINE_CPUFLAG_SSE -DRTE_MACHINE_CPUFLAG_SSE2\
  -DRTE_MACHINE_CPUFLAG_SSE3 -DRTE_MACHINE_CPUFLAG_SSSE3\
  -DRTE_MACHINE_CPUFLAG_SSE4_1 -DRTE_MACHINE_CPUFLAG_SSE4_2\
@@ -123,8 +123,8 @@ $(APP): $(SRC_DIR)/dpdk.c
  -DRTE_MACHINE_CPUFLAG_F16C -DRTE_MACHINE_CPUFLAG_AVX2\
   -I/home/susoon/work/Research_Report/Susoon_example/sh_test/dpdk_with_gpu/build/include\
  -DRTE_USE_FUNCTION_VERSIONING\
- -I/home/susoon/work/dpdk-stable-18.11.2/x86_64-native-linuxapp-gcc/include\
- -include /home/susoon/work/dpdk-stable-18.11.2/x86_64-native-linuxapp-gcc/include/rte_config.h\
+ -I$(RTE_SDK)/$(RTE_TARGET)/include\
+ -include $(RTE_SDK)/$(RTE_TARGET)/include/rte_config.h\
  -D_GNU_SOURCE -o $@ -c $^ $(INC) $(CUDA_LIB_PATH) $(CUDA_INC)
 	$(BUILD) dpdk
 
