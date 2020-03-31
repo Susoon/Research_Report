@@ -2,32 +2,13 @@
 
 ## ToDo List
 
-* ~~64B, 128B의 추가 test 필요~~
-* ~~dpdk와 copy\_to\_gpu가 실행되는 core 확인~~
-* ~~만약 dpdk와 copy\_to\_gpu가 같은 core에서 실행되고 있다면, 다른 core에서 실행되게끔 code 수정 후 test~~
-* ~~monitoring loop가 다른 core에서 실행되게 code 수정 후 test~~
-* ~~현재까지 나온 test 결과 정리 (Summary 파일에 정리)~~
-  * ~~polling으로 64B, 128B 추가 측정하여 data 뽑기~~
-  * ~~3-3) batch delay 부분 수정~~
-  * ~~graph로 쓸만한 data 선별하여 graph 추가하기~~
-* ~~gpu SHA code 확인해서 fancy의 SHA code랑 비교하기~~
-  * ~~openssl sha 구조 확인하기~~
-  * ~~fancy의 sha가 gpgpu의 sha와 구조적으로 동일한지 확인하기~~
 * ipsec packet size별로 구현해놓은 것들 잘 구현되었는지 확인하기
-	* ~~Thread Block 수와 thread 수를 할당한 양이 과도한 양은 아닌지~~
-	* ~~Shared Memory를 과도하게 사용하는 것은 아닌지~~
-	* 위의 두 내용을 잘 적용하였는지 확인
-* ~~nids 공부하기~~
-  * ~~Aho-Corasick 알고리즘 공부하기~~
-  * ~~nids Kernel 코드 뜯어보기~~
-    * ~~Aho-Corasick 알고리즘이 어떻게 적용되었는지 확인하기~~
-  * ~~state로 저장해주는 값들의 의미 알아보기~~
-  * ~~thread 분배 생각해보기~~
-  * ~~Aho-Corasick의 Trie와 Failure Link 구성하는 부분 구현확인하기~~
-* dpdk mempool 공부하기
-  * dpdk mempool과 cache line이 어떻게 사용되는지 확인
-  * dpdk에서 descriptor와 doorbell이 어떻게 align되어있는지 확인
-  * dpdk에서 packet 저장방식이 contiguous한지 확인
+  * 추후에 논문에 담을 때 다시 확인
+* dpdk phyical address에 offset을 줘서 NIC이 하나의 page 내에서 packet을 구분하는 분기점이 있는지 확인
+* packet을 나눠서 저장하는 rte\_mbuf의 segment의 크기를 확인하기
+* rte\_mbuf와 header를 구분해서 저장하는 이유와 multi process간의 관계를 설명하는 문서가 있는지 확인하기
+* dpdk에서 page shift와 page boundary를 어떻게 처리하고 왜 그렇게 하는지 확인하기
+* IOMMU와 IOVA간의 관계를 확인해보기
 ---
 ## 03/31 현재상황
 
@@ -135,13 +116,17 @@
     * 그렇게 가져가게 했다면, NIC에서는 packet을 어떻게 구분해서 찾아가는지
   * DMA가 가져갈 하나의 page당 하나의 packet을 담아서 이를 가져가게 하는지
     * 이렇게 가져가게 한다면 NIC이 굳이 page 내에서 packet을 구분해서 가져갈 필요가 없어짐
-* 
+
+
 
 2. **IOMMU와 IOVA** 에 대한 자세한 확인
    * IOMMU가 DMA와 큰 관련이 있다
      * 이것도 공부 해야함
    * dpdk에서는 IOMMU가 없을 경우에도 작동이 가능하도록 프로그래밍 해놓았는데, 그렇다면 DMA에 packet을 보내는 과정도 프로그래밍이 되어있을 것이다
    * 이 부분을 찾아야한다
+
+
+
 
 3. 왜 rte\_mbuf와 관련된 정보를 담은 변수들을 rte\_mbuf 구조체 안에 넣어서 저장하지 않고, **contiguous한 공간에 끊어서 저장했는가**
    * 이는 rte\_pktmbuf\_init 함수에 언급된 의문점이다
@@ -401,7 +386,7 @@
 * 이 내용들을 이해하고 나면 IOVA에 대한 실마리가 조금 잡힐 것 같다
 * 다음은 DPDK의 IOVA의 개념을 위해 참고한 intel의 dpdk document 사이트이다
 
-[DPDK_DOC_IOVA](https://software.intel.com/en-us/articles/memory-in-dpdk-part-2-deep-dive-into-iova)
+* [DPDK_DOC_IOVA](https://software.intel.com/en-us/articles/memory-in-dpdk-part-2-deep-dive-into-iova)
 
 
 
