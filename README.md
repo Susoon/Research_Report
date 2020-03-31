@@ -29,6 +29,135 @@
   * dpdk에서 descriptor와 doorbell이 어떻게 align되어있는지 확인
   * dpdk에서 packet 저장방식이 contiguous한지 확인
 ---
+## 03/31 현재상황
+
+1. IOVA의 모드의 default를 찾았다
+
+2. 03/30일자에 확인하지 못한 함수들을 조금 해결했다
+
+---
+
+### IOVA Default
+
+* DPDK가 알아서 적절한 IOVA mode를 선택한다고 한다
+* 대부분의 경우 IOVA as PA가 기본값이지만, 모든 사용자들이 IOVA as VA이 가지는 이점때문에 IOVA as VA를 사용하도록 강하게 권장한다고 한다
+
+
+
+<center> IOVA mode default in DPDK doc </center>
+
+
+
+![Alt_text](image/03.31_iova_default_mode.JPG)
+
+
+
+---
+
+### rte_pktmbuf_pool_init
+
+* rte\_mempool 구조체 변수에 rte\_pktmbuf\_pool\_private 구조체 field를 채워주는 함수이다
+* rte\_pktmbuf\_pool\_private 구조체는 다음과 같다
+
+
+
+<center> rte_pktmbuf_pool_private </center>
+
+
+
+![Alt_text](image/03.31_rte_pktmbuf_pool_priv.JPG)
+
+* mbuf\_data\_room\_size라는 변수는 주석에 적힌바와 같이 mbuf가 가지고 있는 data space의 크기이다
+* mbuf\_priv\_size라는 변수는 private area의 크기이다
+  * 하지만 private area가 어떤 역할을 하는 공간인지는 확인하지 못했다
+* user가 원하는 특별한 size가 있다면 이를 rte\_pktmbuf\_pool\_private 구조체에 담아서 rte\_mempool 구조체에 대입해주고, 없다면 default를 대입해준다
+
+* 추후에 mempool에 달린 mbuf가 data를 관리할때, size를 파악할 수 있도록 mempool을 초기화 해주는 부분인 것 같다
+
+
+
+---
+
+### rte_mempool_obj_iter
+
+* 이 함수에서 잘못 본 코드가 있다
+
+
+
+<center> rte_mempool_obj_iter </center>
+
+
+
+![Alt_text](image/03.30_rte_mempool_obj_iter.JPG)
+
+* 위의 함수에서 obj를 rte\_mempool\_objhdr 구조체의 크기만큼 움직이면서 대입해준다고 생각했는데 잘못 읽은 것이었다
+* obj라는 포인터에 hdr의 뒷부분을 대입해준다
+* 그리고 이 obj라는 포인터를 obj\_cb라는 함수에 대입해준다
+  * 여기서 obj\_cb라는 함수 포인터에는 rte\_pktmbuf\_init이라는 함수가 대입되어있다
+* 이 과정을 mempool의 elt\_list라는 구조체를 따라가면서 list의 각각의 component들에게 실행해준다
+  * linked list를 따라가면서 실행해주는 것 같다
+* 이 elt\_list라는 변수는 rte\_mempool\_objhdr\_list라는 구조체 변수인데, 이 구조체의 몸체가 코드에 없다
+  * dpdk 코드 내에서 발견되지 않는다...
+  * 그래서 linked list의 형태로 저장하는 게 확실해 보이지만, 확신하지 못하는 이유이다
+
+---
+
+### rte_pktmbuf_init
+
+* 이 함수는 rte\_mbuf를 초기화해주는 함수이다
+* 위의 함수인 rte\_mempool\_obj\_iter와 함께 생각해보았을때, obj라는 포인터가 대입되었다는 것은 object의 header의 메모리의 바로 뒷 메모리 공간이 대입되었다는 뜻이다
+  * header 바로 다음 공간이 대입되었다는 뜻이다
+* 여기에다가 rte\_mbuf 구조체 변수를 할당해준다
+  * header와 contiguous하게 이어진 공간에 저장되도록 할당해준다
+* 여기서 의문점이 하나 생긴다
+* 그냥 **header와 data를 넣을 공간 등, rte\_mbuf에 대한 정보들을 전부 다 rte\_mbuf 구조체에 넣어서 관리하면 접근이 더 편할텐데, 굳이 각각 따로 찢어서 저장해준다**
+  * |header|rte\_mbuf|data space|...
+  * 위와 같은 형태로 저장해준다
+  * 그리고 header를 접근할 때는, (char\*)m - (sizeof(\*hdr))처럼 pointer arithmetic으로 접근한다
+* 이렇게 했을 때 얻는 이점이 무엇일지 전혀 감이 잡히지 않는다
+* 이에 대해서는 조금 더 알아봐야할 것 같다
+* 그럼 짚고 넘어가야할 것은 이렇게 저장해주는 방식이 유효한가이다
+* rte\_mbuf 변수에서 pointer arithmetic으로 header를 접근하는 것이 가능한가를 확인해보아야한다
+  * 항상 모두 contiguous한 공간에 저장되는가의 문제이다
+* 이것은 03/30일자에 IOVA에 대한 설명이 해답이 되므로 생략하겠다
+
+---
+
+### 확인이 필요한 것들
+
+1. rte\_mempool\_populate\_default 함수에 대한 것은 아직 많은 확인이 필요하다
+   1. 주석에 언급되어 있는 **page shift와 page boundary** 에 대한 것들
+   2. PA와 VA의 상황에 따른 조치 방안들과 각 상황 구분 및 조치에 대한 이유
+
+* page shift와 page boundary의 경우 중요한 키워드이다
+* 여기서 DMA에 packet을 넘겨주는 방식에 대한 실마리를 얻을 수 있을 것 같다
+  * DMA가 가져갈 하나의 page에 여러개의 packet을 모아두고 이를 가져가게 하는지
+    * 그렇게 가져가게 했다면, NIC에서는 packet을 어떻게 구분해서 찾아가는지
+  * DMA가 가져갈 하나의 page당 하나의 packet을 담아서 이를 가져가게 하는지
+    * 이렇게 가져가게 한다면 NIC이 굳이 page 내에서 packet을 구분해서 가져갈 필요가 없어짐
+* 
+
+2. **IOMMU와 IOVA** 에 대한 자세한 확인
+   * IOMMU가 DMA와 큰 관련이 있다
+     * 이것도 공부 해야함
+   * dpdk에서는 IOMMU가 없을 경우에도 작동이 가능하도록 프로그래밍 해놓았는데, 그렇다면 DMA에 packet을 보내는 과정도 프로그래밍이 되어있을 것이다
+   * 이 부분을 찾아야한다
+
+3. 왜 rte\_mbuf와 관련된 정보를 담은 변수들을 rte\_mbuf 구조체 안에 넣어서 저장하지 않고, **contiguous한 공간에 끊어서 저장했는가**
+   * 이는 rte\_pktmbuf\_init 함수에 언급된 의문점이다
+   * 어떠한 이유가 있어서 이렇게 저장했을 텐데 이유를 모르겠다
+
+* 스쳐지나가는 생각으로는 각각의 구조체를 하나의 구조체로 묶지 않고 저장하게 되면, **IOVA as VA** 에서 Physical Address로 저장될 때 각각의 구조체가 서로 다른 segment에 저장될 수 있게 되어서 그런 것 같다
+  * 03/31일자 참고
+  * IOVA as VA에서는 Physical Address는 contiguous하지 않을 수 있지만 Virtual Address는 contiguous하다
+  * 그래서 접근은 contiguous한 것처럼 할 수 있지만, 실제 저장은 segment에 각각 다로 저장될 것이다
+  * 이렇게 되면 memory를 사용하는 데에 효율이 올라간다
+  * IOVA as PA의 경우에는 어차피 contiguous한 Physical Memory에 저장될테니 위처럼 구현해도 접근에 전혀 차이가 없다
+
+
+
+---
+
 ## 03/30 현재상황
 
 * virtual address와 physical address를 처리해주는 코드를 확인하고 있다
