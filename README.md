@@ -12,9 +12,26 @@
 ---
 ## 03/31 현재상황
 
-1. IOVA의 모드의 default를 찾았다
+1. cacheline 단위로 aligned한 이유를 DPDK document에서 설명한 것을 찾았다
+2. IOVA의 모드의 default를 찾았다
+3. 03/30일자에 확인하지 못한 함수들을 조금 해결했다
 
-2. 03/30일자에 확인하지 못한 함수들을 조금 해결했다
+---
+
+### __rte_cache_aligned
+
+
+
+<center> DPDK document for aligned </center>
+
+
+
+![Alt_text](image/03.31_cache_aligned_doc.JPG)
+
+* 위의 내용을 보면 data에 접근할 때 항상 정렬된 상태에서의 접근을 하게끔하면서 Memory False Sharing을 막기 위함이라고 기술되어있다
+* Zero-Size array도 cache line의 크기로 aligned 시킨 이유가 Zero-Size array를 활용하면서 접근할때 정렬된 상태에서 접근을 하기위해서이다
+  * word단위로 접근이 용이하므로
+* ~~document를 잘 찾아보고 잘 읽자...~~
 
 ---
 
