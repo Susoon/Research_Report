@@ -12,9 +12,19 @@
 ---
 ## 03/31 현재상황
 
+* 아래의 것들은 확인한 내용들이다
+
 1. cacheline 단위로 aligned한 이유를 DPDK document에서 설명한 것을 찾았다
-2. IOVA의 모드의 default를 찾았다
-3. 03/30일자에 확인하지 못한 함수들을 조금 해결했다
+2. IOMMU와 IOVA에 대해 설명한 문서를 찾았다
+   * 아직 내용에 대한 확인은 못함
+3. segment를 나누는 기준을 찾았다
+   * 완벽하진 않음
+4. IOVA의 모드의 default를 찾았다
+
+* 아래의 것들은 확인해야할 내용들이다
+
+1. 03/30일자에 확인하지 못한 함수들을 조금 해결했다
+   * 하지만 추가적으로 확인할 내용이 있다
 
 ---
 
@@ -32,6 +42,74 @@
 * Zero-Size array도 cache line의 크기로 aligned 시킨 이유가 Zero-Size array를 활용하면서 접근할때 정렬된 상태에서 접근을 하기위해서이다
   * word단위로 접근이 용이하므로
 * ~~document를 잘 찾아보고 잘 읽자...~~
+
+---
+
+### IOMMU and IOVA document
+
+* 아래의 문서는 IOMMU와 IOVA에 대해 설명해 놓은 intel의 dpdk document 중 일부이다
+  * 아직 읽어보진 않았다...
+
+
+
+<center> IOMMU and IOVA document </center>
+
+
+
+![Alt_text](image/03.31_IOMMU_and_IOVA_doc.JPG)
+
+* [IOMMU and IOVA](https://software.intel.com/en-us/articles/memory-in-dpdk-part-1-general-concepts)
+
+---
+
+### rte_mbuf segment를 나누는 기준
+
+* rte\_mbuf segment를 나누는 기준을 찾았다
+* 결론부터 말하자면 **프로그래머가 조건을 주지 않으면 2KB이다**
+* 아래의 사진은 dpdk가 제공하는 test file 중 test\_mbuf.c 파일의 함수이다
+
+
+
+<center> test_mbuf_linearize_check in test_mbuf </center>
+
+
+
+![Alt_text](image/03.31_test_mbuf_linearize_check_in_test_mbuf.JPG)
+
+* 위의 함수를 보면 test\_mbuf\_linearize라는 함수를 호출하고 있음을 알 수 있다
+* 또한 test를 위해 만든 mbuf array에는 size와 nb\_segs라는 segment의 수가 담겨있다
+* 이를 이용해 test\_mbuf\_linearize함수에 mempool과 packet의 size, segment의 개수를 넘겨주고 있다
+
+
+
+<center> test_mbuf_linearize in test_mbuf </center>
+
+
+
+![Alt_text](image/03.31_test_mbuf_linearize_in_test_mbuf.JPG)
+
+* test\_mbuf\_linearize함수이다
+* 가장 아래부분을 확인하면 seg\_len라는 변수에 pkt\_len / nb\_segs를 대입하여 packet의 길이를 segment의 수로 나누어 대입하고 있다
+* **프로그래머가 직접 segment의 크기를 지정해준 것이다**
+* 물론 이 함수는 test를 하기 위한 코드이므로 segment의 크기 지정을 완벽히 설명해주지는 않는다
+* 다음 사진은 RTE\_MBUF\_DEFAULT\_DATAROOM이라는 macro의 정의를 보여준다
+
+
+
+<center> RTE_MBUF_DEFAULT_DATAROOM </center>
+
+
+
+![Alt_text](image/03.31_RTE_MBUF_DEFAULT_DATAROOM.JPG)
+
+* 위의 사진을 보면 RTE\_MBUF\_DEFAULT\_DATAROOM을 정의하고 이에 대한 설명을 주석으로 남기고 있다
+* 주석에서는 2KB의 buffer를 split하지 않고 사용해야하는 NIC이 존재해서 **최소 buffer의 길이를 2KB + RTE\_PKTMBUF\_HEADROOM의 길이로 할 것을 추천** 하고 있다
+  * RTE\_PKTMBUF\_HEADROOM은 packet의 header를 위한 memory의 크기로 128byte로 지정되어 있다
+* ixy와 같은 이유로 인해 2KB의 buffer size를 지정해두고 사용하는 것 같다
+* segment로 쪼개는 것은 필요에 의해서만 진행되는 듯 하지만 rte\_mbuf의 함수에서는 segment의 크기나 개수를 신경쓰지 않고 general하게 구현했거나 segment의 개수가 1개일때만을 상정하고 구현하여 아직 segment를 쪼개는 함수를 발견하지 못했다
+* 또한 위의 RTE\_MBUF\_DEFAULT\_DATAROOM이나 RTE\_MBUF\_DEFAULT\_BUF\_SIZE를 호출해서 사용하는 함수를 발견하지 못해 기본값이라는 것을 증명하지 못했다
+
+* 위의 추측이 맞는 것 같지만 아직 조금 더 증명이 필요하다
 
 ---
 
