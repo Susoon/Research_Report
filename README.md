@@ -10,6 +10,157 @@
 * dpdk에서 page shift와 page boundary를 어떻게 처리하고 왜 그렇게 하는지 확인하기
 * IOMMU와 IOVA간의 관계를 확인해보기
 ---
+## 04/01 현재상황
+
+* 아래의 것들은 확인한 내용들이다
+
+1. segment의 개수
+2. 각 segment의 크기 지정
+3. rte\_mem\_virt2phy의 역할 및 원리
+
+* 아래의 것들은 추가 확인이 필요한 내용들이다
+
+1. VFIO driver
+2. rte\_mem\_virt2phy의 세부 원리 및 실제 활용
+   * /proc/self/pagemap의 사용방법
+3. HEADROOM의 존재 이유
+
+---
+
+### 1. segment의 개수
+
+* 결론부터 말하자면 **LRO를 사용하지 않는 경우는 모두 1개, LRO를 사용하는 경우는 packet과 segment의 크기에 따라 다르다**
+* ixgbe 드라이버를 사용할 경우 rx를 담당하는 함수는 총 6가지가 있다
+  * ixgbe_recv_pkts_lro_bulk_alloc
+  * ixgbe_recv_pkts_lro_single_alloc
+  * ixgbe_recv_scattered_pkts_vec
+  * ixgbe_recv_pkts_vec
+  * ixgbe_recv_pkts_bulk_alloc
+  * ixgbe_recv_pkts
+* 이를 나누는 기준은 2가지로 나뉜다
+  * packet의 처리 방식
+    1. LRO(Large Receive Offload)
+    2. vectore
+    3. default
+  * allocation 방식
+    * bulk allocation(batch allocation)
+    * single allocation
+    * default
+* 위의 기준에 따라 총 6가지의 함수가 생겼고, 현재 드라이버의 상태와 사용자가 입력해준 옵션에 맞춰서 함수가 선택된다
+* 이 중 LRO버전을 제외한 모든 함수들은 segment가 1로 고정되어있다
+  * 모든 packet이 하나의 segment에 담겨진다는 뜻이다
+* LRO버전의 경우 여러개의 packet을 하나로 합쳐서 넘겨주기 때문에 합쳐진 packet의 크기가 segment의 크기를 넘을 수 있다
+* 이를 위해서 segment를 여러개를 만들어 packet을 저장한다
+
+* 이 때문에 segment의 크기와 packet의 크기에 따라 segment의 개수는 달라질 수 있다
+
+---
+
+### 2. 각 segment의 크기 지정
+
+* segment의 크기는 **프로그래머가 mempool을 만들때 지정해준다**
+
+
+
+<center> mempool_create in fancy </center>
+
+
+
+![Alt_text](image/04.01_mempool_create_in_fancy.JPG)
+
+* fancy에 있는 dpdk 코드이다
+* rte\_pktmbuf\_pool\_create라는 함수를 보면 매개변수로 RTE\_MBUF\_DEFAULT\_BUF\_SIZE를 넘겨준다
+* 이 매개변수는 위의 주석에서 4번에 해당하는 변수로 각 mbuf의 data buffer의 크기를 지정해주는 변수이다
+* RTE\_MBUF\_DEFAULT\_BUF\_SIZE는 2048 + 128로 지정되어있다
+  * 03/31일자 기록 참고
+* 이와 관련된 내용은 03/31일자 기록에 있는 함수의 매개변수를 따라가보면 확인할 수 있다
+* 그렇다면 이 data buffer의 크기는 어떤 범위에서 허용될까
+
+
+
+<center> buf_size setting in ixgbe_dev_rx_init </center>
+
+
+
+![Alt_text](image/04.01_buf_size_set_in_ixgbe_dev_rx_init.JPG)
+
+* 위의 캡쳐를 보면 1KB에서 16KB사이의 값이 유효하다고 한다
+* ixy에서도 그렇고 위의 default값도 그렇고 2KB로 지정되어있는데 왜 최소가 1KB로 되어있을까
+* 그 이유는 ixgbe의 rx함수 중 vector 기능을 사용하는 함수에서 추측할 수 있다
+
+
+
+<center> comment in _recv_raw_pkts_vec </center>
+
+
+
+![Alt_text](image/04.01_comment_in_recv_raw_pkts_vec.JPG)
+
+* 위의 주석은 \_recv\_raw\_pkts\_vec의 함수에 있는 주석이다
+  * \_recv\_raw\_pkts\_vec함수는 ixgbe\_recv\_pkts\_vec 함수를 따라가면 나오는 vector 기능을 사용하는 rx 함수이다
+* 4개의 packet을 하나의 loop에서 처리한다고 기술되어있다
+* 4개의 packet을 한번에 처리하여 contiguous한 공간에 담아준다
+
+
+
+<center> load to contiguous memory space  </center>
+
+
+
+![Alt_text](image/04.01_conti_vec.JPG)
+
+* 따라서 총 4KB 이상의 메모리를 사용하게 하여 DMA의 사용 효율을 높인 것이다
+
+---
+
+### 3. rte\_mem\_virt2phy의 역할 및 원리
+
+* 함수명 그대로 Virtual Address를 Physical Address로 변환해주는 기능을 한다
+* 좀더 자세히 설명하자면 **Virtual Address에 해당하는 page를 찾아 Physical Address로 변환해준다**
+
+
+
+<center> Get Page Number </center>
+
+
+
+![Alt_text](image/04.01_get_page_num.JPG)
+
+* 위의 캡쳐는 rte\_mem\_virt2phy 함수의 일부이다
+* Virtual Address를 page size로 나눠서 page number를 구한다
+  * page는 virtual address의 관점이고, frame이 physical address의 관점이다
+  * 따라서 virt\_pfn이라는 변수는 사실 page number를 뜻하고, 아래의 page라는 변수가 실제 pfn이 될 것이다
+* offset을 이용해 pfn값을 구해온다
+  * pagemap을 읽어와 사용하는 이 부분은 추가확인이 필요함
+
+
+
+<center> Get Physical Address </center>
+
+
+
+![Alt_text](image/04.01_get_phy_addr.JPG)
+
+* 위의 캡쳐는 이전 캡쳐의 다음 부분이다
+* 구한 pfn값과 Virtual Address를 page size로 나누어 얻은 page offset(실제로는 frame offset)을 더해 Physical Address를 구한다
+
+---
+
+### 확인해야할 부분
+
+1. VFIO driver
+   * VFIO 드라이버가 dpdk에서 하는 역할을 확인해야한다
+   * VFIO와 IOVA as VA 모드간의 관계도 확인해야한다
+2. rte\_mem\_virt2phy의 세부 원리 및 실제 활용
+   * /proc/self/pagemap의 사용방법과 offset의 역할에 대한 확인이 필요하다
+3. HEADROOM의 존재 이유
+   * 빈 padding일 가능성이 매우 크지만 확실하지 않다
+   * tailroom은 document에서는 등장하지만 실제 코드에서는 등장하지 않는다는 점과 함께 확인해볼 필요가 있다
+
+
+
+---
+
 ## 03/31 현재상황
 
 * 아래의 것들은 확인한 내용들이다
