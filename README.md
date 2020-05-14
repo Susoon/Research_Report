@@ -1,14 +1,17 @@
 # Daily Report for DPDK
 
-## ToDo List
+##  ToDo List
 
-* ipsec packet size별로 구현해놓은 것들 잘 구현되었는지 확인하기
-  * 추후에 논문에 담을 때 다시 확인
-* dpdk phyical address에 offset을 줘서 NIC이 하나의 page 내에서 packet을 구분하는 분기점이 있는지 확인
-* packet을 나눠서 저장하는 rte\_mbuf의 segment의 크기를 확인하기
-* rte\_mbuf와 header를 구분해서 저장하는 이유와 multi process간의 관계를 설명하는 문서가 있는지 확인하기
-* dpdk에서 page shift와 page boundary를 어떻게 처리하고 왜 그렇게 하는지 확인하기
-* IOMMU와 IOVA간의 관계를 확인해보기
+1. gpunet 코드에서 buffer의 운용 방법 확인
+   * gpu에 할당된 buffer의 총 size
+   * send / recv에 따른 buffer 활용
+     * 왜 send에서는 index로 sbuf에 접근해서 message를 가져오고 recv에서는 ptr로 packet을 가져오는가
+   * gpu interface 확인
+     * warp단위로 함수를 호출하는 과정 확인
+2. packet size별로 nf 돌려서 그래프 만들기
+3. Matrix Multiplication 구현해서 dpdk와 gdnio로 실험하기
+4. Evaluation할 app 찾아서 돌려보기
+
 ---
 ## 04/01 현재상황
 
