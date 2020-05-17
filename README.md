@@ -2,17 +2,161 @@
 
 ##  ToDo List
 
-1. gpunet 코드에서 buffer의 운용 방법 확인
-   * gpu에 할당된 buffer의 총 size
-   * send / recv에 따른 buffer 활용
-     * 왜 send에서는 index로 sbuf에 접근해서 message를 가져오고 recv에서는 ptr로 packet을 가져오는가
-   * gpu interface 확인
-     * warp단위로 함수를 호출하는 과정 확인
+1. ~~gpunet 코드에서 buffer의 운용 방법 확인~~
+   * ~~gpu에 할당된 buffer의 총 size~~
+   * ~~send / recv에 따른 buffer 활용~~
+     * ~~왜 send에서는 index로 sbuf에 접근해서 message를 가져오고 recv에서는 ptr로 packet을 가져오는가~~
+   * ~~gpu interface 확인~~
+     * ~~warp단위로 함수를 호출하는 과정 확인~~
 2. packet size별로 nf 돌려서 그래프 만들기
 3. Matrix Multiplication 구현해서 dpdk와 gdnio로 실험하기
 4. Evaluation할 app 찾아서 돌려보기
 
 ---
+## 05/17 현재상황
+
+* nf와 Matrix Multiplication 구현중이다.
+
+---
+
+### NF 구현
+
+* nf의 경우 router, ipsec, nids 모두 수정 후 실행해보았다.
+* pps가 매우 이상하게 계산된다
+
+
+
+<center> router pps </center>
+
+
+
+![Alt_text](image/05.17_router.JPG)
+
+
+
+<center> ipsec pps </center>
+
+
+
+![Alt_text](image/05.17_ipsec.JPG)
+
+
+
+<center> nids pps </center>
+
+
+
+![Alt_text](image/05.17_nids.JPG)
+
+* 위의 캡쳐사진들을 보면, packet을 아예 처리하지 못하거나, 1%미만의 packet들만 처리하는 것을 확인할 수 있다
+* 이에 대한 원인은 추측 중이다
+  1. rx\_buf의 인덱싱문제
+     * ipsec과 nids의 경우, 코드 수정후 재확인 필요
+     * 자세한 내용은 아래에
+  2. 아직 해결되지 않은 buffer의 pipelining 문제
+     * 이는 찬규형과 얘기해봐야 알 것 같다
+---
+### rx_buf indexing problem
+* router는 1개의 packet당 1개의 thread가 할당되고, router 커널이 512개의 Thread를 가진 1개의 Thread Block을 할당받는다.
+  * rx\_kernel과 동일한 개수의 Thread가 할당되고, 동일한 개수의 Thread를 가진다.
+* 따라서 rx\_kernel에 chapter\_idx를 도입한 것과 동일하게 indexing을 해주면 문제가 없다.
+
+
+
+<center> router indexing </center>
+
+
+
+![Alt_text](image/05.17_router_indexing.JPG)
+* 위의 if문 내부 조건을 보면, (0x1000\*512)\*chapter\_idx를 인덱스에 더해주어 chapter\_idx를 도입하고 있음을 알 수 있다.
+* ipsec과 nids는 1개의 packet당 1개 이상의 thread가 할당되어, rx\_kernel과 다른 개수의 Thread를 가지게 된다.
+  * ipsec은 64B의 packet의 경우 1개의 packet당 3개의 thread가 할당되어, 커널이 128개의 thread를 가진 Thread Block 3개를 가진다.
+  * nids의 경우 1개의 packet당 3개의 thread가 할당되어, 커널이 128개의 thread를 가진 Thread Block 3개를 가진다.
+* 따라서 chapter\_idx를 도입할 때, 추가적인 indexing이 필요하다.
+
+
+
+<center> ipsec indexing </center>
+
+
+
+![Alt_text](image/05.17_ipsec_indexing.JPG)
+* 위의 if문 내부 조건을 보면, chapter\_idx외에 (0x1000\*PPB)\*seq\_num를 인덱스에 더해주어 chapter\_idx를 도입하고 있음을 알 수 있다.
+* router와 달리 ipsec과 nids는 loop를 1번 실행하여 모든(512개) packet을 처리할 수 없으므로, 1번의 loop 실행 뒤 chapter\_idx 변경을 하면 안된다.
+  * 1번의 loop 실행이 128개의 packet을 처리하니 총 4번의 loop가 필요하다.
+    * 위에서 제시한 예시의 경우 3개의 Thread Block이 1번 loop를 실행한 뒤 1개의 Thread Block이 loop를 1번 더 실행해주어야한다.
+* 따라서 seq\_num을 사용하여 4번에 걸쳐서 대입하게끔 유도한 것이다.
+
+* 위의 추측대로 문제가 해결된다면, router는 제대로 작동해야함이 맞다.
+* 하지만 router도 정상 작동을 하지 않는 것을 통해 다른 문제가 있을 수 있음을 추측할 수 있다.
+
+---
+
+### Matrix Multiplication
+
+* 다음과 같은 가정 속에서 코드를 구현했다
+  1. packet의 payload에 matrix의 값들이 빈틈없이 채워져있다고 가정했다.
+    * packet의 payload size가 60B라면 4B의 int값 15개가 채워져있다고 가정했다.
+  2. (1개의 packet에 들어있는 data의 개수) * 16의 row와 column을 가진 Square Matrix로 연산한다 
+    * 60B의 payload size를 기준으로 15 * 16 = 240개의 row와 column을 가졌다고 가정했다
+  3. MM 커널에서 packet을 받아와 mat1과 mat2에 data를 넣어준 뒤 gpu\_matrix\_mult함수를 호출시, mat1과 mat2를 곱하여 mat\_result에 저장하는 과정을 진행한다
+    * gpu\_matrix\_mult함수가 github에서 가져온 코드이다
+
+* github에 star를 2번째로 많이 받은 코드를 가져왔다
+  * github 사이트 : [matrix-cuda](https://github.com/lzhengchun/matrix-cuda)
+  * 첫번째로 많이 받은 코드는 cuda로 구현하였지만 python에서 사용할 수 있게끔 API를 제공하는 모듈이어서 제외했다
+  * 첫번째로 많이 받은 MM 코드 : [blocksparse](https://github.com/openai/blocksparse)
+  
+* 어떠한 알고리즘을 적용하는 것이 아닌 직접 곱셈을 하는 코드이다
+  
+  * 이러한 이유때문에 첫번째 코드를 써야하나 고민중에 있다
+  
+* 이 코드는 seed를 고정한 후 rand함수를 사용해 matrix를 채우고, gpu에서 MM을 계산하고 cpu에서 MM을 계산한 후 속도차이를 확인하는 코드이다.
+
+* matrix를 채우는 부분을 packet에서 데이터를 뽑아서 채워넣도록 수정했다
+
+
+
+<center> Filling Matrix </center>
+
+
+
+![Alt_text](image/05.17_MM_kernel.JPG)
+
+* packet의 data부분을 memcpy로 matrix(2차원 배열이지만 1차원처럼 사용)에 그대로 넣어주었다.
+  * packet의 payload에 matrix의 값이 빈틈없이 채워져있다는 가정을 위해서.
+* 한번에 matrix의 모든 값을 채워넣을 수 없으므로, mat\_idx를 사용하여 현재 값이 대입되어야할 위치를 알려준다.
+* mat\_flag로 현재 값을 대입 중인 matrix를 알려준다.
+  * cur\_mat\[mat\_flag\]가 현재 값을 대입 중인 matrix이다.
+* mat\_flag가 2가 되면 mat1과 mat2 모두 값 대입이 완료되었다는 의미이므로, gpu\_matrix\_mult 커널을 호출한 뒤 chapter\_idx를 이동시키고, pkt\_cnt값을 올린다.
+
+* 현재 위의 코드는 실행되지 않고 있다.
+  * cudaMemcpy가 실행되지 않는다.
+
+
+
+<center> Error Part </center>
+
+
+
+![Alt_text](image/05.17_errorpart.JPG)
+
+* while문 전체를 주석처리할 경우 실행되지만, while문만 남기고 while문 내부 코드를 전부 주석처리하여도 실행이 안된다.
+* 원인은 할당된 thread의 수가 gpu가 감당할 수 있는 thread의 수를 넘어갔기 때문으로 추측중이다.
+* 이 때문에 thread 수를 재조정 중이다.
+  * row와 column이 모두 240(=15\*16)이므로 matrix의 값의 총 개수는 49600(=240\*240)이다.
+  * 하나의 값당 하나의 thread가 사용되므로 총 49600개의 thread를 할당하려 시도했던 것이다.
+  * 이로 인해 MM 커널에서 thread를 모두 가져가버렸고, rx\_kernel이 사용하려했던 thread도 MM이 사용하게 되어버린 것이다.
+* 여기서 의문은 thread의 수를 과도하게 할당했다면, 커널 자체가 실행되지 않았어야하지않는가 이다.
+* 더 자세히 알아볼 필요가 있을 것 같다.
+* 아래의 사이트는 MM 코드를 수정하면서 찾아본 cuda의 thread 할당방법을 소개한 사이트이다.
+  * 아직 더 읽어봐야할 것 같다.
+* [cuda_Grid](http://haanjack.github.io/cuda/2016/03/27/cuda-prog-model.html)
+
+
+
+---
+
 ## 04/01 현재상황
 
 * 아래의 것들은 확인한 내용들이다
