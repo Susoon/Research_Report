@@ -13,8 +13,34 @@
 4. Evaluation할 app 찾아서 돌려보기
 
 ---
-## 05/17 현재상황
+## 05/18 현재상황
+* nf의 indexing 문제의 원인을 대략적으로 파악하였다.
+* 기존 if문에서 packet을 받은 것을 확인한 방법은 다음과 같다.
 
+<center> packet checking in router </center>
+
+![Alt_text](image/05.17_router_indexing.JPG)
+* 위의 사진을 보면 chapter\_idx에는 0x1000을 곱해주었지만 threadIdx.x에는 곱해주지 않았음을 확인할 수 있다.
+* 이렇게 되면 thread번호를 통한 이동은 1byte씩 이동하게 된다.
+* 원래는 4byte씩 이동해야하므로, 각 thread가 본인이 맡아야할 packet의 부분에 정확하게 도달하지 못하게 된 것이다.
+  * 왜 4byte씩인지는 확인해볼것
+* rx\_kernel에 buf\_status의 값을 변화시키는 부분이 있어 packet을 확인하는 부분에 buf\_status를 활용하는 것으로 수정했다.
+  * rx\_buf의 값을 변화시키며 packet을 확인하는 것은 packet의 data를 변조시키는 것이므로 이를 피하면서 indexing 문제도 덜한 buf\_status를 활용했다.
+
+<center> packet checking with buf_status in router </center>
+
+![Alt_text](image/05.18_router_indexing_buf_status.JPG)
+* 위의 사진처럼 buf\_status의 값을 확인해서 packet을 확인하게끔했다.
+* 수정 후 pps는 다음과 같이 확인되었다.
+
+<center> pps with router after modification </center>
+
+![Alt_text](image/05.18_router_pps_buf_status.JPG)
+* 정확히 25%가 나오는 것을 확인할 수 있다.
+* 이는 chapter\_idx의 관리가 제대로 되지 않아 발생한 문제로 추측된다.
+
+---
+## 05/17 현재상황
 * nf와 Matrix Multiplication 구현중이다.
 
 ---
