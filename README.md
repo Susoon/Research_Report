@@ -13,6 +13,22 @@
 4. Evaluation할 app 찾아서 돌려보기
 
 ---
+## 05/19 현재상황
+* ipsec에 1개의 thread block당 512개이상의 thread를 할당할 경우 kernel이 launch되지 않았다.
+  * 128byte 이상을 처리하는 ipsec 커널의 경우 1개의 thread block에 512개 이상의 thread가 할당됨
+    * 모두 launch되지 않음
+  * 128B를 처리하는 ipsec 커널의 경우, 1개의 thread block당 896개의 thread를 사용하고 총 4개의 thread block이 사용됨
+  * 이를 1개의 thread block당 448개의 thread를 할당하고 총 8개의 thread block으로 늘렸을때는 launch됨
+* 이와 동일한 현상이 nids에도 발생하는지 확인 필요
+  * nids의 경우 먼저 확인되어야할 것이 packet의 size별로 할당되는 thread의 수가 다른지 코드를 확인해야함
+* MM의 경우 일단 local 상에서 실험 후 코드 분석 필요
+  * local 상에서 Matrix 크기별로 속도 측정
+  * 커널에 thread 할당하는 것과 매커니즘 분석 필요
+* DMA Batch 관련 이슈 확인해보기
+  * Batched DMA로 검색해보면 될듯함
+  * ~~시간이 된다면~~
+
+---
 ## 05/18 현재상황
 * nf의 indexing 문제의 원인을 대략적으로 파악하였다.
 * 기존 if문에서 packet을 받은 것을 확인한 방법은 다음과 같다.
