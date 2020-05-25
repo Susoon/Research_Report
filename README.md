@@ -13,7 +13,59 @@
 4. Evaluation할 app 찾아서 돌려보기
 
 ---
+## 05/25 현재상황
+
+* ipsec의 경우 한번의 loop으로 모든 packet(512)개를 처리할 수 없는 경우 packet을 받았는지 확인하는 것 자체에서 성능저하가 이미 발생
+  * 512byte 이상의 packet의 경우 두 번 이상의 loop로 packet을 처리해야함
+  * 1024byte 기준으로 512개의 packet을 3번에 걸쳐서 처리함
+* rx\_kernel과 ipsec의 처리속도 차이로 추정중
+
+
+
+* 64byte의 경우 ipsec을 실행시켰을 때, 성능저하가 있었던 것에 대해서 추가 실험을 진행했음
+  * AES만 실행될 때
+  * SHA처리까지만 진행되고 처리된 값이 copy되지는 않을 때
+  * SHA처리 된 값이 multi-thread에 의해 copy될 때
+  * SHA처리 된 값이 하나의 thread에 의해 copy될 때
+
+
+
+<center> Only AES </center>
+
+
+
+![Alt_text](image/05.25_64_aes.JPG)
+
+
+
+<center> AES and SHA </center>
+
+
+
+![Alt_text](image/05.25_64_sha.JPG)
+
+
+
+<center> Copy with multi-threads </center>
+
+
+
+![Alt_text](image/05.25_64_sha_multcopy.JPG)
+
+
+
+<center> Copy with one-thread </center>
+
+
+
+![Alt_text](image/05.25_64_sha_copy.JPG)
+
+
+
+---
+
 ## 05/19 현재상황
+
 * ipsec에 1개의 thread block당 512개이상의 thread를 할당할 경우 kernel이 launch되지 않았다.
   * 128byte 이상을 처리하는 ipsec 커널의 경우 1개의 thread block에 512개 이상의 thread가 할당됨
     * 모두 launch되지 않음
