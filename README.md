@@ -15,9 +15,12 @@
 ---
 ## 05/26 현재상황
 
-* ipsec 1024B의 성능저하 원인을 알아보려 이것저것 실험 중 이상한 현상을 발견했다.
+1. ipsec 1024B의 성능저하 원인을 알아보려 이것저것 실험 중 이상한 현상을 발견했다.
+  * 해결
+2. ipsec 64B의 성능향상 실험
+
 ---
-### 현상 의문제기 & 실험 1
+### 1번 현상 의문제기 & 실험 1
 
 <center> ipsec 1024B ring num </center>
 
@@ -55,7 +58,27 @@
       * 1024B의 packet은 1개의 packet당 63개의 thread가 할당된다.
 * 각 Thread Block이 어떻게 일을 하고 있는지 확인이 필요해보인다.
 
+---
+### 해결
 
+* rot\_index 변수를 shared 변수로 설정해두었는데, shared 변수의 경우 Thread Block 내에서만 공유되고 서로 다른 Thread Block간에는 공유되지 않는다.
+* 그래서 첫번째 Thread Block에서만 rotation을 돌고 다른 Block의 경우 돌지 않아 성능이 떨어진 것이다.
+* 수정 후 재실험이 필요하다.
+---
+### 2번 문제 현상 및 의문 제기
+
+* 64B packet을 ipsec에 넣고 돌렸을 때 생기는 성능저하가 SHA처리한 값을 packet에 memcpy로 넣어주는 과정에서 생기는 것을 발견.
+  * 05/25일자 실험 참고
+* 성능저하의 구체적인 주 요인이 무엇인가와 memcpy를 제거할 수 있는가에 대한 실험을 진행해야함
+  1. Multi-Thread copy로 인해 발생한 Memory False Sharing에 의한 성능저하가 큰 폭으로 존재하는가
+    * 성능저하의 실질적 주요인은 memcpy 그 자체이겠지만, 05/25의 실험의 결과를 보면 Multi-Thread copy가 Single-Thread copy보다 성능이 떨어지는 것의 원인 파악이 필요해보였다.
+    * Multi-Thread copy와 Single-Thread copy의 성능차이가 Memory False Sharing에 의한 것으로 가설을 세우고 실험을 진행했다.
+      * 20B밖에 되지 않는 data를 3개의 Thread로 나누어 copy를 하다보니 서로의 cache를 더럽혀 overhead가 발생하지 않을까라는 추측을 통해 가설을 세웠다.
+      * GPU의 실질적으로 호출되는 cache line size는 32B이다.
+      * [GPU cacheline Question](https://forums.developer.nvidia.com/t/pascal-l1-cache/49571/4)
+  2. SHA의 결과값을 packet에 붙여주기위해 사용되는 octx배열의 삭제를 통한 memcpy 제거
+    * octx 배열의 경우 Outer Digest를 진행하고 그 결과값을 packet에 붙여주기전까지의 data를 저장하기 위해 사용된다.
+    * 결국 octx 배열을 사용하지 않고 Outer Digest에 packet buffer를 바로 넘겨주면 memcpy가 필요없게 된다.
 
 ---
 ## 05/25 현재상황
