@@ -16,6 +16,8 @@
 ## 05/26 현재상황
 
 * ipsec 1024B의 성능저하 원인을 알아보려 이것저것 실험 중 이상한 현상을 발견했다.
+---
+### 현상 의문제기 & 실험 1
 
 <center> ipsec 1024B ring num </center>
 
@@ -32,7 +34,28 @@
 * 결국 packet buffer에 ipsec의 모든 thread들이 동시에 도착하지만 몇몇 thread들만 packet을 확인할 수 있었다는 것이다.
 * 이것은 결국 두루뭉실하게 넘어갔던 rx\_kernel이 ipsec의 thread들을 **막는다**는 개념을 정확하게 할 필요가 있음을 보여주는 것이라 추측된다.
 * 0번째뿐만이 아닌 1번째, 2번째 rotation까지 넘어가서 일을 하는 thread들이 특정한 칸(e.g. 각 rotation의 0번째 칸)을 담당하는 thread들인지, 아니면 랜덤한 thread들인지 확인해볼 필요가 있을 것 같다.
-  * 현재까지는 15번째 이하의 칸을 관리하는 thread들만 다음 rotation에 넘어가서도 packet을 확인할 수 있었다.
+  * 현재까지는 15번째 이하의 칸을 관리하는 thread들만 다음 rotation에 넘어가서도 packet을 확인할 수 있었다
+---
+
+### 실험 2
+
+* pps는 출력하지 않고 rot\_index가 변하는 시점과 ring num만 출력하게 해보았다
+
+<center> ring num and rot_index </center>
+
+![Alt_text](image/05.26_ipsec_rot.JPG)
+* 위의 사진을 보면 rot\_index는 1에서 2로 넘어갔음에도 불구하고 rot\_index가 변하는 시점 앞뒤로 대부분 0번째 rotation에 속해있음을 확인할 수 있다.
+  * 1에서 2로 넘어갔다면 변하는 시점 전에는 1번째 rotation으로 찍혀야하고 후에는 2번째 rotation으로 찍혀야함이 맞다.
+* 그 말은 결국 **rotation은 돌지만 대부분의 thread들은 다음 rotation으로 넘어가지 못했다**라는 결론이 나온다.
+  * 이번에도 15번째 이하의 칸을 관리하는 thread들만 rotation에 넘어가서도 packet을 확인할 수 있었다.
+  * 즉, 945(=15*63)번째 thread까지만 rotation을 돌았다는 뜻이다.
+    * 1개의 Thread Block에는 1008개의 thread가 할당되어 있다.
+    * Thread Block과 어느정도 연관돼있을 가능성이 있어보인다.
+      * 63(=1008-945)개의 thread만 빼고 모두 첫번째 Thread Block에 있는 thread만 넘어간 것이다.
+      * 1024B의 packet은 1개의 packet당 63개의 thread가 할당된다.
+* 각 Thread Block이 어떻게 일을 하고 있는지 확인이 필요해보인다.
+
+
 
 ---
 ## 05/25 현재상황
