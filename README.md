@@ -13,6 +13,28 @@
 4. Evaluation할 app 찾아서 돌려보기
 
 ---
+## 05/26 현재상황
+
+* ipsec 1024B의 성능저하 원인을 알아보려 이것저것 실험 중 이상한 현상을 발견했다.
+
+<center> ipsec 1024B ring num </center>
+
+![Alt_text](image/05.26_ipsec_1024_rot_num.JPG)
+
+* 위의 사진은 192pps로 PKT-GEN에서 packet을 보냈을 때, gdnio가 packet 수를 count하는 if문 내에서 ring의 몇번째 칸이 반응하는지 출력한 것이다.
+  * e.g.) \[1th rot\] ring num : 15는 1번째 rotation의 15번째 칸이니 186(=171 * 1 + 15)번째 칸에 packet이 들어왔고 이때문에 해당 칸을 담당하는 thread가 위의 값을 출력한 것이다.
+* 위의 사진을 보면 대부분 0번째 rotation만 출력됨을 알 수 있다.
+  * 위의 사진은 일부분만 가져온 것이긴하지만 1번째와 2번째 rotation에서 출력된 경우는 전체 중 10%이하에 불과했다.
+* 결국 ipsec의 thread들이 **0번째 rotation에서는 제 몫의 일을 다하지만 그 외의 rotation의 경우 그렇지 못한다**라는 것을 알 수 있다.
+* 하지만 의문인 것은 그렇다면 왜 **몇몇 thread는 일을 하고 그 외의 thread는 일을 하지 못하는가**이다.
+* 만약 기존의 가설대로 rx\_kernel이 ipsec의 thread들이 packet buffer에 접근하는 것을 막아 packet을 확인하지 못해서 성능이 떨어진 것이라면, 0번째 rotation에서만 일을 하고 나머지 rotation에서는 일을 하지 못해야하는 것이 맞다.
+  * 혹시나 몇몇 thread가 먼저 일을 마치고 rx\_kernel이 막기 전에 packet buffer에 접근하는 일이 생길까봐 ipsec에서 syncthreads()로 thread를 정리하면서 코드가 진행되게끔했다.
+* 결국 packet buffer에 ipsec의 모든 thread들이 동시에 도착하지만 몇몇 thread들만 packet을 확인할 수 있었다는 것이다.
+* 이것은 결국 두루뭉실하게 넘어갔던 rx\_kernel이 ipsec의 thread들을 **막는다**는 개념을 정확하게 할 필요가 있음을 보여주는 것이라 추측된다.
+* 0번째뿐만이 아닌 1번째, 2번째 rotation까지 넘어가서 일을 하는 thread들이 특정한 칸(e.g. 각 rotation의 0번째 칸)을 담당하는 thread들인지, 아니면 랜덤한 thread들인지 확인해볼 필요가 있을 것 같다.
+  * 현재까지는 15번째 이하의 칸을 관리하는 thread들만 다음 rotation에 넘어가서도 packet을 확인할 수 있었다.
+
+---
 ## 05/25 현재상황
 
 * ipsec의 경우 한번의 loop으로 모든 packet(512)개를 처리할 수 없는 경우 packet을 받았는지 확인하는 것 자체에서 성능저하가 이미 발생
