@@ -13,6 +13,138 @@
 4. Evaluation할 app 찾아서 돌려보기
 
 ---
+## 06/01 현재상황
+1. ipsec 64B 버전에서 SHA처리한 값을 rx\_buf에 memcpy하는 것을 single thread로 넣었을 때의 throughput을 구하였다.
+
+<center> Single Thread Copy </center>
+
+![Alt_text](image/06.01_ipsec_64_single_copy.JPG)
+
+* 위의 결과가 현재까지 가장 높은 속도를 보여준다.
+
+2. ipsec 64B 버전에서 ipsec의 모든 과정을 single thread로 실행했을 때의 throughtput을 구하였다.
+  * 여기서는 다양한 상황을 가정하였다.
+  1. rx\_buf를 이용해 직접 작업을 하며, IV값 대입을 1byte씩 연산하여 대입한 경우
+  2. application용 buffer를 kernel의 local memory 영역에 선언하여 rx\_buf의 값을 복사해 작업하며, IV값 대입을 1byte씩 연산하여 대입한 경우
+  3. application용 buffer를 kernel의 local memory 영역에 선언하여 rx\_buf의 값을 복사해 작업하며, IV값 대입을 8byte씩 연산하여 대입한 경우
+
+<center> IV value Assign with 1 byte Code </center>
+
+![Alt_text](image/06.01_assigncode_single.JPG)
+
+* IV값 대입을 1byte씩 진행한 경우의 코드이다.
+* 최적화를 위해서 aes_tmp값을 buffer에 대입하는 것은 memcpy로 대체했다.
+
+<center> IV value Assign with 8 byte Code </center>
+
+![Alt_text](image/06.01_assigncode_eight.JPG)
+
+* IV값 대입을 8byte씩 진행한 경우의 코드이다.
+* 역시 최적화를 위해서 memcpy를 사용했다.
+
+* 각각의 경우에 대해서 \(1\) SHA만 실행한 경우, \(2\)IV값 대입만 실행한 경우, \(3\) SHA와 IV값 대입 모두 실행한 경우로 나누어 실험을 진행하였다.
+* 자세한 실험 결과는 아래에 남겼다.
+---
+### Single Thread 실험
+1. rx\_buf & 1byte
+
+<center> rx_buf & 1byte : SHA </center>
+
+![Alt_text](image/06.01_ipsec_64_single_SHA_rxbuf.JPG)
+
+<center> rx_buf & 1byte : Assign </center>
+
+![Alt_text](image/06.01_ipsec_64_single_assign_rxbuf.JPG)
+
+<center> rx_buf & 1byte : SHA & Assign </center>
+
+![Alt_text](image/06.01_ipsec_64_single_all_rxbuf.JPG)
+
+* rx\_buf에 직접 작업을 하는 경우 RX rate까지 떨어지는 것을 알 수 있다.
+* SHA만 실행한 경우 96%의 효율을 보여주지만, IV값 대입을 실행할 경우 rx\_buf에 접근 횟수가 늘어나 rx\_kernel가 rx\_buf에 접근하는 것을 방해해 RX rate까지 떨어진 것을 확인할 수 있다.
+* SHA와 IV값 대입을 모두 실행할 경우 30%의 아주 저조한 효율을 보인다.
+
+2. application buf & 1byte
+
+<center> application buf & 1byte : SHA </center>
+
+![Alt_text](image/06.01_ipsec_64_single_SHA_appbuf.JPG)
+
+<center> application buf & 1byte : Assign </center>
+
+![Alt_text](image/06.01_ipsec_64_single_assign_appbuf.JPG)
+
+<center> application buf & 1byte : SHA & Assign </center>
+
+![Alt_text](image/06.01_ipsec_64_single_all_appbuf.JPG)
+
+* application buffer를 사용한 경우 RX rate에 전혀 영향이 없음을 확인할 수 있다.
+* SHA만 진행한 경우 rx\_buf를 사용했을 때보다 더 낮은 pps를 보이지만 IV값 대입을 진행한 경우에는 더 높은 pps를 보였다.
+* 특히 SHA와 IV값 대입 모두 진행했을 경우에는 rx\_buf를 사용했을 때보다 20%가량 더 높은 pps를 보였다.
+
+<center> Copy to App buf </center>
+
+![Alt_text](image/06.01_ipsec_copy_appbuf.JPG)
+
+* packet을 받아와 buf에 copy해주면서 발생하는 overhead에 의해 SHA가 더 낮은 pps를 보였는지 확인하기 위해서 buf에 copy해주는 것만 실행되게끔 수정 후 실험해보았다.
+* 100% 효율을 보였지만 copy overhead가 전혀 없다고 확신할 수는 없다.
+  * SHA와 copy를 동시에 진행함으로 인해 overhead가 큰 폭으로 증가할 가능성이 있으므로
+    * scheduling이 꼬인다거나, 단순히 둘의 overhead의 합이 크다거나
+* 하지만 크게 영향을 미치지는 못하는 것으로 보인다.
+
+3. application buf & 8byte
+
+<center> application buf & 8byte : Assign </center>
+
+![Alt_text](image/06.01_ipsec_64_eight_assign_appbuf.JPG)
+
+<center> application buf & 8byte : SHA & Assign </center>
+
+![Alt_text](image/06.01_ipsec_64_eight_all_appbuf.JPG)
+
+* IV값 대입을 8byte로 하는 경우는 SHA만 실행할 경우 2번 실험과 동일하기때문에 SHA 실험은 진행하지 않았다.
+* 1byte씩 진행하는 경우보다 더 느린 속도를 보였다.
+* 이 전에 misaligned 문제를 해결하기 위해 uint32\_t를 모두 unsigned char로 수정하여 코드를 실행했을 때, 형 변환이 너무 빈번하게 일어나 오히려 속도가 떨어진 것과 동일한 원인에 의해 속도가 떨어진 것으로 추정된다.
+* 사실 misaligned 문제가 여기서도 발생한다.
+  * 형변환을 통한 할당이 진행되는데 sizeof\(struct ethhdr\)의 값이 2의 제곱수 형태가 아니므로
+* 위의 코드를 확인해보면 pps 측정을 위해 sizeof\(struct ethhdr\)의 값 없이 진행한 것을 확인할 수 있다.
+* application buffer로만 실험을 진행한 이유도 있다.
+* rx\_buf에 직접 접근하여 형변환을 시도할 경우 illegal memory access 에러를 띄우고 실행이 되지 않는다.
+
+<center> Illegal Memory Access Error </center>
+
+![Alt_text](image/06.01_ipsec_64_eight_all_appbuf.JPG)
+* 런타임 에러가 발생하는 것을 확인할 수 있다.
+---
+### 결론 및 추가 실험의 필요성
+1. rx\_buf를 사용할 경우 RX rate의 성능저하
+* rx\_buf에 직접 접근하여 처리할 경우, syncthreads가 없어 여러개의 thread가 제각기 다른 시간에 rx\_buf에 접근하게 된다.
+  * e.g.) thread 1번이 접근하는 중에 thread 2번이 접근하고, thread 15번이 접근을 시도하는 등
+* rx\_kernel의 경우 syncthreads에 의해 모든 therad가 기다렸다가 한 번에 접근을 시도하는 데, ipsec이 rx\_buf에 연속적으로(각 therad의 접근시간이 연속적으로) 접근을 시도해서 rx\_kernel이 방해받게 되는 것이다.
+* 이로인해 application buffer의 속도가 더 빨라진 것으로 추측된다.
+
+2. 1 thread per 1 packet의 가능성
+* 위의 결과를 보면 ipsec의 모든 과정을 1개의 thread로 실행할 경우 속도가 급격하게 떨어짐을 알 수 있다.
+* 1 thread per 1 packet이 가능해졌을 경우의 장점은 **모든 size의 packet에 대해 동일하게 ipsec을 적용할 수 있다**이다.
+* 위의 장점이 주는 효과는 거대하다.
+  * 가능만하다면 ipsec에는 더이상 이슈가 존재하지 않는다.
+  * batch를 할 필요도 없어보인다.
+* 다만 가능성이 낮아보이고, **이를 해결하는 것이 현재 논문에 꼭 필요한 사항인가**가 의심된다.
+  * 이거 하나로도 논문을 쓸 수 있지 않을까라는 생각도 든다.
+* 추가적으로 알아볼 필요는 있겠으나, 구현을 통한 직접적인 해결이 필요한지는 더 논의가 필요한 것 같다.
+
+---
+## 05/27 현재상황
+* ipsec 64B의 성능향상을 위한 실험을 진행했다.
+
+1. Memory False Sharing에 의한 성능 저하가 있는가
+* 결론부터 말하자면 **없다**.
+* 실험은 다음과 같은 상황속에서 실행되었다.
+  * data의 크기 : 64B / 20B
+  * thread의 수 : 1 / 2 / 3
+  * copy방향 : local memory \-\> global memory
+
+---
 ## 05/26 현재상황
 
 1. ipsec 1024B의 성능저하 원인을 알아보려 이것저것 실험 중 이상한 현상을 발견했다.
