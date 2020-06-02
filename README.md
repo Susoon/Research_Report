@@ -84,7 +84,7 @@
 
 <center> Copy to App buf </center>
 
-![Alt_text](image/06.01_ipsec_copy_appbuf.JPG)
+![Alt_text](image/06.01_ipsec_64_copy_appbuf.JPG)
 
 * packet을 받아와 buf에 copy해주면서 발생하는 overhead에 의해 SHA가 더 낮은 pps를 보였는지 확인하기 위해서 buf에 copy해주는 것만 실행되게끔 수정 후 실험해보았다.
 * 100% 효율을 보였지만 copy overhead가 전혀 없다고 확신할 수는 없다.
