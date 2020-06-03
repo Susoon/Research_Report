@@ -13,6 +13,62 @@
 4. Evaluation할 app 찾아서 돌려보기
 
 ---
+## 06/03 현재상황
+1. 64B packet
+* IV값을 대입해주는 것을 제외한 모든 부분(SHA포함)만 돌렸을 때의 성능을 확인해보았다.
+
+<center> ipsec 64B Application Buffer </center>
+
+![Alt_text](image/06.03_ipsec_64_all_appbuf_SHA.JPG)
+
+* 100%의 성능이 나온다.
+* 이는 IV값을 대입해주는 for문에 문제가 있다는 것을 보여준다.
+  * 문제가 isolation되었다.
+* 이를 어떻게 해결할 것인가에 대한 해결책이 필요하다.
+* 해결책을 위해선 정확한 원인 파악이 필요하다.
+
+2. 128B packet
+* 128B 버전으로 구현된 ipsec을 실행시켰더니 다음과 같은 에러가 발생하면서 ipsec kernel이 launch되지 않았다.
+
+<center> Error of 128B packet ipsec </center>
+
+![Alt_text](image/06.03_ipsec_128_error.png)
+
+* 위의 에러의 원인을 찾아냈다.
+  * extended변수의 indexing 문제였다.
+* 기존 64B와 1514B packet 코드를 기준으로 구현하였는데, 이 코드는 extended를 global memory에 선언하고 이를 매개변수로 받아 사용했다.
+* 이 후 코드를 변경하면서 extended가 local memory로 넘어가게 되었는데 이 과정에서 indexing이 꼬이면서 에러가 발생하였다.
+
+<center> Error part </center>
+
+![Alt_text](image/06.03_ipsec_128_error.JPG)
+
+* 위의 사진이 에러를 유발한 부분이다.
+* 기존에는 global memory에 선언된 extended에 여러 packet의 data가 저장되고 이를 여러개의 thread가 나눠 사용하다보니 저런 index의 변환이 필요했다.
+* 하지만 extended를 local memory에 선언한 뒤에는 각 thread가 고유의 extended 배열을 가지므로 그럴 필요가 없다.
+
+<center> Fixed Error part </center>
+
+![Alt_text](image/06.03_fix_ipsec_128_error.JPG)
+
+* local memory에 선언된 extended를 위한 indexing을 구현한 것이다.
+* 수정 후에는 kernel이 정상적으로 launch되었다.
+* 하지만 여전히 문제가 남아있는 듯하다.
+
+<center> ipsec 128B packet test </center>
+
+![Alt_text](image/06.03_ipsec_128_appbuf.JPG)
+
+* 위의 사진은 수정된 128B packet에 대한 ipsec 코드를 실행한 결과이다.
+* 위의 코드는 rx\_buf에 직접 접근하여 ipsec작업을 진행하는 것이 아니라 local memory에 application buffer를 선언하여 그 위에서 작업을 진행한다.
+* 이 코드는 현재 60%의 성능을 보이고 있다.
+* 이는 위의 64B packet의 실험에서 문제가 되었던 IV값 대입부분을 **multi-thread로 실행**한 버전이다.
+* 이전의 128B packet의 실험의 경우 위의 에러를 해결하지 못해 SHA를 주석처리 후 실험을 진행하였다.
+* 그 결과 100%의 성능을 보였다.
+* 64B packet의 SHA 처리 overhead가 그리 크지 않은 것으로 미루어보았을때, 128B packet도 SHA에 의한 overhead가 40%까지 성능을 저하시키진 않을 것으로 추측된다.
+* 코드 전반적인 indexing 문제를 해결 후 재실험이 필요하다
+
+---
 ## 06/01 현재상황
 1. ipsec 64B 버전에서 SHA처리한 값을 rx\_buf에 memcpy하는 것을 single thread로 넣었을 때의 throughput을 구하였다.
 
