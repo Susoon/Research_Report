@@ -13,6 +13,47 @@
 4. Evaluation할 app 찾아서 돌려보기
 
 ---
+## 06/05 현재상황
+1. 128B packet버전에서의 ipsec이 실행되지 않는 문제점에 대해서 알아보고 있다.
+* 다음과 같은 런타임 에러명을 띄우며 실행되지 않는다.
+
+<center> Error Name </center>
+
+![Alt_text](image/06.03_ipsec_128_error.JPG)
+
+* cudaErrorLaunchOutOfResources 에러는 다음과 같은 상황에 발생한다.
+
+<cetner> Error reason </center>
+
+![Alt_text](image/06.05_cudaErrorLaunchOutOfResources.JPG)
+
+1. device kernel에 과하게 많은 parameter를 넘겨줄 경우 발생
+  * 이 전에 global memory에 선언 후 넘겨주었을 때 실행되지 않았던 이유
+  * 64B와 달리 128B 이상의 경우 global memory에 선언한 d\_extended 변수를 kernel에 parameter로 넘겨준다.
+  * 이때 해당 parameter를 주석처리할 경우 실행되고, 주석처리하지 않은 경우 위의 에러가 발생하였다.
+
+2. register에 과하게 많은 thread를 할당한 경우 발생
+  * 현재 local memory에 선언한 extended를 사용한 경우에 해당하는 이유로 추측된다.
+  * SHA처리를 하는 경우 extended 배열에서 작업하는 부분이 있는데 해당 부분에서 에러가 발생한다.
+
+<center> Error Part </center>
+
+![Alt_text](image/06.05_errorpart.JPG)
+
+* 위의 사진에서 for문 내에 두번째 줄에서 에러가 발생한다.
+  * extended\[e\_index \+ t\] = S\(temp,1\);
+  * 해당 부분을 다루는 과정에서 에러가 발생하여 실행이 안된다.
+    * 위아래 부분을 주석처리하면 변화가 없으나 해당 부분을 주석처리하면 실행이 된다.
+
+* 단, 걸리는 것이 하나 있다.
+* register에 thread가 너무 많이 할당되었다는 것은 한 순간에 처리해야할 작업량이 많다는 뜻이다.
+  * **kernel**에 thread를 너무 많이 할당한 것이 아니라 **register**에 할당한 것이므로
+  * register에 할당했다는 것은 그 순간에 처리해야할 작업이 생겼다는 것
+  * 너무 많이 할당되었다는 것은 처리해야할 작업량이 과도하게 많다는 것이다.
+* 그렇다면 다른 부분을 주석처리해도 동일하게 실행되어야하는 것이 아닌가?
+* 작업량의 문제가 정말 맞는 것인가에 대한 의문이 남는다.
+
+---
 ## 06/03 현재상황
 1. 64B packet
 * IV값을 대입해주는 것을 제외한 모든 부분(SHA포함)만 돌렸을 때의 성능을 확인해보았다.
