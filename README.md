@@ -38,7 +38,7 @@
 
 <center> Error Part </center>
 
-![Alt_text](image/06.05_errorpart.JPG)
+![Alt_text](image/06.04_errorpart.JPG)
 
 * 위의 사진에서 for문 내에 두번째 줄에서 에러가 발생한다.
   * extended\[e\_index \+ t\] = S\(temp,1\);
