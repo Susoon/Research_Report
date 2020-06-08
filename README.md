@@ -9,11 +9,130 @@
    * ~~gpu interface 확인~~
      * ~~warp단위로 함수를 호출하는 과정 확인~~
 2. packet size별로 nf 돌려서 그래프 만들기
+   1. 각 size별로 ipsec의 모든 기능을 1개의 thread로 실행했을 때의 실험
+   2. 각 size별로 ipsec에서 SHA를 제외한 모든 기능을 기존 버전(Single + Multi-thread)으로 실행했을 때의 실험
+   3. 64B packet을 ipsec에서 IV값 대입을 제외한 모든 기능을 single thread로 실행했을 때의 실험
+   4. 각 실험 결과 정리(ipsec, router, nids 모두)
 3. Matrix Multiplication 구현해서 dpdk와 gdnio로 실험하기
 4. Evaluation할 app 찾아서 돌려보기
 
 ---
+## 06/08 현재상황
+
+* 64B부터 1514B까지 ipsec의 모든 기능을 single thread로 진행하였을때의 속도를 확인하고 있다.
+* 이를 위해서 각 size별로 ipsec을 수정중이다.
+* 이는 APUnet에서 ipsec 실험을 1개의 thread로 진행한 것에서 착안하여 모든 size의 packet을 1개의 thread로 진행하여 나온 속도를 확인하기 위함이다.
+* 기존에는 100%의 속도(10Gbps)를 보여주기위해서 수정했다면 현재는 최고 속도를 구하기 위함이다.
+* 각 실험은 application buffer를 각 thread마다 local variable로 선언 후 그 buffer 상에서 작업을 진행하였다.
+
+---
+
+### 1. 64B / 128B / 256B의 실험
+
+
+
+<center> 64B All single thread & app buffer </center>
+
+
+
+![Alt_text](image/06.08_ipsec_64_allsingle_app.JPG)
+
+
+
+<center> 128B All single thread & app buffer </center>
+
+
+
+![Alt_text](image/06.08_ipsec_128_allsingle_app.JPG)
+
+
+
+<center> 256B All single thread & app buffer </center>
+
+
+
+![Alt_text](image/06.08_ipsec_256_allsingle_app.JPG)
+
+* 위의 사진을 보면 ~~아름답게~~ 증가하는 형태를 띄고 있다.
+* 다만 걸리는 부분은 64B \-\> 128B으로의 증가량에 비해서 128B \-\> 256B으로의 증가량이 월등히 크다.
+  * 64B \-\> 128B : 9% (0.9Gbps)
+  * 128B \-\> 256B : 26% (2.6Gbps)
+* 이는 IFG(Interframe Gap)을 제외한 순수한 packet이 전송되는 수의 차를 확인할 필요가 있어보인다.
+  * 위의 bps는 IFG를 포함한 크기이지만 실제로 IFG값을 빼면 64B의 경우 bps가 7.XX Gbps로 떨어진다.
+  * 128B와 256B에서의 순수 bps가 얼마나 나오는지 비교하여보고 납득할만한 수치로 증가한 것인지 확인이 필요하다
+
+---
+
+### 2. 512B의 실험
+
+* 결론부터 말하자면 실험에 실패했다.
+* 그 이유는 **local variable의 과도한 선언**에 있다.
+
+
+
+<center> local variable of 256B ver. </center>
+
+
+
+![Alt_text](image/06.08_256_local.JPG)
+
+
+
+<center> local variable of 512B ver. </center>
+
+
+
+![Alt_text](image/06.08_512_local.JPG)
+
+* 위의 사진들은 256B와 512B의 packet ver.에서 각각 선언된 local variable들이다.
+* 256B의 경우 총 1,136B 사용되었다.
+  * IV : 16B
+  * aes_tmp : 240B (256B - 16B)
+  * ictx : 24B
+  * octx : 24B
+  * extended : 320B (80 * 4B)
+  * buf : 512B (2 * 256B)
+
+* 512B의 경우 총 1,906B 사용되었다.
+  * IV : 16B
+  * aes_tmp : 498B (512B - 16B)
+  * ictx : 24B
+  * octx : 24B
+  * extended : 320B (80 * 4B)
+  * buf : 1024B (2 * 512B)
+
+* 256B의 경우보다 512B의 경우에서 770B의 local variable이 더 사용되었다.
+* local variable의 문제인지 확인하기위해서 512B ver.에서 다른 부분은 그대로 유지한 채로 local variable의 사용량을 감소시켜보았다.
+
+<center> local variable of modified 512B ver. </center>
+
+
+
+![Alt_text](image/06.08_512_local_small.JPG)
+
+* 위의 사진처럼 256B ver.에서 필요한 만큼만 선언 후 실행시켜보았더니 정상 실행되었다.
+  * 하지만 aes_tmp 배열의 크기가 작아서 runtime error가 발생한다.
+  * 단지 kernel launch가 되는가를 확인하기 위해 실행시킨 것이다.
+* local variable의 사용량을 줄일 필요가 있다.
+  * extended를 sha1_kernel_global_512 함수(SHA 작업을 실제로 진행하는 ipsec의 callee 함수) 내에서 선언
+    * 하지만 320B만 확보가 가능해 1024B 이상의 크기를 가지는 packet의 경우 해결되지 않는다.
+  * aes_tmp의 간소화
+    * packet의 정보를 덮어씌우지 않으면서 IV값 대입을 하기 위해선 tmp가 필요하다.
+    * 이를 줄이려면 철저한 계획이 필요하다.
+* 사실 이는 mempool의 적용을 통해 buf 사용이 불필요해지면 자연스럽게 해결될 문제이다.
+  * buf의 크기가 가장 큰 용량을 차지하므로
+* 하지만 속도 확인과 구현 상 이슈를 파악하기 위해 해결해야할 필요가 있다.
+
+
+
+
+
+
+
+---
+
 ## 06/05 현재상황
+
 1. 128B packet버전에서의 ipsec이 실행되지 않는 문제점에 대해서 알아보고 있다.
 * 다음과 같은 런타임 에러명을 띄우며 실행되지 않는다.
 
@@ -297,6 +416,7 @@
 ### 2번 문제 현상 및 의문 제기
 
 * 64B packet을 ipsec에 넣고 돌렸을 때 생기는 성능저하가 SHA처리한 값을 packet에 memcpy로 넣어주는 과정에서 생기는 것을 발견.
+  
   * 05/25일자 실험 참고
 * 성능저하의 구체적인 주 요인이 무엇인가와 memcpy를 제거할 수 있는가에 대한 실험을 진행해야함
   1. Multi-Thread copy로 인해 발생한 Memory False Sharing에 의한 성능저하가 큰 폭으로 존재하는가
