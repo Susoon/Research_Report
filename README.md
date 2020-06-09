@@ -17,6 +17,95 @@
 4. Evaluation할 app 찾아서 돌려보기
 
 ---
+## 06/09 현재상황
+
+* 모든 packet size에 대해서 single thread만 ipsec을 처리할 경우의 문제점이 **local memory의 부족**이었다.
+  * 06.08일자 참고
+* 이를 해결하기위해서 global memory에 application buffer를 선언한 후 kernel에게 parameter로 넘겨주어 작업하게끔 변경하였다.
+* 이때, 가장 문제가 되는 부분이었던 AES처리한 값을 header에 넣어주는 과정을 더 최적화하기 위해 headroom이란 개념을 도입했다.
+
+* headroom이란 개념은 dpdk의 packet manipulation 방식에서 착안했다.
+
+
+
+<center> dpdk mbuf </center>
+
+
+
+![Alt_text](image/06.09_dpdkmbuf.jpg)
+
+* 위의 사진은 DPDK의 공식 문서에서 발췌한 사진이다.
+* 실제 packet의 payload가 담기는 부분 앞과 뒤에 headroom과 tailroom이 존재한다.
+* 이 전에 DPDK를 공부할때에는 저 headroom과 tailroom의 존재의 이유를 몰랐는데 ipsec을 위해 header 처리를 고민하다가 알게 되었다.
+
+
+
+<center> dpdk headroom description </center>
+
+
+
+![Alt_text](image/06.09_headroom_des.JPG)
+
+* 위의 설명을 보면 RTE_PKTMBUF_HEADROOM이 대부분의 경우에서 packet의 앞에 header를 추가하기 위함이라고 나와있다.
+* 이 개념을 도입하면 aes\_tmp를 전혀 사용할 필요가 없게 된다.
+* aes\_tmp를 사용할 필요가 없게 된다면 각 size별로 사용하는 local variable의 크기는 static한 것들만 남게 된다.
+  * e.g.) sha1_gpu_context, IV, etc...
+* 그렇다면 더 이상 **local variable로 인한 문제는 발생하지 않는다.**
+
+* 위의 개념을 도입한 이후 ipsec의 성능을 확인하기 위해서 3가지 실험을 진행하였다
+
+1. 64B \~ 1514B 크기의 packet을 rx\_buf에서 application buffer로 memcpy만 했을때의 pps
+2. 64B \~1514B 크기의 packet을 HEADROOM 개념을 도입했을 때의 pps
+3. 64B 크기의 packet을 single thread과 multi thread를 혼용하고  HEADROOM 개념을 도입했을 때의 pps
+
+---
+
+### 1. memcpy test와 headroom개념 도입 test 비교
+
+* 위의 3가지 실험 중 1번과 2번 실험의 결과를 표와 그래프로 나타내었다.
+
+
+
+<center> memcpy and headroom test table </center>
+
+![Alt_text](image/06.09_global_table.JPG)
+
+
+
+<center> memcpy and headroom test graph </center>
+
+
+
+![Alt_text](image/06.09_global_graph.JPG)
+
+* 위의 그래프를 보면 memcpy만 실행시켰을 경우의 pps는 거의 linear하게 감소하고, headroom을 도입하여 ipsec을 실행한 경우의 pps는 거의 linear하게 증가한다.
+* memcpy만 실행한 경우를 total로 보고 headroom을 도입한 경우를 이로 나누었을 때의 그래프가 아래의 그래프이다.
+* 거의 linear하게 증가하지만 50%를 넘지 못한다.
+
+---
+
+### 2. 64B single + multi thread
+
+* 64B의 경우 기존에 multi thread와 single thread를 혼용하여 ipsec 처리를 한 ver.이 있었다.
+  * 이 경우 9Gbps 정도의 처리량을 보였다.
+* 이를 headroom과 application buffer를 도입하여 재실험해보았다.
+
+
+
+<center> 64B single + multi thread </center>
+
+
+
+![Alt_text](image/06.09_global_64_sm.JPG)
+
+* 위의 사진을 보면 40%정도의 성능을 보임을 알 수 있다.
+* 이는 기존 성능\(90%\)에 비해 절반에 못 미치는 성능을 보이지만 위의 memcpy만 진행했을 때를 total로 보고 계산할 경우 꽤 높은 성능을 보인다.
+  * 4.074 / 5.865 = 69.463%
+  * 유일하게 50% 이상의 성능을 보인다.
+* 확실히 multi-thread의 성능이 더 뛰어남을 알 수 있는 실험이다.
+
+---
+
 ## 06/08 현재상황
 
 * 64B부터 1514B까지 ipsec의 모든 기능을 single thread로 진행하였을때의 속도를 확인하고 있다.
