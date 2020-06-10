@@ -9,14 +9,82 @@
    * ~~gpu interface 확인~~
      * ~~warp단위로 함수를 호출하는 과정 확인~~
 2. packet size별로 nf 돌려서 그래프 만들기
-   1. 각 size별로 ipsec의 모든 기능을 1개의 thread로 실행했을 때의 실험
-   2. 각 size별로 ipsec에서 SHA를 제외한 모든 기능을 기존 버전(Single + Multi-thread)으로 실행했을 때의 실험
-   3. 64B packet을 ipsec에서 IV값 대입을 제외한 모든 기능을 single thread로 실행했을 때의 실험
-   4. 각 실험 결과 정리(ipsec, router, nids 모두)
+   1. ~~각 size별로 ipsec의 모든 기능을 1개의 thread로 실행했을 때의 실험~~
+   2. ~~각 size별로 ipsec에서 SHA를 제외한 모든 기능을 기존 버전(Single + Multi-thread)으로 실행했을 때의 실험~~
+   3. ~~64B packet을 ipsec에서 IV값 대입을 제외한 모든 기능을 single thread로 실행했을 때의 실험~~
+   4. ~~각 실험 결과 정리(ipsec, router, nids 모두)~~
 3. Matrix Multiplication 구현해서 dpdk와 gdnio로 실험하기
 4. Evaluation할 app 찾아서 돌려보기
 
 ---
+## 06/10 현재상황
+
+1. ipsec의 개선점을 찾기
+   * 현재 ipsec의 상황은 linear한 증가와 percent상 나름 준수한 수치를 보이는 희망적인 상황이다.
+   * 하지만 app buf로의 memcpy를 제외했을 때도 현재와 유사한 상황이 보일지는 의문이 든다.
+   * global memory에 높은 빈도로 접근하는 것이 성능 저하의 주 요인인지 정확한 파악이 필요해보인다.
+2. nids와 router의 상태파악
+   * nids와 router가 어떤 상태에 있는지 파악이 필요했다.
+     * 성능이 낮아 최적화가 필요한지
+     * resource가 모자라지는 않은지
+
+---
+
+### 1. ipsec
+
+* 어제의 실험으로 ipsec은 완성에 가까운 수준에 도달한 것으로 보인다.
+* 현재 가장 걱정되는 사항은 **mempool 시스템으로 바꾸고 나서도 유사한 그래프가 도출될 것인가**이다.
+* 이러한 걱정이 생기는 이유는 다음과 같다.
+
+1. memcpy의 overhead가 그렇게 큰 영향을 주지 않을 것 같다는 추측
+2. 기존 논문들에서 언급한 주 성능 저하 원인은 SHA에서의 성능저하보다 기존 논문들에서는 큰 영향이 없다던 AES에서의 성능저하가 압도적으로 큰 것
+3. ipsec 성능 저하의 정확한 원인 파악 실패
+
+* ipsec 성능 저하의 원인은 **global memory의 빈번한 접근, rx\_buf에서 application buffer로의 memcpy**가 현재까지 밝혀낸 원인이다.
+* 하지만 이들은 모두 이 모든 최적화 과정을 거치기 전의 ipsec 초안 버전에서도 동일하게 적용되는 문제들이다.
+* 그 때는 multi-thread를 사용했다할지라도 현재 버전의 성능저하가 매우 심하다.
+* 이는 mempool 시스템으로 바꾸고 난 뒤의 실험결과를 보고 확인해야할 것 같다.
+
+---
+
+### 2. router & nids
+
+* 결론부터 말하자면 **더 이상 고칠 부분이 없다**이다.
+* router와 nids 모두 정상작동하며 100%의 성능을 보인다.
+* nids의 경우에만 일부 수정이 있었다.
+* nids의 경우 ipsec과 동일하게 1개의 packet당 1개 이상의 thread가 할당되어야했다.
+  * 할당되는 thread의 수도 동일했다.
+* 이 경우, 512B 이상의 size를 가지는 packet들에 대해서는 thread 수가 부족해 성능의 급격한 저하를 가지게 된다.
+* 이를 해결하기 위해서 ipsec에 적용했던 single thread solution을 적용하였고 그 결과 모든 크기의 packet에서 100%의 성능을 보인다.
+  * 아래에 사진에는 64B와 1514B의 성능만 남겼다.
+
+<center> 64B nids </center>
+
+
+
+![Alt_text](image/06.10_nids_64.JPG)
+
+
+
+<center> 1514B nids </center>
+
+
+
+![Alt_text](image/06.10_nids_1514.JPG)
+
+* trie에 payload를 한 번 거치면 nids의 모든 과정이 끝나기때문에 overhead가 그렇게 크지 않은 것이 원인으로 추측된다.
+* thread의 수를 1개로 줄이면서 코드도 일부 수정되었다.
+* 기존 nids의 코드는 multi-thread를 사용하기 위해 수정된 코드였다.
+  * Report\_20.02\_20.04.md 파일의 03/20일자 참고
+* 이를 single-thread를 위해 구현된 초안 코드로 변경하였다.
+* 이는 성능에 전혀 영향을 주지 않았다.
+  * 애초에 성능을 저하시킬수는 없는 변화였다.
+* 모든 수정이 끝나면서 nids는 packet의 크기에 전혀 영향을 받지 않는 코드가 되었고, 따라서 nids와 router는 **packet의 size와 상관없이 실행가능하며 100%의 성능을 보이는 코드**가 되었다.
+
+
+
+---
+
 ## 06/09 현재상황
 
 * 모든 packet size에 대해서 single thread만 ipsec을 처리할 경우의 문제점이 **local memory의 부족**이었다.
