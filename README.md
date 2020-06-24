@@ -17,6 +17,121 @@
 4. Evaluation할 app 찾아서 돌려보기
 
 ---
+## 06/24 현재상황
+
+1. nf들 mempool 구조에 맞게 수정 후 실험
+   * ipsec은 RX-TX 연결이 완성되면 그 후 실험
+2. dpdk와 GPU-Ether 각각 CPU cache pollution 있는지 실험
+
+---
+
+### 1. nf들 mempool 구조에 맞게 수정 후 실험
+
+* 모든 nf들을 mempool 구조에 맞게 수정하였다.
+* 또한, 1개의 packet당 1개의 thread만을 사용하면서, packet의 크기를 dynamic하게 확인하고 이에 맞게 각 기능을 수행하게끔 모두 수정하였다.
+
+* ipsec의 경우 RX-TX의 연결간에 발생하는 문제와 동일한 문제가 발생하여 추후에 RX-TX 연결간의 문제가 해결될 경우 실험하기로 했다.
+  * RX-TX 연결간에 발생하는 문제란 RX가 할당한 버퍼를 사용하는 커널(TX 혹은 nf들)이  버퍼를 반납하는 속도가 RX에 비해 많이 느리면 뻗어버리는 증상을 말한다.
+  * ipsec의 경우 RX에 비해 처리속도가 매우 느려 RX가 할당 요청을 압도적으로 더 많이 하다보니 터지는 듯하다.
+  * 이는 찬규형과 함께 고쳐봐야할 것 같다.
+* router와 nids는 모든 packet size에 대해서 100%의 속도를 보인다.
+  * RX와 nf만 실행시켰을 때의 상황
+  * free를 nf에서 해줌
+* 아래는 router와 nids의 실험결과를 64B와 1514B에 대한 것만 남긴 것이다.
+
+
+
+<center> router : 64B </center>
+
+
+
+![Alt_text](image/06.24_router_64.JPG)
+
+
+
+<center> router : 1514B </center>
+
+
+
+![Alt_text](image/06.24_router_1514.JPG)
+
+
+
+<center> nids : 64B </center>
+
+
+
+![Alt_text](image/06.24_nids_64.JPG)
+
+
+
+<center> nids : 1514B </center>
+
+
+
+![Alt_text](image/06.24_nids_1514.JPG)
+
+* ~~아주 아름답게도~~ 100%의 속도를 보이고 있음을 확인할 수 있다.
+* 이 경우에는 nids와 router가 처리하는 속도가 충분히 빨라서 RX의 속도를 떨어뜨리지 않는 것을 확인할 수 있다.
+
+---
+
+### 2. cache pollution
+
+* DPDK와 GPU-Ether가 각각 cache pollution을 일으키는지 실험해보았다.
+* 실험방법은 다음과 같다.
+
+1. DPDK와 GPU-Ether를 snow에서 각각 실행시킨 후 ckjung에서 pkt-gen을 사용해서 64B packet을 최대 pps로 전송한다.
+
+2. snow에서 교수님이 주신 코드를 cache를 사용하는 버전으로 실행시킨다.
+   * 교수님이 주신 코드는 2000만번 배열에 접근하는 코드이다.
+   * 배열에 2000만번 접근하는 데에 걸린 시간을 측정해서 출력해준다.
+   * 이를 cache가 적용되도록 접근하는 것과 cache가 적용되지 않게 접근하는 것 두 가지 방법으로 구현되어있다.
+     * cache가 적용되지 않게 접근하는 것은 index를 엄청나게 큰 수(e.g. 100이상)로 증가시켜 cache에 다음 접근될 데이터가 담기지 않도록 구현한 것이다.
+   * 실행시킬때 DPDK와 GPU-Ether 모두 **pps 출력 기능을 off해 packet 처리 외의 CPU 사용을 금지시켰다**.
+
+* 이 결과는 다음과 같다.
+
+
+
+<center> Normal (without any packet transmission) </center>
+
+
+
+![Alt_text](image/06.24_dpdk_off.JPG)
+
+
+
+<center> DPDK  </center>
+
+
+
+![Alt_text](image/06.24_dpdk_on.JPG)
+
+
+
+<center> GPU-Ether </center>
+
+
+
+![Alt_text](image/06.24_gdnio_on.JPG)
+
+
+
+* 위의 결과를 보면 GPU-Ether와 DPDK 모두 실행시키지 않고 test 프로그램을 실행시켰을 때의 결과를 확인할 수 있다.
+  * 415ms
+  * 이를 base로 삼고 비교한다.
+* DPDK를 실행시켰을 경우 450ms, GPU-Ether를 실행시켰을 경우 420ms의 시간이 소요되었다.
+  * 오차를 5ms정도로 추정하고 있다.
+* DPDK가 base에 비해서 30ms 가량 더 오래 걸리는 것을 확인할 수 있다.
+
+* 반면 GPU-Ether는 오차를 감안하면 동일한 수치를 보임을 확인할 수 있다.
+* 결론적으로 **GPU-Ether는 cache pollution을 일으키지 않는다**.
+
+
+
+---
+
 ## 06/10 현재상황
 
 1. ipsec의 개선점을 찾기
