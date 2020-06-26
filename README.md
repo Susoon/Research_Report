@@ -17,6 +17,74 @@
 4. Evaluation할 app 찾아서 돌려보기
 
 ---
+## 06/25 현재상황
+
+* cache pollution을 위한 실험을 진행하였다.
+* 실험은 65536개의 칸을 가진 배열을 이용했다.
+
+1. 1칸씩 이동하면서 배열에 접근하여 값을 가져와 간단한 연산 후 c라는 변수에 대입
+   * 배열의 단일 데이터 접근 실험
+2. 16칸씩 이동하면서 배열 arr1의 값 64B를 arr2에 memcpy
+   * 배열의 다수 데이터 동시 접근 실험
+
+* 결론부터 말하자면 **cache pollution으로인한 시간적 비용은 약 7~8%로 동일했다.**
+
+
+
+<center> Single data access : No any applications </center>
+
+
+
+![Alt_text](image/06.25_off_access.JPG)
+
+
+
+<center> Single data access : DPDK </center>
+
+
+
+![Alt_text](image/06.25_dpdk_access.JPG)
+
+
+
+<center> Single data access : GPU-Ether </center>
+
+
+
+![Alt_text](image/06.25_gpuether_access.JPG)
+
+
+
+<center> Multiple data access : No any applications </center>
+
+
+
+![Alt_text](image/06.25_off_memcpy.JPG)
+
+
+
+<center> Multiple data access : DPDK </center>
+
+
+
+![Alt_text](image/06.25_dpdk_memcpy.JPG)
+
+
+
+<center> Multiple data access : GPU-Ether </center>
+
+
+
+![Alt_text](image/06.25_gpuether_memcpy.JPG)
+
+* 위의 데이터를 보면 단일 데이터 접근의 경우 DPDK가 44.5초, GPU-Ether와 app을 실행시키지 않은 경우가 41.3초로 **3초\(7.2%\) 정도의 차이를 보였다**.
+
+* 다수 데이터 접근의 경우 DPDK가 19.8초, GPU-Ether와 app을 실행시키지 않은 경우가 18.2초로 **1.5초\(8.2%\) 정도의 차이를 보였다**.
+
+
+
+---
+
 ## 06/24 현재상황
 
 1. nf들 mempool 구조에 맞게 수정 후 실험
