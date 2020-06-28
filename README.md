@@ -17,6 +17,95 @@
 4. Evaluation할 app 찾아서 돌려보기
 
 ---
+## 06/28 현재상황
+
+* 다음의 실험을 진행하였다.
+
+1. cache pollution 실험
+
+   * 이 전의 실험과 달라진 점이 두가지 있다.
+
+   1. 1회의 컴파일로 생성된 아웃풋 파일을 모든 실험에 반복 사용하였다.
+      * 이 전에는 매 실험때마다 컴파일 후 새로 생성된 아웃풋 파일을 사용
+   2. 배열의 크기를 L3 캐시의 크기에 맞춰서 생성하였다.
+      * i7-6800k CPU를 사용하는 snow 서버는 15MB의 L3 캐시 사이즈를 가진다.
+   3. access와 memcpy가 아닌 두 개의 배열에 있는 값을 더하여 다른 배열에 저장하는 add 실험이 추가되었다.
+      * arr1과 arr2에 있는 값을 arr3에 대입하며, arr1와 arr2의 크기의 합이 L3캐시의 크기와 같다.
+
+2. 완성된 rx_kernel을 사용해서 nf 실험
+
+   * 이 전과 달리 ipsec도 실행 가능하다.
+
+---
+
+### cache pollution
+
+* 위에 서술한 바와 같이 **L3 캐시를 모두 사용하는 크기의 배열**을 만들어 실험에 사용하였다.
+* 결론부터 말하자면 **DPDK는 최소 8%, GPU-Ether는 최대 2.5%의 burden이 발생했다**.
+
+
+
+<center> cache pollution test result </center>
+
+
+
+![Alt_text](image/06.28_cachepollution_table.JPG)
+
+* DPDK의 경우 최소 8% 이상의 burden을 보였고 memcpy의 경우 최대 18%의 burden을 보였다.
+* GPU-Ether의 경우 최소 0.5%, memcpy의 경우 2.5%의 burden을 보였다.
+* DPDK와 GPU-Ether 모두 memcpy에서 다른 실험에 비해 큰 값을 가졌는데 이에 대해서는 더 알아볼 필요가 있어보인다.
+* access와 add 실험의 경우 모두 DPDK는 cache pollution을 보이지만 GPU-Ether는 cache pollution을 거의 보이지 않는다는 결과를 보여준다.
+
+---
+
+### nf 실험
+
+* nf에서는 신경써야할 이슈가 하나 있다.
+* 이슈에 대해서 논하기 전에 이슈를 신경쓰지 않고 결과를 도출해보자면 다음과 같다.
+* nids와 router는 모두 100%가 나와 생략했다.
+  * 사실 nids는 64B와 1514B만 측정했으나 100%가 나올것으로 추정되어 생략했다.
+
+
+
+<center> ipsec table </center>
+
+
+
+![Alt_text](image/06.28_ipsec.JPG)
+
+* 왼쪽의 값이 Kpps이고 오른쪽의 값이 Gbps이다.
+  * 사실 10G NIC을 사용하였으므로 오른쪽의 값은 데이터 전송 퍼센트라고 봐도 무방하다.
+* packet의 크기에 따라 linear하게 증가함을 확인할 수 있다.
+* 결과는 모두 의도대로 도출되어 nf가 모두 제기능을 한다고 봐도 되지만 하나의 이슈가 발생하였다.
+* 이는 **시간이 지나면 rate가 점점 떨어진다**는 것이다.
+
+
+
+<center> ipsec 1024B start </center>
+
+
+
+![Alt_text](image/06.28_ipsec_1024_start.JPG)
+
+
+
+<center> ipsec 1024B end </center>
+
+
+
+![Alt_text](image/06.28_ipsec_1024_end.JPG)
+
+* 위의 사진은 ipsec을 1024B의 패킷에 대해서 20분가량 실행시켰을 때의 결과를 나타내고 있다.
+* **20분이 경과하자 총 1%가량 RX와 TX(NF) rate가 감소하였다.**
+* 이는 ipsec뿐만 아니라 router와 nids 모두 발생하는 현상이다.
+* 이는 기존에 \_\_syncthreads의 문제였던 기억이 있어 nf에 \_\_syncthreads를 추가하여보았다.
+* 그 결과 ipsec의 경우 감소 추세는 급격히 감소하였으나 여전히 감소하는 추세를 보였고, nids와 router는 감소하지 않았다.
+  * 하지만 nids와 router도 5분가량만 실행시켜본 상태이기때문에 확실히 감소하지 않을 것이라고는 보장할 수 없다.
+  * 다만 ipsec의 경우 5분 가량만 실행시켜도 0.5%이상 감소하였기때문에 이와 비교하였을때 감소는 하지만 그 감소폭이 매우 미세하다고 추측할 수 있다.
+* 이는 rx\_kernel에 문제가 있는 것으로 추정된다.
+
+---
+
 ## 06/27 현재상황
 
 * cache pollution을 위한 실험을 진행하였다.
