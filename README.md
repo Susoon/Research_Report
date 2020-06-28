@@ -17,6 +17,76 @@
 4. Evaluation할 app 찾아서 돌려보기
 
 ---
+## 06/27 현재상황
+
+* cache pollution을 위한 실험을 진행하였다.
+* 06/25일자 실험에서 반복문의 반복 횟수를 500배 증가시켜 실험을 진행하였다.
+* 상황 설정은 06/25일자 실험과 동일하게 설정되었다.
+  * 아래에 설명되어있다.
+
+1. 1칸씩 이동하면서 배열에 접근하여 값을 가져와 간단한 연산 후 c라는 변수에 대입
+   * 배열의 단일 데이터 접근 실험
+2. 16칸씩 이동하면서 배열 arr1의 값 64B를 arr2에 memcpy
+   * 배열의 다수 데이터 동시 접근 실험
+
+* 결론부터 말하자면 **cache pollution으로인한 시간적 비용은 약 7~8%로 동일했다.**
+
+
+
+<center> Single data access : No any applications </center>
+
+
+
+![Alt_text](image/06.27_off_access_500.JPG)
+
+
+
+<center> Single data access : DPDK </center>
+
+
+
+![Alt_text](image/06.27_dpdk_access_500.JPG)
+
+
+
+<center> Single data access : GPU-Ether </center>
+
+
+
+![Alt_text](image/06.27_gpuether_access_500.JPG)
+
+
+
+<center> Multiple data access : No any applications </center>
+
+
+
+![Alt_text](image/06.27_off_memcpy_500.JPG)
+
+
+
+<center> Multiple data access : DPDK </center>
+
+
+
+![Alt_text](image/06.27_dpdk_memcpy_500.JPG)
+
+
+
+<center> Multiple data access : GPU-Ether </center>
+
+
+
+![Alt_text](image/06.27_gpuether_memcpy_500.JPG)
+
+* 위의 데이터를 보면 단일 데이터 접근의 경우 DPDK가 225.5초, GPU-Ether와 app을 실행시키지 않은 경우가 208.3초로 **17.3초\(8.3%\) 정도의 차이를 보였다**.
+
+* 다수 데이터 접근의 경우 DPDK가 19.8초, GPU-Ether와 app을 실행시키지 않은 경우가 18.2초로 **1.5초\(8.2%\) 정도의 차이를 보였다**.
+
+
+
+---
+
 ## 06/25 현재상황
 
 * cache pollution을 위한 실험을 진행하였다.
