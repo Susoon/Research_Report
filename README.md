@@ -13,11 +13,84 @@
    2. ~~각 size별로 ipsec에서 SHA를 제외한 모든 기능을 기존 버전(Single + Multi-thread)으로 실행했을 때의 실험~~
    3. ~~64B packet을 ipsec에서 IV값 대입을 제외한 모든 기능을 single thread로 실행했을 때의 실험~~
    4. ~~각 실험 결과 정리(ipsec, router, nids 모두)~~
-3. Matrix Multiplication 구현해서 dpdk와 gdnio로 실험하기
-4. Evaluation할 app 찾아서 돌려보기
+3. ~~Matrix Multiplication 구현해서 dpdk와 gdnio로 실험하기~~
+4. ~~Evaluation할 app 찾아서 돌려보기~~
 
 ---
 ## 07/08 현재상황
+
+1. DPDK의 구조는 이전 chapter\_idx를 사용하던 버전을 사용하게 되었다.
+   * packetShader와 APUNet에서는 패킷 I/O가 **하나의 thread가 RX와 TX를 모두 담당한다**.
+     * RX와 TX를 분리해서 구현할 필요가 없다.
+   * packetShader와 APUNet에서 master thread가 필요한 이유는 **NIC개수에 맞게 worker thread가 여러개이기 때문에 worker들이 RX한 패킷을 sequential하게 정렬해줄 필요가 있기 때문이다.**
+     * 우리는 NIC이 1개여서 worker thread도 1개만 있으면 된다.
+     * 고로 master thread가 필요없다.
+   * NF를 DPDK와 실험하기 위해서는 GPU-Ether의 실험에서 사용한 NF를 **어차피 수정해야한다**.
+     * 패킷을 batch해서 GPU에 전달해야하기 때문에 mempool의 운용방식이 변경될 수 밖에 없다.
+     * contiguous한 공간에 패킷을 담아서 batch해야하는 방식이 GPU-Ether의 mempool에 패킷 버퍼가 minimempool을 통해 저장되는 방식과 충돌하기 때문
+   * 따라서 **GPU-Ether와 DPDK가 각각 다른 구조의 NF를 사용하므로 패킷 버퍼 운용방식을 통일시킬 필요가 없다**.
+2. DPDK가 GPU에 패킷을 전달하지 않고 **오직 CPU에서만 작동되는 DPDK의 forwarding**을 실험해보았다.
+   * 이는 아래에 서술해두었다.
+
+---
+
+### DPDK with ONLY CPU forwarding
+
+* 64B와 128B의 패킷에 한해서 GPU에 패킷을 넘겨주지 않고 CPU내에서만 실행되는 DPDK의 성능을 확인해보았다.
+
+
+
+<center> 64B packet forwarding </center>
+
+
+
+![Alt_text](image/07.08_dpdk_without_gpu_64_start.jpg)
+
+
+
+<center> 128B packet forwarding </center>
+
+
+
+![Alt_text](image/07.08_dpdk_without_gpu_128_start.jpg)
+
+* 위의 사진을 보면 64B의 경우 65%, 128B의 경우 100%의 성능을 보이는 것을 확인할 수 있다.
+* 하지만 이는 신뢰할만한 수치가 아니다.
+
+
+
+<center> 64B packet forwarding retransmitt </center>
+
+
+
+![Alt_text](image/07.08_dpdk_without_gpu_64_restart.jpg)
+
+
+
+<center> 128B packet forwarding after several seconds </center>
+
+
+
+![Alt_text](image/07.08_dpdk_without_gpu_128_end.jpg)
+
+
+
+<center> 128B packet forwarding retransmitt </center>
+
+
+
+![Alt_text](image/07.08_dpdk_without_gpu_128_restart.jpg)
+
+* 64B와 128B 두 경우 모두 pktgen에서 traffic 생성을 멈췄다가 다시 전송했을 때 ~~랜덤한 확률로~~ TX rate 떨어진다.
+* 128B의 경우 pktgen에서 전송 시작 후 몇 초내로 TX rate이 떨어진다.
+
+* 이 원인은 파악 중에 있다.
+
+---
+
+## 07/08 현재상황 - 삭제
+
+* 아래의 내용은 불필요해 삭제되었다.
 
 * packetshader와 apunet에서 구현한 Packet I/O의 형태를 본따 DPDK 대조군을 구현중에 있다.
 * 대략적 구상을 마쳤고, 실제 구현만 하면 되는 상태이다.
@@ -110,11 +183,12 @@
    * 이렇게 되면 **DPDK와 GPU-Ether가 실험에 사용한 NF의 구조가 각각 다른 형태를 띄게 된다**.
      * 사실 extract\_pktbuf 함수의 내부구조와 mempool의 운용방식에 변화가 있어 이미 같은 구조라고 보기는 힘들다.
    * 실행 중에 구조체를 변경시킬 것인지 NF 코드의 구조를 변경시킬 것인지에 대한 결정이 필요하다.
-3. rte\_mempool의 사용
-   * 기존 DPDK 코드는 rte\_mempool을 선언하지만 사용하지는 않는다.
-   * 대신 rte\_mbuf를 한번 선언하고 이를 계속 재활용해서 사용하는 형태로 구현되어 있다.
-   * 모든 기능을 하나의 함수 내에서 sequential하게 진행하던 기존 방식과 달리, worker와 master node로 분리된 현재 방식을 위해선 rte\_mempool의 사용이 필수적이다.
-   * 구조의 어마어마한 변화가 필요한 것은 아니지만 rte\_mempool을 운용하는 방식을 알아볼 필요가 있다.
+3. ~~rte\_mempool의 사용~~
+   * ~~기존 DPDK 코드는 rte\_mempool을 선언하지만 사용하지는 않는다.~~
+   * ~~대신 rte\_mbuf를 한번 선언하고 이를 계속 재활용해서 사용하는 형태로 구현되어 있다.~~
+   * ~~모든 기능을 하나의 함수 내에서 sequential하게 진행하던 기존 방식과 달리, worker와 master node로 분리된 현재 방식을 위해선 rte\_mempool의 사용이 필수적이다.~~
+   * ~~구조의 어마어마한 변화가 필요한 것은 아니지만 rte\_mempool을 운용하는 방식을 알아볼 필요가 있다.~~
+   * 
 
 
 
