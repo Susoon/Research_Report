@@ -17,6 +17,109 @@
 4. Evaluation할 app 찾아서 돌려보기
 
 ---
+## 07/08 현재상황
+
+* packetshader와 apunet에서 구현한 Packet I/O의 형태를 본따 DPDK 대조군을 구현중에 있다.
+* 대략적 구상을 마쳤고, 실제 구현만 하면 되는 상태이다.
+
+---
+
+### 함수 흐름
+
+
+
+<center> dpdk packet flow </center>
+
+
+
+![Alt_text](image/07.08_dpdk_flow.jpg)
+
+* 현재 구상중이 DPDK의 패킷 흐름이다
+
+1. worker
+
+   1. rx_burst 
+      * DPDK가 NIC에서 패킷을 받아온다.
+      * 이는 기본 burst 개수인 32개가 max이다.
+      * 이를 rte\_mempool\(DPDK의 mempool\)내부의 rte\_mbuf\(DPDK의 패킷 버퍼)에 저장한다.
+      * 저장한 패킷 버퍼가 무엇인지 master node에게 알린다.
+      * rx를 true로 변경한다.
+   2. if tx == true
+      * tx flag가 true인지 확인한다.
+      * tx flag는 master node에서 변경된다.
+   3. tx\_burst
+      * tx flag가 true일때만 실행된다.
+      * master node가 지정해준 버퍼들을 하나씩 전송한다.
+
+2. master
+
+   1. alloc\_pktbuf
+
+      * GPU의 mempool\(GPU-Ether의 mempool\)에서 pkt\_buf\(GPU-Ether의 패킷 버퍼\)를 할당받는다.
+
+   2. if GPU process done
+
+      * 할당받은 패킷 버퍼가 GPU process를 끝낸 데이터를 담고있는 버퍼인지 확인한다.
+      * 해당 process가 끝났는지에 대한 정보는 app\_idx로 판단한다.
+
+   3. copy\_to\_tx\_batch\_arr
+
+      * GPU process가 끝난 패킷에 대해서만 실행된다.
+
+      * 버퍼들을 worker node에게 알려준다.
+
+   4. else if rx == true
+
+      * GPU process가 끝낸 데이터를 담고 있는 패킷 버퍼를 할당받은 것이 아니며, DPDK가 받은 패킷을 GPU에 전달해야하는 상황인지 확인한다.
+      * rx flag는 worker node에서 변경된다.
+
+   5. copy\_to\_mempool
+
+      * worker node에 의해 지정된 패킷 버퍼\(DPDK\)들을 mempool\(GPU-Ether\)의 패킷 버퍼\(GPU-Ether\)에 복사해넘겨준다.
+      * 이를 app\_idx를 통해 GPU에게 알려준다.
+
+3. GPU
+
+   1. extract\_pktbuf
+      * GPU-Ether에서의 역할과 동일하게 할당받고 데이터까지 저장된 패킷을 받아오는 역할을 한다.
+      * GPU-Ether과 내부구조는 차이가 있다.
+      * batch해서 넘겨줘야하는 DPDK의 구조에 의해 chapter\_idx를 쓰던 버전과 유사한 구조의 mempool형태를 띄고 있다.
+      * 현재 chapter내에 있는 버퍼들이 모두 처리가 끝나야 다음 버퍼로 넘어간다.
+   2. free\_pktbuf
+      * 현재 chapter 내에 있는 버퍼들이 모두 처리가 끝난 경우 해당 버퍼들을 free해준다.
+      * 여기서 GPU process가 끝났다는 것을 알려줄 필요가 있다.
+      * 이는 위에서 서술한 바와 같이 app\_idx로 알린다.
+
+---
+
+### 세부 구현시 주의해야할 사항
+
+1. batch하는 패킷의 수에 변동
+   * batch하는 패킷의 수가 변동하는 이유는 **모든 크기의 패킷들에 대해 DPDK가 최대의 효율을 보이는 batch의 개수가 1024개이지만, GPU의 thread 수는 512개이기 때문**이다.
+   * 이러한 변동사항이 있어도 pipelining이 잘 이루어지는지에 대한 의문이 있다.
+   * 결국 이러한 구조로 변경하게 되면 GPU-Ether가 겪었던 문제를 유사하게 겪게되는 것이다.
+   * 만약 이슈가 발생한다면 GPU-Ether가 해결한 방식으로 해결을 시도하거나, batch하는 패킷의 수를 통일시킬 필요가 있다.
+2. 구조체 변경 \(DPDK의 rte\_mbuf \-\> GPU-Ether의 pkt\_buf)
+   * NF들은 모두 GPU-Ether의 mempool과 pkt\_buf를 사용하는 것에 맞춰서 구현되어 있다.
+   *  DPDK와 NF를 호환시키기 위해서는 **master node가 패킷 버퍼 구조체를 변경시켜줄 필요가 있다**.
+   * **여기서 발생하는 overhead는 무시할 것인가**에 대한 생각을 해볼 필요가 있다.
+     * 사실 원래 필요한 cudaMemcpy에 GPU-Ether의 pkt\_buf에 필요한 field 몇개 변경이 추가된 정도에 불과하다.
+     * 이 또한 사실 app\_idx처럼 field 변경이 불가피한 경우가 존재한다.
+     * 걱정되는 부분은 **위의 부분이 충분한 사유가 되는가**이다.
+   * 만약 패킷 버퍼 구조체를 변경시키지 않는 방향으로 구현을 하게 된다면, NF의 구조를 변경시켜야한다.
+   * 이렇게 되면 **DPDK와 GPU-Ether가 실험에 사용한 NF의 구조가 각각 다른 형태를 띄게 된다**.
+     * 사실 extract\_pktbuf 함수의 내부구조와 mempool의 운용방식에 변화가 있어 이미 같은 구조라고 보기는 힘들다.
+   * 실행 중에 구조체를 변경시킬 것인지 NF 코드의 구조를 변경시킬 것인지에 대한 결정이 필요하다.
+3. rte\_mempool의 사용
+   * 기존 DPDK 코드는 rte\_mempool을 선언하지만 사용하지는 않는다.
+   * 대신 rte\_mbuf를 한번 선언하고 이를 계속 재활용해서 사용하는 형태로 구현되어 있다.
+   * 모든 기능을 하나의 함수 내에서 sequential하게 진행하던 기존 방식과 달리, worker와 master node로 분리된 현재 방식을 위해선 rte\_mempool의 사용이 필수적이다.
+   * 구조의 어마어마한 변화가 필요한 것은 아니지만 rte\_mempool을 운용하는 방식을 알아볼 필요가 있다.
+
+
+
+---
+
 ## 06/28 현재상황
 
 * 다음의 실험을 진행하였다.
