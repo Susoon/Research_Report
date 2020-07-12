@@ -17,6 +17,152 @@
 4. ~~Evaluation할 app 찾아서 돌려보기~~
 
 ---
+## 07/12 현재상황
+
+* DPDK가 forwarding할 때, 패킷의 헤더가 바뀌지 않는 문제가 있었다.
+* 이를 파악하던 중 이상한 점을 발견했다.
+
+---
+
+### rte\_pktmbuf_free
+
+* 현상 설명 전에 rte\_pktmbuf\_free가 정말로 필요한지에 대해서 미리 언급한다.
+* 결론부터 말하자면 **필수**이다.
+* 그 이유는 당연히 tx\_burst에서 패킷 버퍼를 free해주지 않기 때문이다.
+
+
+
+<center> ixgbe_xmit_pkts </center>
+
+
+
+![Alt_text](image/07.12_ixgbe_xmit.jpg)
+
+* 위의 코드는 tx\_burst를 호출하였을 때 실제로 불리는 함수인 ixgbe\_xmit\_pkts의 내부 코드이다.
+* 위의 do\-while문이 전송을 위해 패킷 버퍼에 실제로 접근하는 유일한 코드이다.
+* **그 어디에도 패킷 버퍼를 free해주는 코드가 없다.**
+  * rte\_pktmbuf\_free\_seg 함수가 호출되는 이유는 txe의 mbuf라는 field에 패킷을 담아 전송하는 데, 만약 이전에 패킷이 전송되고 free되지 않았다면 이를 free시키고 패킷을 담기 위함이다.
+    * rte\_pktmbuf\_free\_seg 함수는 여러개의 segment로 나뉘어진 패킷의 segment 중 하나만을 free해주는 함수이다.
+  * 이는 **이 부분에서 mbuf가 사용될 때는 패킷이 전송된 후라는 것이 확실히 보증되었기 때문에 사용**된다. 
+
+
+
+---
+
+### Strange Things in DPDK execution
+
+<center> DPDK header check source code </center>
+
+![Alt_text](image/07.12_make_char_buf_print.JPG)
+
+
+
+![Alt_text](image/07.12_swp_hdr_buf_print.JPG)
+
+* 위는 헤더가 변환되는지 확인하기위해 printf문을 삽입한 코드이다.
+* make\_char\_buf 함수에는 **RX한 패킷을 받은 직후에 확인하여 헤더의 첫번째 값이 0인지 확인한다.**
+  * DPDK-pktgen을 실행시킨 ckjung의 mac 헤더의 첫번째 값이 0이다.
+  * 따라서 받은 직후의 패킷의 헤더의 첫번째 값이 0이라면 **애초에 DPDK-pktgen에서 destination mac 헤더를 잘못 설정\(a0로 시작하는 snow의 mac 헤더가 아닌 본인의 mac해더로 설정\)해서 전송해준 것**이 된다.
+* swp\_hdr\_buf 함수에는 swp\_hdr 함수를 통해 **헤더가 변경된 직후의 패킷의 헤더를 확인하여 헤더의 첫번째 값이 0이 아닌지 확인한다.**
+  * 위에 make\_char\_buf 함수에서 설명했듯이 ckjung의 mac 헤더의 첫번째 값이 0임을 이용했다.
+  * 헤더가 변경된 직후에 헤더를 확인했는데 0이 아니라면 **잘못된 destination mac 헤더를 가진 패킷이라는 뜻**이다.
+* 만약 위의 코드를 실행시켜 Strange Header!!! -> Not Swapped!!!의 순서로 출력된다면 **해당 패킷은 애초에 잘못된 헤더를 담고 들어와 헤더 swap을 했지만 swap이 안된 것처럼 보인다 **라는 뜻이다.
+  * snow의 mac ip를 담고와 ckjung의 mac ip로 변경되어서 나가야 정상적인 형태이지만
+  * 애초에 ckjung의 mac ip를 담고와 변경을 시도하면 snow의 mac ip로 변경이되므로 swap을 했지만 swap이 안된 것처럼 보인다는 뜻이다.
+
+
+
+<center> DPDK strange thing : without compiler optimization</center>
+
+
+
+![Alt_text](image/07.12_strange_dpdk1.JPG)
+
+![Alt_text](image/07.12_strange_dpdk2.JPG)
+
+* 첫번째 사진을 보면 **Strange Header!!!가 아닌 패킷도 Not Swapped!!!를 띄운다**는 것을 확인할 수 있다.
+  * 이는 snow의 mac ip를 destination ip로 헤더에 정상적으로 담고 왔지만 **진짜로 헤더 swap이 일어나지 않은 패킷**이라는 뜻이다.
+* 두번째 사진은 더 이상한 결과를 보여준다.
+* sequential하게 실행되는 for문을 실행시켰는데 **21번 패킷 다음에 1번 패킷을 검사하고 이를 바뀌지 않은 것으로 인식한다**.
+  * 이 위에서 1번 패킷은 이미 Not Swapped!!를 띄웠다.
+  * 중복해서 검사한 것이다.
+* 이는 DPDK 코드가 정상 작동을 하지 못하고 있다는 것을 의미한다.
+  * 실험 환경은 64B 패킷을 0.01의 rate(약 1513개)로 전송한 것이기 때문에 **Rx rate이 너무 높아서 라는 변명도 못한다**.
+
+---
+
+* 위는 compiler 최적화인 \-O3 option을 주지 않고 컴파일 했을 때 발생한 일이다.
+* 그렇다면 -O3 option을 주면 발생하지 않는가
+* 는 아니다
+
+
+
+<center> DPDK strange thing : with 3rd level compiler optimization</center>
+
+
+
+![Alt_text](image/07.12_strange_dpdk1_O3.JPG)
+
+* 첫번째 사진을 보면 \-O3 옵션을 줘도 동일하게 제대로 들어온 패킷의 헤더를 swap하지 않는 경우가 존재함을 확인할 수 있다.
+* 위의 결과를 보며 추측한 것은 **free되지 않는 패킷 버퍼가 남아있고 이는 destination mac ip가 ckjung으로 되어있는 상태인데 이를 다시 swap하려고 시도하는가**이다.
+* 이는 불가능하다.
+
+
+
+<center> Make Bufs Null </center>
+
+
+
+![Alt_text](image/07.12_free_bufs.JPG)
+
+* 이는 dpdk.c에 rx\_loop 함수 내에 있으며, 패킷 버퍼를 tx로 전송한 직후에 있는 코드이다.
+* 패킷 버퍼를 rte\_pktmbuf\_free로 free시켜준 후 패킷 버퍼의 데이터 부분을 가리키는 포인터를 담고 있는 배열인 ptrBuf와 패킷 버퍼 배열인 buf 모두 NULL로 바꿔준 뒤, nb\_rx까지 0으로 바꿔주는 것을 확인할 수 있다.
+  * 사실 nb\_rx는 0으로 바꿔줄 필요가 없지만 혹시나해서 넣었다.
+* 따라서 실제로 패킷 버퍼가 free가 되었든지 말든지 배열에 담겨있는 모든 포인터를 버려버리기 때문에 새로 할당받아 붙여주지 않는 이상 사용할 수 없다.
+* 만약 이 전 turn에 받은 패킷 버퍼를 재접근해서 헤더를 바꾸려는 시도를 할 경우 NULL 포인터에 접근하는 것이므로 에러가 떴을 것이다.
+* 하지만 에러가 발생하지 않은 것을 통해 **직전에 받은 패킷만 사용하고 그 전 turn에 받은 패킷은 사용하지 않았음**을 확인할 수 있다.
+
+---
+
+### Compiler Optimization
+
+* DPDK에서 발생하는 이상한 현상의 원인은 아직 파악하지 못했다.
+* 다만 **\-O3 옵션의 유무가 DPDK 정상작동과 무관하다**라는 것은 확인할 수 있었다.
+* 여기서 선택의 기로가 생긴다.
+* **\-O3 옵션을 준 상태로 컴파일한 코드를 사용할 것인가, 컴파일러 최적화 옵션이 없는 상태로 컴파일한 코드를 사용할 것인가**이다.
+* 이는 아주 ~~좋지 못한~~ 큰 차이를 보이기 때문에 중요하다.
+
+
+
+<center> DPDK forwarding rate : without compiler optimization option </center>
+
+
+
+![Alt_text](image/07.12_No_Opti.JPG)
+
+* 위는 기존에 확인했던 DPDK의 forwarding rate이다.
+
+
+
+<center> DPDK forwarding rate : with 3rd level compiler optimization option </center>
+
+
+
+![Alt_text](image/07.12_O3.JPG)
+
+* 위는 \-O3 옵션을 줬을 때의 forwarding rate이다.
+* 거의 100%에 가까운 rate을 보인다.
+
+---
+
+* 만약 \-O3 옵션이 DPDK의 정상작동에 영향을 끼친다다면, \-O3 옵션 없이 실행시킨 첫번째 rate\(65%\)을 사용하면 되고 문제가 없다.
+* 하지만 만약 -O3 옵션이 DPDK의 정상작동에 정말 하나도 영향을 끼치지 않는다면, 두번째 rate\(99%\)을 논문에 실어야한다.
+
+* \-O3는 높은 확률로 DPDK의 정상작동에 영향을 끼치지 않을 것 같다.
+* DPDK의 오작동의 원인을 정확하게 파악하여 어떠한 결과를 사용할 것인지 파악할 필요가 있어 보인다.
+
+---
+
 ## 07/08 현재상황
 
 1. DPDK의 구조는 이전 chapter\_idx를 사용하던 버전을 사용하게 되었다.
