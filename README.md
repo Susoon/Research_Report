@@ -17,6 +17,106 @@
 4. ~~Evaluation할 app 찾아서 돌려보기~~
 
 ---
+## 07/13 현재상황
+
+1. 패킷의 헤더가 변환되지 않거나 헤더가 변환된 패킷을 받게된 이유는 **rte\_pktmbuf\_free**때문이었다.
+   * 아래에 설명된 rte\_pktmbuf\_free가 필수적이라는 것은 잘못된 정보이다.
+     * 필수이긴 하지만 내용이 다르다.
+   * tx\_burst가 패킷 버퍼를 free해주지 않는 줄 알았으나 실제로는 해준다.
+   * rte\_pktmbuf\_free는 **RX 받았지만 TX되지 않은 패킷에 한해서** 진행되어야한다.
+     * 그렇지 않으면 에러가 발생한다.
+
+
+
+<center> rte_pktmbuf_free Example </center>
+
+
+
+![Alt_text](image/07.13_dpdk_free.JPG)
+
+
+
+2. DPDK의 log를 기록하고 확인하는 법을 알아냈다.
+   * 아래에 자세히 기술한다.
+
+3. 컴파일러 최적화 옵션인 \-O3는 DPDK의 정상작동에 영향을 주지 않는다.
+   * rte\_pktmbuf\_free를 없애면 모두 정상작동한다.
+   * 최적화 옵션을 줬을 경우 모든 패킷 크기에 대해 100%의 성능을 보인다.
+   * 최적화 옵션을 주지 않았을 경우 64B 패킷 크기에 대해 80%의 성능을 보인다.
+   * **재실험 후 결과사진 필요**
+
+---
+
+### DPDK log 출력 및 확인
+
+1. DPDK가 log를 출력하도록 설정하여야한다.
+
+* 아래의 방법 중 하나가 그 역할을 한다.
+  * 정확하게 어떤 방법이 역할을 했는지는 확실하지않다.
+
+
+
+1) dpdk 폴더의 config 폴더 내에 있는 "defconfig_x86_64-native-linuxapp-gccdefconfig_x86_64-native-linuxapp-gcc" 파일을 다음과 같이 수정한다.
+
+
+
+![Alt_text](image/07.13_config_deconfig.jpg)
+
+
+
+2) dpdk 폴더의 config 폴더 내에 있는 "common_base"파일 중 일부를 다음과 같이 수정한다.
+
+
+
+![Alt_text](image/07.13_config_common_base_eth.JPG)
+
+![Alt_text](image/07.13_config_common_base_ixgbe.JPG)
+
+* 위의 방법이 가장 유력하다.
+
+
+
+3) rte_log.h 파일 중 일부를 다음과 같이 수정한다.
+
+
+
+![Alt_text](image/07.13_rte_log_rte_log_level.JPG)
+
+
+
+2. DPDK 기반의 앱을 실행시킬때 다음과 같은 옵션을 추가한다.
+
+``--log-level="LOGTYPE,LOGLEVEL"``
+
+* 여기서 LOGTYPE과 LOGLEVEL은 rte\_log.h 파일에 매크로로 기록되어있는 것 중 하나를 각각 택해서 사용한다.
+
+
+
+![Alt_text](image/07.13_rte_log_logtype.JPG)
+
+![Alt_text](image/07.13_rte_log_loglevel.JPG)
+
+* 위의 방법을 사용하면 **화면에 DPDK log를 출력**한다.
+
+
+
+3. /var/log/syslog 파일을 확인한다.
+
+* 화면에 출력된 log든지 출력되지 않은 log든지 모두 syslog에 기록된다.
+* 위의 common\_base 파일에 설정하지 않은 LOGTYPE의 경우 log level 옵션을 주지 않으면 syslog에도 출력되지 않는다.
+
+
+
+![Alt_text](image/07.13_syslog.JPG)
+
+* 위의 형태로 log가 기록된다.
+  * 위의 APP: nb_rx: 12라는 log는 DPDK 앱\(rx\_loop\)에서 RTE\_LOG 매크로를 직접 호출하여 log를 기록하게 하여 기록된 log이다.
+  * RTE\_LOG\(DEBUG, "nb_rx : %d\n", nb_rx\);
+
+* 위의 과정을 통해 DPDK log를 확인할 수 있다.
+
+---
+
 ## 07/12 현재상황
 
 * DPDK가 forwarding할 때, 패킷의 헤더가 바뀌지 않는 문제가 있었다.
@@ -24,7 +124,7 @@
 
 ---
 
-### rte\_pktmbuf_free
+### rte\_pktmbuf_free - 잘못된 정보
 
 * 현상 설명 전에 rte\_pktmbuf\_free가 정말로 필요한지에 대해서 미리 언급한다.
 * 결론부터 말하자면 **필수**이다.
