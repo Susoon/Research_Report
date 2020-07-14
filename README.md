@@ -17,6 +17,44 @@
 4. ~~Evaluation할 app 찾아서 돌려보기~~
 
 ---
+## 07/14 현재상황
+
+1. DPDK에 컴파일러 옵션을 준 경우와 주지 않은 경우의 실험 결과를 수집했다.
+2. GPU\-Ether와 NF를 붙혀 RX와 TX 모두 진행한 경우의 실험 결과를 수집했다.
+
+---
+
+### DPDK Compiler Option Test
+
+
+
+<center> No Opt and O3 </center>
+
+
+
+![Alt_text](image/07.14_No_Opt_O3.png)
+
+* 위의 그래프에서 확인할 수 있듯이,컴파일러 최적화 옵션을 주지 않은 경우 64B의 패킷에서만 81.1%로 낮은 throughput을 보이고 나머지는 모두 100%를 보인다.
+
+---
+
+### GPU-Ether NF test
+
+
+
+<center> NIDS and IPv4 Forwarding </center>
+
+
+
+![Alt_text](image/07.14_NIDS_and_IPv4_Forwarding.png)
+
+* 위의 그래프는 GPU\-Ether와 NF를 함께 실행시킨 결과를 수집한 그래프이다.
+* GPU\-Ether의 RX \-> NF \-> GPU\-Ether의 TX 순으로 실행되었다.
+* 64B를 제외하고는 모두 100%를 보였으나 64B의 Forwarding Rate를 생각해보면 사실상 100%라고 봐도 무방할 듯 하다.
+* 위는 DPDK\-pktgen에 표기되는 수치로 계산한 것이나, GPU\-Ether가 자체적으로 계산하여 화면에 출력하는 수치로는 **128B 패킷에서 모두 99.7 \~ 99.8%에 상주한다**.
+
+---
+
 ## 07/13 현재상황
 
 1. 패킷의 헤더가 변환되지 않거나 헤더가 변환된 패킷을 받게된 이유는 **rte\_pktmbuf\_free**때문이었다.
