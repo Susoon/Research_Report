@@ -17,6 +17,99 @@
 4. ~~Evaluation할 app 찾아서 돌려보기~~
 
 ---
+## 07/16 현재상황
+
+1. 랜덤 ip 혹은 랜덤 payload를 가진 패킷 전송이 가능하게 DPDK pktgen을 수정하였다.
+2. 랜덤 ip 패킷을 이용해 router 실험 결과를 수집했다.
+3. 랜덤 payload 패킷을 이용해 router 실험 결과를 수집했다.
+
+---
+### DPDK pktgen을 이용해 랜덤 ip를 가진 패킷을 전송하는 법
+
+* 사실 랜덤 ip는 아니다.
+* 랜덤에 가까운 형태의 ip를 전송시키는 것이다.
+* 방법은 다음과 같다.
+
+1. rand\_router.pkt 파일을 생성한다.
+   * 사실 이름은 상관없고 .pkt의 확장자만 가지면 된다.
+2. rand\_router.pkt 파일 내에 다음과 같은 내용을 기입한다.
+
+
+```
+enable 0 range
+range 0 dst ip start 0.0.0.0
+range 0 dst ip min 0.0.0.0
+range 0 dst ip max 255.255.255.255
+range 0 dst ip inc 5.7.3.11
+range 0 dst mac start a0:36:9f:03:13:86
+range 0 dst mac min a0:36:9f:03:13:86
+range 0 dst mac max a0:36:9f:03:13:86
+range 0 dst mac inc 00:00:00:00:00:00
+range 0 dst port start 1
+range 0 dst port min 1
+range 0 dst port max 65000
+range 0 dst port inc 1
+range 0 src port start 1
+range 0 src port min 1
+range 0 src port max 65000
+range 0 src port inc 1
+range 0 src ip start 0.0.0.0
+range 0 src ip min 0.0.0.0
+range 0 src ip max 255.255.255.255
+range 0 src ip inc 7.11.5.3
+```
+
+   * 위의 코드의 의미는 다음과 같다.
+   1. 패킷을 단일 패킷이 아닌 일정 범위에 해당하는 패킷을 전송 가능하게 하겠다.
+   2. 패킷의 destination의 ip는 0.0.0.0에서 255.255.255.255까지 5.7.3.11씩 증가된다.
+      * 5.7.3.11의 의미는 각 숫자들이 2의 서로소이면서 소수이게 만든 것이다.
+      * 서로 다른 소수이므로 랜덤에 가까운 변화를 보이지 않을까해서 만든 것이다.
+   3. 패킷의 destination의 mac ip는 snow의 mac ip로 고정시킨다.
+   4. 패킷의 destination의 port는 1부터 65000까지 1씩 증가된다.
+   5. 패킷의 source의 ip와 mac ip도 동일하게 변화한다.
+3. execution\_router.sh라는 파일을 만들어 아래의 내용을 기입한다.
+```
+sudo ./app/x86_64-native-linuxapp-gcc/pktgen -l 0-3 -- -T -P -m [1-3:1-3].0 -f ./nf/router/rand_router.pkt
+```
+4. execution\_router.sh 파일을 실행시킨다.
+
+* 위의 과정을 마치면 ip와 mac ip, port가 계속 변화하는 패킷들이 전송된다.
+---
+### DPDK pktgen을 이용해 랜덤 payload를 가진 패킷을 전송하는 법
+
+* 랜덤 payload를 가진 패킷을 전송하기 위해서는 DPDK pktgen의 코드 수정이 필요하다.
+* pktgen 폴더의 app 폴더 내에 있는 pktgen.c라는 파일의 수정이 필요하다.
+
+<center> pktgen\_fill\_pattern </center>
+
+![Alt_text](./image/07.16_pktgen_fill_pattern.JPG)
+
+* 위의 함수를 수정해야한다.
+* 위의 함수에서 pattern을 none으로 줬을 때 랜덤 payload를 가진 패킷을 전송하게 하기 위해서 NO\_FILL\_PATTERN의 경우에 코드를 추가했다.
+* 랜덤값을 대입하는 것을 최적화하기 위해서 uint8\_t을 4개 묶어 uint32\_t로 계산해서 대입한다.
+* 여기서 주의할 점은 rand\(\)함수의 시드 값을 주는 srand함수를 **pg\_start\_lcore라는 pktgen의 시작부**에 추가해야한다는 것이다.
+   * 아무생각없이 위의 코드에서 랜덤값을 넣어주기 직전에 srand함수를 호출하였다가 Full Rate이 나오지 않는 경우가 발생했다.
+   * 더군다나 매번 시드를 타고 들어가 가장 첫 값을 건네받다보니 랜덤 payload를 가지지도 못했다.
+* 위의 코드를 추가하고 나면 아래와 같이 랜덤한 payload를 가진 패킷을 전송하게 된다.
+
+<center> Packets with random payload </center>
+
+![Alt_text](./image/07.16_pktgen_rand_pkt.JPG)
+* 위의 패킷을 보면 랜덤한 payload를 가진 패킷임을 확인할 수 있습니다.
+---
+### NIDS와 Router의 성능
+
+* 아래의 그래프는 랜덤 패킷을 이용해 진행한 실험의 결과이다.
+
+<center> NIDS and Router </center>
+
+![Alt_text](./image/07.16_NIDS_and_Router.png)
+* 64B의 패킷을 제외하고 모두 100%의 성능을 보임을 알 수 있다.
+* NIDS의 경우 100%의 성능을 보이지 못할 것이라 예상했지만 **Single Thread로도 100%의 성능을 보인다.** 
+* 64B의 패킷의 경우 1%가량의 차이를 보이지만 이는 일시적 변화량에 의한 오차범위 내의 값이다.
+
+---
+
 ## 07/14 현재상황
 
 1. DPDK에 컴파일러 옵션을 준 경우와 주지 않은 경우의 실험 결과를 수집했다.
