@@ -17,6 +17,60 @@
 4. ~~Evaluation할 app 찾아서 돌려보기~~
 
 ---
+## 07/23 현재상황
+
+* dpdk와 GPU를 결합해 작동하는 Worker\-Master 버전의 dpdk를 구현중이다.
+* Worker\-Master 버전의 dpdk 구현 중 생긴 이슈를 남긴다.
+
+---
+
+### Segfault error 6
+
+1. 발단
+   * DPDK의 IO와 Fowarding 등 모든 기능을 하나의 thread에서 담당할때는 발생하지 않았던 에러가 발생했다.
+   * IO만을 담당하는 Worker thread와 Master thread로 분리하고 이들간의 소통을 위해 pktMetaData 구조체를 만들어 RX/TX를 위한 패킷 큐와 이들의 head를 각각 담게끔 만들었다.
+   * 해당 구조체 변수\(pmd\)를 선언해 서로간의 데이터 공유를 시도했다.
+   * 컴파일 후 실행시 정상작동하지만 패킷을 전송받기 시작하면 segfault가 발생하며 종료된다.
+   * dmesg를 통해 확인하니 segfault error 6라는 에러가 발생한 것이었다.
+2. 원인 파악
+   * master thread와의 통신에 문제가 발생한 것으로 추측하여 파일 분할에 문제가 있어 발생한 것으로 추측하였다.
+     * master thread의 코드를 모두 주석처리하여 worker thread만 해당 변수에 접근하게 하였으나 동일한 에러가 발생했다.
+   * 구조체를 사용한 것에 문제가 발생한 것으로 추측하였다.
+     * 구조체 내부의 field를 각각 따로 선언후 접근하게 하였으나 동일한 에러가 발생했다.
+   * segfault error 6에 대해 검색해보니 다음과 같은 의미를 담고 있다고 한다.
+
+``` 6: The cause was a user-mode write resulting in no page being found. ```
+   * user\-mode write를 진행하려는 메모리의 page가 발견되지 않았다는 뜻이다.
+   * 좀 더 자세한 원인을 파악하기 위해 gdb를 사용했다.
+
+<center> gdb debug result </center>
+
+![Alt_text](./image/07.23_segfault6_gdb.JPG)
+
+3. gdb 결과 분석
+   * 해당 결과를 검색해보니 다음과 같은 답변이 나왔다.
+
+![Alt_text](./image/07.23_segfault6_causion.JPG)
+   * 메모리 관리에 문제가 있다는 뜻이다.
+   * 위의 답변과 segfault error 6의 의미를 함께 생각해보면 다음과 같은 결론이 나온다.
+   * **할당한 메모리 영역 너머의 공간에 접근을 시도했다.**
+
+4. segfault 원인 코드 수정
+   * segfault를 유발한 코드는 DPDK 패킷 버퍼 내의 패킷 데이터를 character 배열\(패킷 Q\)로 옮겨 담는 함수인 **make\_char\_buf**함수였다.
+
+![Alt_text](./image/07.23_segfault6_modified.JPG)
+
+   * 위의 코드의 for문 조건부는 원래 **i < nb**였다.
+   * 즉, 위의 조건은 **할당된 메모리 영역은 신경쓰지 않고 받은 패킷 수만큼 옮겨담는데에만 관심을 가지겠다**라는 뜻이다.
+   * 위의 코드를 **i < nb && head + i < PKT\_BATCH**로 변경했다.
+      * head는 패킷 Q에 패킷 데이터가 담기는 시작점을 의미한다.
+      * 60이라면 60개의 패킷 데이터가 패킷 Q에 담겨있으니 61번째의 공간부터 패킷 데이터를 저장하라는 의미이다.
+      * 패킷 Q의 크기는 PKT\_BATCH로 \(패킷의 크기\) \* \(패킷을 배치하는 개수\)의 크기이다.
+
+* 위의 과정을 거친 후 코드는 segfault를 발생시키지 않고 정상작동한다.
+
+---
+
 ## 07/16 현재상황
 
 1. 랜덤 ip 혹은 랜덤 payload를 가진 패킷 전송이 가능하게 DPDK pktgen을 수정하였다.
