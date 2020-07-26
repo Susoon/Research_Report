@@ -17,6 +17,104 @@
 4. ~~Evaluation할 app 찾아서 돌려보기~~
 
 ---
+## 07/26 현재상황
+
+* DPDK와 GPU를 결합한 코드를 완성했다.
+* Worker\-Master형식의 코드와 Worker가 Master의 역할을 모두 수행하는 코드를 만들었다.
+  * 각각 dpdkGPU와 dpdkGPUONE이다.
+* Worker\-Master형식의 코드가 Forwarding에서 더 높은 속도를 보여 Worker\-Master형식의 DPDK코드가 최종 채택되었다.
+* Worker\-Master형식의 코드를 이용해 GPU로 넘겨줄때의 batch하는 패킷수 변화에 따른 Throughput을 확인해보았다.
+* 결론을 먼저 밝히자면
+
+**1. Worker\-Master와 One Core의 경우 Worker\-Master 형식이 채택되었다.**
+
+**2. 최적의 batch 크기는 256개이다.** 
+
+---
+
+###  Worker\-Master vs One Core
+
+* Worker\-Master형식과 1개의 thread가 모두 처리하는 방식의 성능 차이는 상황에 따라 다르다.
+* **아래의 Bps와 %는 정확한 수치를 출력하지 못하므로 무시해야한다.**
+
+
+
+<center> Rx with reaching on GPU : Worker-Master</center>
+
+
+
+![Alt_text](./image/07.26_dpdk_gpu_WM_rx_512.JPG)
+
+
+
+
+
+<center> Rx with reaching on GPU : One Thread</center>
+
+
+
+![Alt_text](./image/07.26_dpdk_gpu_one_rx_512.JPG)
+
+
+
+* 위의 그림은 DPDK가 RX한 패킷을 GPU에 넘겨주는 과정까지만 진행했을 때의 Throughput을 측정한 실험 결과이다.
+  * 패킷의 크기는 64B이며 batch한 패킷 수는 512개이다.
+* 위의 경우에 대해서는 One Thread의 경우 거의 모든 패킷을 GPU에 전달한 반면, Worker\-Thread의 경우 9.5M개의 패킷만 전달할 수 있었다.
+
+
+
+<center> Forwarding : Worker-Master</center>
+
+
+
+![Alt_text](./image/07.26_dpdk_batch_512_dpdk.JPG)
+
+
+
+<center> Forwarding : One Thread</center>
+
+
+
+![Alt_text](./image/07.26_dpdk_gpu_one_forwarding.JPG)
+
+* 위의 사진은 DPDK가 pktgen이 전송한 패킷을 GPU에 전달한 뒤 GPU에서 패킷 수를 카운트하고 다시 DPDK에 전달, 그 후에 DPDK가 TX를 하는 Forwarding을 모두 진행했을 때의 실험 결과이다.
+  * 패킷의 크기는 64B이며 batch한 패킷 수는 512개이다.
+* 위의 경우에서는 1개의 Thread를 사용할 경우 2.5Mpps만큼의 RX Throughput을 보이며 GPU에 도달하는 패킷수와 TX는 그보다 적은 2.3Mpps를 보였다.
+* 반면 Worker\-Master의 경우 6.8Mpps의 50%에 살짝 못미치는 수준의 속도를 보였다.
+* 이는 Packet Shader가 보여준 성능과 유사하다.
+  * Packet Shader는 3개의 Worker와 1개의 Master Thread 그룹을 다수 구현하고, 10G NIC 8개를 사용해 80Gbps 환경에서 실험해 40Gbps가량의 성능을 보였다.
+    * Thread 그룹의 수는 밝히지 않았다.
+    * 논문에서 밝힌 실험환경상 4개였을 것으로 추측된다.
+* Packet Shader가 Worker Thread 수를 늘리고 pipelining을 하는 등 다양한 최적화 기법을 적용했음에도 불구하고 50%의 성능이었던 것을 감안하면 **적절한 수치라고 추측된다.**
+
+* **위의 실험결과에 의해 Worker\-Master 형식의 DPDK가 채택되었다.**
+  * 그 이유는 NF와 Forwarding 실험을 해야하기 때문
+
+
+
+---
+
+### Batch Size Test
+
+* Worker\-Master 형식의 DPDK를 사용하여 batch size test를 진행했다.
+* 64B의 패킷을 사용했으며 DPDK가 받은 패킷 수\(RX\), GPU에 도달한 패킷 수\(GPU\), DPDK가 전송한 패킷 수\(TX\)를 각각 기록하였다.
+* 그래프의 수치들은 pktgen이 전송한 패킷 수로 RX/GPU/TX를 각각 나눈 값을 퍼센트로 사용했다.
+  * pktgen이 전송한 패킷 중 몇 퍼센트가 RX/GPU/TX처리 되었는지를 퍼센트로 나타낸 것이다.
+
+<center> Batch Size Test Graph </center>
+
+![Alt_text](./image/07.26_batch_size_test_graph.png)
+
+* 위의 그래프를 보면 예상과 다르게 256개의 batch 크기가 최적의 크기임을 알 수 있다.
+* 512개를 batch할 경우 GPU에 도달하는 패킷수가 256개일때와 동일하지만 batch하는 과정에서의 overhead에 의해 **RX rate이 떨어졌다.**
+* 1024개를 batch할 경우 batch  overhead에 의해 **TX rate까지 떨어졌다.**
+* RX를 100% 근방으로 처리하면서 GPU에 가장 많은 양의 패킷을 전달하는 batch의 수는 256개였다.
+* **따라서 NF에서의 실험은 256개로 진행해야한다.**
+
+
+
+---
+
 ## 07/23 현재상황
 
 * dpdk와 GPU를 결합해 작동하는 Worker\-Master 버전의 dpdk를 구현중이다.
