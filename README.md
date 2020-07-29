@@ -17,6 +17,75 @@
 4. ~~Evaluation할 app 찾아서 돌려보기~~
 
 ---
+## 07/29 현재상황
+
+* Cache Pollution test를 진행했다.
+* DPDK와 GPU를 결합한 코드에서 512B 이상의 크기의 패킷의 경우에서 TX rate이 큰 폭으로 변화하는 버그가 있다.
+
+---
+
+### Cache Pollution Evaluation
+
+* 기존의 Access, Memcpy, Add실험이 아닌 Matrix Product을 Noisy Neighbor로 지정해서 실험을 진행했다.
+  * Access, Memcpy, Add 실험은 6.28일자 실험 참고
+* Lynx 논문에서의 Matrix Product 실험을 참고했다.
+  * Lynx에서도 snow와 동일하게 15MB의 L3 캐시를 사용해 동일한 크기의 Matrix를 이용해 실험했다.
+* 기존의 실험에서는 DPDK를 CPU I/O만 기능하는 코드를 택하였으나 DPDK와 GPU를 결합한 코드를 채택해 실험을 진행했다.
+* pktgen에서 랜덤 payload 패킷을 전송하게 하였으며 1514B의 패킷을 사용해 실제 환경과 유사한 환경을 조성했다.
+
+
+
+<center> Cache Pollution Graph </center>
+
+
+
+![Alt_text](./image/07.29_Cache_Pollution_Min.png)
+
+* GPU\-Ether는 0.2%의 적은 performance degradation을 보인 반면, DPDK는 84.58%의 높은 degradation을 보였다.
+* 기존 실험과 달리 극명한 차이를 보인 이유는 다음과 같이 추정된다.
+  1. 랜덤 payload를 사용
+  2. 행렬곱을 1회 시행하여 이전 시행이 다음 시행에 영향을 미치지 않음
+
+---
+
+### DPDK TX rate Problem
+
+* 512B 이상의 크기를 가지는 패킷의 경우 DPDK가 불안정한 TX rate를 보였다.
+
+
+
+<center> DPDK with GPU : 1514B </center>
+
+
+
+![Alt_text](./image/07.29_dpdk_router_1514_dpdk_min.JPG)
+
+
+
+![Alt_text](./image/07.29_dpdk_router_1514_dpdk_max.JPG)
+
+* 위는 router를 실행하는 DPDK의 Throughput이다.
+  * forwarding도 동일한 증상을 보이지만 사진이 없어 router로 대체했다.
+* 200Kpps의 변동폭을 가진다.
+* 이는 1514B의 패킷 기준으로 RX rate의 25%가량의 성능 변화이다.
+* 하지만 Monitoring Loop을 실행시키지 않는다면 안정적인 rate을 보인다.
+
+
+
+<center> DPDK with GPU :1514B with No Monitoring </center>
+
+
+
+![Alt_text](./image/07.29_dpdk_1514.JPG)
+
+* 모니터링을 하지 않는다면 위의 수치를 안정적으로 보여준다.
+* 이는 **CPU thread의 과부화**에 의한것으로 추측된다.
+* 위의 문제를 해결할 필요가 있다.
+
+
+
+---
+
 ## 07/26 현재상황
 
 * DPDK와 GPU를 결합한 코드를 완성했다.
