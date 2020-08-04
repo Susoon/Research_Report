@@ -17,6 +17,144 @@
 4. ~~Evaluation할 app 찾아서 돌려보기~~
 
 ---
+## 08/04 현재상황
+
+* 실험을 위한 DPDK 구현을 모두 마쳤다.
+* forwarding과 NF에 대한 실험을 마쳤다.
+* 아래에 DPDK 구현 중 맞이한 이슈를 남긴다.
+
+---
+
+### Pipelining Issue
+
+* 실험에 사용된 DPDK는 Worker\-Master형식으로 구현되어 있다.
+* 이로 인해 Worker와 Master, GPU App 총 3개의 프로그램이 병렬실행되며 Worker \<\-\> Master \<\-\> GPU App의 형태로 데이터를 공유한다.
+* 이때 Worker와 Master, GPU App간의 데이터 접근 타이밍을 잘 맞춰주지 않으면 에러가 발생하거나 큰 폭으로 변화하는 유동적인 throughput rate을 유발한다.
+
+
+
+#### 1. Master Thread
+
+<center> Master Thread code : Before </center>
+
+
+
+![Alt_text](./image/08.04_dpdk_master_before.JPG)
+
+* 기존 Master Thread의 코드에서 GPU로부터 패킷을 받아올때의 조건문은 위와 같았다.
+* copy\_from\_gpu 함수를 호출하여 **바로 패킷 Queue에 패킷을 복사**하고 복사된 패킷의 수가 0보다 크면 thead의 값을 복사된 패킷수로 변경해주는 방식이었다.
+* 이는 **Worker Thread가 I/O처리를 마쳐 패킷 Queue가 비었는지**에 대해 고려하지 않은 코드이다.
+
+
+
+<center> Master Thread code : After </center>
+
+
+
+![Alt_text](image/08.04_dpdk_master_after.JPG)
+
+* 기존 조건문에 thead가 0인지 확인하는 조건을 삽입했다.
+* 조건 삽입을 통해 **Worker Thread가 I/O처리를 위해 패킷 Queue에서 DPDK 패킷 버퍼로 패킷 복사를 마친 후 thead를 0으로 변경해주면** GPU로부터 패킷을 복사해오게끔 변경되었다.
+
+
+
+#### 2. Worker Thread
+
+
+
+<center> Worker Thread code : Before </center>
+
+
+
+![Alt_text](image/08.04_dpdk_thead_before.JPG)
+
+* 기존 코드에서는 **패킷 Queue에 있는 패킷의 헤더 변경 \-\> 패킷 Queue에 있는 패킷을 DPDK 패킷 버퍼에 저장 \-\> 패킷 전송 및 버퍼 free \-\> thead변경**의 순서대로 진행되었다.
+* 이로인해 **Worker Thread가 과도하게 많은 시간동안 패킷 큐를 점령**하고 있게 된다.
+
+
+
+<center> Worker Thread code : After </center>
+
+
+
+![Alt_text](image/08.04_dpdk_thead_final.JPG)
+
+* 위의 코드는 기존 방식에서 패킷 처리 순서를 변경한 코드이다.
+* **패킷 Queue에 있는 패킷을 DPDK 패킷 버퍼에 저장 \-\> thead변경 \-\> 패킷 Queue에 있는 패킷의 헤더 변경 \-\>  패킷 전송 및 버퍼 free**의 순서대로 진행되게 변경하였다.
+* 이로인해 Worker Thread가 패킷 Queue를 최대한 빨리 비우고 **DPDK 패킷 버퍼에서 I/O 작업을 진행**하게 되어 Master Thread가 패킷 Queue에 더 빈번하게 접근가능하게 수정되었다.
+
+
+
+#### 3. GPU App
+
+<center> GPU App code : Forwarding </center>
+
+
+
+![Alt_text](image/08.04_dpdk_gpu_forwarding_code.JPG)
+
+* 위의 코드는 DPDK Forwarding 버전에 사용된 GPU kernel 코드이다.
+  * 다른 NF 코드들도 동일하게 변경되어 가장 간단한 코드인 Forwarding으로 예시를 들었다.
+* 위의 while문은 3개의 if문으로 구성되어 있다.
+  1. statusBoard를 확인하여 패킷이 Master Thread로부터 전달되었는지 확인
+  2. 전달받은 패킷 수보다 작은 번호를 가지는 thread들이 GPU processing을 진행
+     * Forwarding에서는 하는 일이 없다.
+  3. chapter\_idx 변경으로 패킷 버퍼의 다음 챕터에 패킷이 복사되어있는지 확인
+* 각 if문 전에 syncthread를 추가하여 모든 thread가 같은 nb값을 사용하고 같은 chapter\_idx를 통해 동일한 챕터를 확인하게 강제하였다.
+* 또한, 2번째 if문에서 thread들은 각자의 processing을 마친 후 statusBoard의 값을 1 증가시킨다.
+* 마지막에서 0번 thread가 statusBoard의 값을 1 추가로 증가시켜 nb의 값고 statusBoard의 값이 동일하게 맞춰준다.
+  * statusBoard가 -1부터 시작하므로 1을 추가로 증가시켜주어야한다.
+* Master Thread는 copy\_from\_gpu 함수를 통해 위의 패킷을 복사해오는데, 이때 **statusBoard의 값과 nbBoard의 값이 동일한 챕터**의 패킷을 복사해온다.
+* 위의 과정을 통해 **모든 thread가 전달받은 패킷에 대한 처리를 끝내야 Master Thread가 패킷을 복사해가게끔** 강제하였다.
+  * nb\(받은 패킷 수\)와 statusBoard의 값\(패킷을 처리한 thread의 수\)가 동일해야 전달받은 패킷을 모든 thread가 처리했다는 것이기 때문이다.
+
+
+
+#### 4. Pkt-gen
+
+
+
+<center> Pkt-gen : range </center>
+
+
+
+![Alt_text](image/08.04_dpdk_pktgen_size_range.JPG)
+
+* Router와 IPSec의 경우 각 패킷이 ip와 port값이 pkt\-gen의 range 기능을 통해 변화하면서 전송되도록 설정해두었다.
+* 이때 range의 기능을 사용하게 되면 패킷의 크기도 range를 통해 지정해주지 않으면 위의 상태로 전송되어 **64B의 크기로 전송**된다.
+* 따라서 다음의 명령어를 통해 pkt\-gen에게 패킷 크기를 지정해줘야한다.
+
+```
+range 0 size start (pkt size)
+range 0 size min (pkt size)
+range 0 size max (pkt size)
+set 0 size (pkt size)
+```
+
+* **range 모드를 위한 패킷 크기 뿐만 아니라 기본 pkt\-gen을 위한 패킷 크기도 설정해주어야한다.**
+
+---
+
+### DPDK Performance
+
+* 아래는 DPDK의 Forwarding과 NF 성능 그래프이다.
+
+
+
+<center> DPDK Forwarding Graph </center>
+
+![Alt_text](image/08.04_DPDK_RX_GPU_TX.png)
+
+
+
+<center> DPDK NF Graph </center>
+
+![Alt_text](image/08.04_NF_DPDK.png)
+
+
+
+---
+
 ## 07/29 현재상황
 
 * Cache Pollution test를 진행했다.
