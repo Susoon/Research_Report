@@ -17,6 +17,31 @@
 4. ~~Evaluation할 app 찾아서 돌려보기~~
 
 ---
+## 08/10 현재상황
+
+* 모든 실험을 마쳤다.
+* 원인을 파악하지 못한 이슈는 다음과 같다.
+
+1. DPDK의 rate이 불안정한 이슈
+	* 이는 headroom을 삽입할 경우에 발생하는 이슈이다.
+	* 64B의 headroom을 삽입하면 128B에서 발생하고, 128B의 headroom을 삽입하면 256B에서 발생한다.
+	* 패킷 크기의 절반에 해당하는 headroom을 삽입하면 발생하는 것으로 추정된다.
+	* cacheline과 관련있을 가능성이 크다.
+2. APUNet의 NIDS 성능이 낮은 이슈
+	* Single Thread 버전으로 NIDS를 실행시킬 경우 GPU-Ether와 DPDK는 62%에 준하는 성능이 나온다.
+		* 64B패킷을 사용했으며, DPDK는 forwarding rate이 50%가량의 성능을 보여 62%는 아니지만 forwarding rate에 준하는 성능이 나온다.
+	* APUNet의 경우 50Gbps의 forwarding rate을 보였지만 NIDS의 경우 2.5Gbps로 5%의 성능을 보였다.
+		* 역시 64B패킷의 경우이다.
+	* Single Thread 버전으로 random port를 사용해 실험한 GPU-Ether와 DPDK에 비해 APUNet의 NIDS의 throughput이 처참하게 낮다.
+	* DPDK도 처음에 동일한 성능이 나왔으나 pktgen의 버그를 발견한 뒤 forwarding rate에 준하는 성능을 보였다.
+	* 그 버그는 **udp헤더의 패킷 크기 값 설정 오류**이다.
+	* pktgen의 경우 패킷 크기와 무관하게 udp헤더에 패킷 크기를 1234로 지정해놓는다.
+		* 이는 16진법의 수이며, 10진법으로 13330이다.
+	* 하나의 thread가 13288B\(13330 - 42\)를 모두 담당하니 당연히 rate이 떨어질 수 밖에 없었던 것이다.
+	* 1514B의 패킷으로 실험할 경우 100%의 throughput을 보이는데 이는 RX rate이 64B에 비해 20배가량 적기 때문으로 추정된다.
+	* **APUNet 정도되는 논문이 이 사실을 몰랐을까....?**
+
+---
 ## 08/04 현재상황
 
 * 실험을 위한 DPDK 구현을 모두 마쳤다.
