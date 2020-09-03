@@ -2,13 +2,25 @@
 
 ##  ToDo List
 
-1. ffmpeg 사용해서 transcode server 구현해서 실험해보기
-2. ffmpeg 코드 확인 후 GPU-Ether와 연결 가능하게 수정하기
+1. ~~gpunet 코드에서 buffer의 운용 방법 확인~~
+   * ~~gpu에 할당된 buffer의 총 size~~
+   * ~~send / recv에 따른 buffer 활용~~
+     * ~~왜 send에서는 index로 sbuf에 접근해서 message를 가져오고 recv에서는 ptr로 packet을 가져오는가~~
+   * ~~gpu interface 확인~~
+     * ~~warp단위로 함수를 호출하는 과정 확인~~
+2. packet size별로 nf 돌려서 그래프 만들기
+   1. ~~각 size별로 ipsec의 모든 기능을 1개의 thread로 실행했을 때의 실험~~
+   2. ~~각 size별로 ipsec에서 SHA를 제외한 모든 기능을 기존 버전(Single + Multi-thread)으로 실행했을 때의 실험~~
+   3. ~~64B packet을 ipsec에서 IV값 대입을 제외한 모든 기능을 single thread로 실행했을 때의 실험~~
+   4. ~~각 실험 결과 정리(ipsec, router, nids 모두)~~
+3. ~~Matrix Multiplication 구현해서 dpdk와 gdnio로 실험하기~~
+4. ~~Evaluation할 app 찾아서 돌려보기~~
 
 ---
 ## 09/03 현재상황
 
-* Streaming 실험 관련 내용을 조사했다.
+* Streaming 실험 관련 내용을 조사중에 있다.
+* 파악해야할 내용은 다음과 같다.
 
 1. Streaming 실험 방법
 	* Client가 하는 기능 & 그 기능을 하기위해 필요한 app
@@ -20,85 +32,7 @@
 ---
 ### Streaming Evaulation Method
 
-* 전체적인 그림은 다음과 같다.
-1. Server가 자체적으로 영상을 가지고 있다.
-2. Server가 가진 영상을 DASH\(Dynamic Adaptive Streaming over HTTP\)의 방식으로 Client에게 전송한다.
-	* DASH란 Client와 Server간의 Link Bandwidth이 유동적일때 영상의 화질을 유동적으로 해당 bandwidth에서 보낼 수 있는 최고화질로 변경해서 전송해주는 기법을 말한다.
-3. Client는 Server가 보내준 영상을 실시간으로 play한다.
 
-* 위의 방식은 mobicom과 infocom에 제출된 논문 4개의 Evaluation 부분을 통해 확인한 내용이다.
-* 해당 논문은 가장 아래에 참조되어있다.
-
-* 각 단계를 세부적으로 파악하자면 다음과 같다.
-
-`1. Server가 자체적으로 영상을 가지고 있다.`
-
-* 그렇다면 그 영상은 어디서 구한 것이고 어떤 것이며 어떠한 형태로 저장되어 있는가.
-* 각 논문들은 다양한 곳에서 영상을 구해서 사용했다.
-* 영상의 출처를 밝히지 않은 논문이 대부분이었으며, 출처가 발혀진 경우에도 Twitch와 Vimeo같은 사용자가 많은 Streaming 배급사의 영상을 사용한 경우가 있었다.
-* 위의 경우를 제외하고 남은 경우는 \(1\) 다른 논문의 데이터를 사용하거나 \(2\) 인터넷 상에 존재하는 dataset을 사용한 것이었다.
-* 인터넷 상에 존재하는 dataset의 경우 영상의 길이와 frame, 화질과 획득방법에 따라 잘 나뉘어 있었는데 추후에 evaluation에 사용하기에 좋을 것 같다.
-	* [Xiph](https://media.xiph.org/video/derf/.)
-* 이러한 출처를 통해 각 논문이 원하는 주제에 맞는 영상을 획득한 것 같다.
-	* 4k관련 논문은 4k 영상을, 다양한 frame의 영상을 통해 전반적인 streaming의 성능을 보여줄 필요가 있을 경우 다양한 영상을 사용했다.
-	* wireless관련 논문의 경우 타 논문의 데이터를 주로 사용하였는데 이때는 LTE dataset을 사용했다고한다.
-	* 이는 실제 영상을 사용하였다기보다는 LTE의 성능과 관련된 dataset을 사용하였지 않았을까라는 추측이 있다.
-	* 자세한 내용은 해당 dataset을 서술한 논문을 확인해볼 필요가 있다.
-* 어떠한 형태로 저장되어 있는가에 대한 내용은 다음 단계에서 설명한다.
-
-`2. Server가 가진 영상을 DASH의 방식으로 Client에게 전송한다.`
-
-* 이를 보고 파악해야하는 부분은 DASH의 방식으로 전송하기 위한 모든 것들이다.
-* DASH는 어떻게 구현했는지 혹은 어떤 APP을 사용했는지, DASH를 위해 Server와 Client가 해야할 일은 무엇인지가 필요하다.
-* DASH를 위해 Server가 해야할 일을 먼저 서술하자면, Server는 해당 DASH app 혹은 구현에 맞는 코덱으로 실험 영상을 인코딩해야하고 Client와의 Link의 Bandwidth를 확인 후 적절한 화질의 영상을 선택 후 전송해야한다.
-* 이 과정에 대한 서술은 논문에 따라 다르다.
-* 공통적인 부분은 대부분의 논문에서 영상 인코딩은 **ffmpeg**을 사용해서 진행했다는 것이다.
-* DASH가 미리 여러가지 버전으로 인코딩된 영상을 상황에 맞게 보내주는 알고리즘이라는 것을 감안해봤을때, ffmpeg으로 인코딩된 영상을 bandwidth 상황에 맞게 보내준 것 같다. 
-* 영상을 일정한 크기의 chunk로 나누어 각 chunk를 다양한 화질로 인코딩한 후 chunk의 길이\(e.g. 4초\)단위로 bandwidth를 확인 후 이를 전송하는 방식을 택했다.
-* 대부분의 논문에서 DASH 알고리즘을 구현했다라는 언급만 있고 어떠한 오픈소스를 사용했다는 언급은 없었다.
-* OSMF\(Open Source Media Framework\)라는 framework를 사용해 구현한 경우도 있었으나 이는 해당 논문에서 제안한 시스템을 구현하기 위함이라는 이유가 강했으면 그 외에는 Twitch나 Vimeo를 직접 사용하여 DASH를 구현할 필요가 없었다.
-* 추후에 연구에서 DASH를 구현할 필요가 없어 자세한 구현 방법을 알아보지는 않았으나 DASH 구현을 도와주는 라이브러리와 framework가 존재하니 이를 잘 활용하면 될 것 같다.
-	* [http-streaming](https://github.com/videojs/http-streaming)
-	* [flashls](https://github.com/mangui/flashls)
-
-`3. Client는 Server가 보내준 영상을 실시간으로 play한다.`
-
-* 그렇다면 Client는 각 chunk를 어떠한 방법으로 받아서 출력하는가.
-* 이는 특별한 구조를 알리지 않았다.
-* 대신 어떠한 app을 사용했는지만 언급되어있는데 이는 다음과 같다.
-* GPAC, Chrome과 Chromium이다.
-* 현존하는 다양한 player를 사용해서 실행하였다.
-* 이는 Client부분이 논문들이 관심있는 부분이 아니기 때문이다.
-* 추후 연구에서 영상을 실행할 필요는 없기때문에 자세한 파악은 필요없어 보인다.
-
----
-### Streaming evaluation metric
-
-* 각 논문에서 사용한 metric은 모두 다양하다.
-* 하지만 공통적으로 사용한 metric이 존재하는데 이는 다음과 같다.
-* TTFB\(Time To First Byte\)이다.
-* TTFB란 Client가 Server에게 처음으로 보낸 메시지가 Server가 처리된 후 다시 Client에게 전송하여 Client의 Browser가 처리를 마치는 데에까지 걸리는 시간을 의미한다.
-	* 쉽게 설명하자면 Client가 클릭한 후 해당 버튼 관련 기능이 화면에 출력되기까지 걸리는 시간이다.
-* 이러한 TTFB가 중요한 분야는 SEO\(Search Engine Optimization\)이긴 하지만 채팅과 같은 Viewer\-Streamer간의 소통이 존재하는 Streaming의 특성상 TTFB가 중요한 지표 중 하나로 작용한다.
-* 또 다른 metric으로는 SSIM\(Structual Similarity\)과 PSNR\(Peak Signal-to-Noise Rate\)이 있다.
-* SSIM은 영상 압축 과정에서 발생하는 손실률을 계산하는 지표이며 PSNR은 신호가 가질 수 있는 최대 전력에 대한 잡음의 전력의 비를 계산해 영상 압축의 손실률을 계산하는 식이다.
-* SSIM의 경우 2004년에 publish된 논문이며 어디 학회에 제출된 것인지는 찾지 못했으나 Wikitree에 기재될 정도로 유명한 state\-of\-art로 보인다.
-* 그 외에 사용된 metric은 대부분 논문 자체에서 중점을 둔 기능의 성능을 보여주기위해 직접 만든 계산식을 따르거나 Network Throughput을 사용하였다.
-
----
-### Reference
-
-* 아래의 논문은 이번 조사에 참고한 논문들이다.
-* 모두 읽어본 것은 아니며 일부분, 특히 Evaluation만을 확인하였다.
-
-1. Exploring the interplay between CDN caching and video streaming performance : Ehab Ghabashneh and Sanjay Rao
-2. PERM: Neural Adaptive Video Streaming with Multi-path Transmission : Yushuo Guan, Yuanxing Zhang, Bingxuan Wang, Kaigui Bian, Xiaoliang Xiong and Lingyang Song
-3. Walls Have Ears: Traffic-based Side-channel Attack in Video Streaming : Jiaxi Gu, Jiliang Wang, Zhiwen Yu, Kele Shen 
-4. Jigsaw: Robust Live 4K Video Streaming : Ghufran Baig, Jian He, Mubashir Adnan Qureshi, Lili Qiu, Guohai Chen, Peng Chen, Yinliang Hu
-5. Improving Fairness, Efficiency, and Stability in HTTP-based Adaptive Video Streaming with FESTIVE : Junchen Jiang, Vyas Sekar, Hui Zhang
-6. MultiLive: Adaptive Bitrate Control for Low-delay Multi-party Interactive Live Streaming : Ziyi Wang, Young Cui, Xiaoyu Hu, Xin Wang, Wei Tsang Ooi, Yi Li
-7. Image Quality Assessment: From Error Visibility to Structural Similarity : Zhou Wang, Member, IEEE, Alan Conrad Bovik, Fellow, IEEE, Hamid Rahim Sheikh, Student Member, IEEE, and Eero P. Simoncelli, Senior Member, IEEE
-8. DASH in Twitch: Adaptive Bitrate Streaming in Live Game Streaming Platforms : Karine Pires, Gwendal Simon
 
 ---
 ## 08/10 현재상황
