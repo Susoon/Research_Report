@@ -9,6 +9,35 @@
 ---
 ## 09/09 현재상황
 
+* 알아낸 정보로는 NVIDIA에서 지원해주는 ffmpeg용 h264 코덱은 nvenc인데 이는 **NVIDIA 드라이버가 관리해주는 하드웨어상에 구현된 디코더**이다.
+    * 이는 NVIDIA가 FFmpeg측에 source를 전부 제공한 후 만들어달라고 부탁한 것이라고....
+    * 여기서 source는 드라이버 코드인 것 같다.
+    * AMD도 전부 갖다바친 뒤 만들어달라고 부탁해서 만든 것\(amf\)이 있다.
+* nvenc는 하드웨어 상에 구현된 디코더이다보니 GPU\-Ether에 맞게 수정할 수가 없다....
+* 한가지 가능성은 **CoreAVC**라는 디코더이다. 이는 NVIDIA에서 제공한 것은 아니지만 CUDA를 사용한 GPU 가속을 제공한다고 한다.
+* 하지만 CoreAVC는 유료이다...
+* 결국 마지막 방법은 오픈소스이자 가장 높은 성능을 보인다는 x264를 GPU에 포팅하는 것이다.
+* 이는 **전부 CPU코드로 구성된 코덱을 GPU에 포팅**하는 엄청난 노~~오오오오오오~~력이 필요하다....
+* 사용가능한 opensource를 조금더 찾아보고 ffmpeg의 구조를 더 자세히 파악할 필요가 있지만 GPU로 포팅의 가능성이 그렇게 높아보이진 않는다.
+* 아래는 참고한 사이트들이다.
+
+* [wikipedia-Advanced Video Coding](https://en.wikipedia.org/wiki/Advanced_Video_Coding)
+* [H.264/MPEG-4 AVC products and implementations](https://en.wikipedia.org/wiki/H.264/MPEG-4_AVC_products_and_implementations#cite_note-23)
+* [Video Transcoding Examined: AMD, Intel, And Nvidia In-Depth](https://www.tomshardware.com/reviews/video-transcoding-amd-app-nvidia-cuda-intel-quicksync,2839-2.html)
+* [FFmpeg-NVIDIA](https://developer.nvidia.com/ffmpeg)
+* [NVIDIA-Video Codec SDK Documentation](https://docs.nvidia.com/video-technologies/video-codec-sdk/ffmpeg-with-nvidia-gpu/index.html)
+
+* 아래는 ffmpeg 설치를 위해 사용한 configure 옵션들이다.
+```
+./configure --enable-gpl --enable-cuda-sdk --enable-libx264 --enable-cuda --enable-cuvid --enable-nvenc --enable-nonfree --extra-cflags=-I/usr/local/cuda/include  --extra-ldflags=-usr/local/cuda/lib64 --enable-cross-compile
+```
+
+* 아래는 추가로 살펴본 영상 파일을 구할 수 있는 사이트들이다.
+* [DigitalFoundary](https://www.digitalfoundry.net/)
+* [Red](https://www.red.com/sample-r3d-files)
+* [Xiph](https://media.xiph.org/)
+
+---
 * ffmpeg의 작동원리에 대해서 공부하고 있다.
 * ffmpeg을 사용하더라도 추가적인 코덱을 라이브러리러 넘겨줘야 기대하는 수준의 화질로 영상을 인코딩할 수 있다.
 * H264방식의 인코딩을 택할 예정이며, 현재 hulkbuster 서버에는 GPU가 없으므로 libx264로 인코딩하는 것을 목표로 하며 추후에 GPU를 설치하고 난 뒤에는 h264\_nvenc로 인코딩하는 것이 목표이다.
