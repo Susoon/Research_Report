@@ -7,6 +7,88 @@
 3. ffmpeg 코드 확인 후 GPU-Ether와 연결 가능하게 수정하기
 
 ---
+## 09/10 현재상황
+
+* FFmpeg을 사용할 것인가에 대한 것을 확실히 하기위해선 다음의 내용을 확실히 파악할 필요가 있다.
+
+1. **NVIDIA**에서 제공하는 H264 코덱을 활용할 수 있는가
+2. 일반적으로 가장 많이 사용되는 **x264** 라이브러리를 GPU에 포팅시킬 수 있는가
+3. **CUDA**를 사용하여 구현된 H264 코덱이 있는가
+
+* 그에 대한 답변을 아래에 남긴다.
+
+---
+### 1. **NVIDIA**에서 제공하는 H264 코덱을 활용할 수 있는가
+
+* NVIDIA에서는 H264 코덱을 제공한다.
+* 이들의 이름은 NVENC와 NVDEC이다.
+    * NVidia ENCoder와 NVidia DECoder이다.
+* 이들은 09/09일자에 밝힌바와 같이 **하드웨어에 구워져서** 나온다.
+
+> NVIDIA GPUs contain one or more **hardware-based decoder and encoder(s) (separate from the CUDA cores)** which provides fully-accelerated hardware-based video decoding and encoding for several popular codecs. With decoding/encoding offloaded, the graphics engine and the CPU are free for other operations.
+
+* NVIDIA developer에서도 실제로 위와 같이 hardware\-based decoder and encoders\(s\) \(seperate from the CUDA cores\)가 강조되어있다.
+* 아래는 NVIDIA가 이해를 돕기위해 위의 글 아래에 기재한 그림이다.
+
+![Alt_text](./image/09.10_nvidia_codec.png)
+
+* 설명과 동일하게 **CUDA core와 별개로** codec과 codec을 위한 버퍼가 존재함을 알 수 있다.
+* 해당 기능이 탑재된 GPU는 아래의 링크에서 확인할 수 있다.
+    * [NVIDIA GPU Codec](https://developer.nvidia.com/video-encode-decode-gpu-support-matrix)
+* 따라서 NVIDIA에서 제공하는 코덱은 수정이 불가하여 활용할 수 없다.
+* 이를 조금더 확실히 하려면 **ffmpeg에서 NVENC와 NVDEC를 어떻게 호출하는가**를 파악할 필요가 있다.
+* 코덱을 호출하는 방식에 따라 활용도가 정해질 수 있기 때문이다.
+* 이는 FFmpeg 코드를 조금더 확인해봐야 알 수 있는 부분이다.
+* 여태까지 확인한 바로는 NVENC와 NVDEC에 관한 코드가 존재는 하지만 C파일로만 존재를 하며, 해당 파일 내에는 코덱 설정을 위해 사용하는 구조체에 해당 코덱을 사용하기 위해 필요한 변수 세팅이 되어있으며, 그 외에는 NVIDIA 코덱에서 사용하는 변수 선언이 전부이다.
+* 더 자세한 연결고리는 FFmpeg에 cuda관련 옵션을 configure에 주고 make하여 코드를 확인하면 찾을 수 있을 것 같지만 현재 hulkbuster 서버에는 GPU가 없어서 nvcc를 호출하지 못해 configure자체가 불가능한 상태이다.
+
+* 참고 링크
+* [NVIDIA Developer video codec](https://developer.nvidia.com/nvidia-video-codec-sdk#NVENCFeatures)
+* [NVIDIA GPU Codec](https://developer.nvidia.com/video-encode-decode-gpu-support-matrix)
+
+---
+### 2. 일반적으로 가장 많이 사용되는 **x264** 라이브러리를 GPU에 포팅시킬 수 있는가
+
+* 위는 불가능하다고 보는 게 맞다.
+* 09/09일자에 기록한 바와 같이 x264 라이브러리는 CPU에 맞게 구현된 라이브러리이기 때문에 모든 코드가 CPU에 맞게 최적화되어 구현되어 있다.
+* 이러한 라이브러리를 GPU에 맞게 최적화하여 재구현한다는 것은 하나의 work에 가까운 수준으로의 시간과 노력투자를 요구한다.
+* 따라서 이는 **불가능하다**.
+
+---
+### 3. **CUDA**를 사용하여 구현된 H264 코덱이 있는가
+
+* 2번에서의 이슈를 조금 더 생각해보면, **누군가 이미 x264 라이브러리를 GPU에 포팅시켜놓지 않았을까?**라는 생각을 할 수 있다.
+* 만약 누군가 이미 x264라이브러리를 GPU에 맞게 포팅시켜놓았고, 이를 논문으로 제출한 기록이 있다면 따로 구현할 필요 없이 해당 코드만 받아와 조금 수정해서 사용하고 논문에 ref하면 된다.
+* 그런데 **없다.**
+* google scholar에 검색해서 확인해본 결과 총 5편의 논문이 h264 코덱을 GPU에 포팅하려는 시도를 하였다.
+
+1. Performance Evaluation of H.264/AVC Decoding and Visualization using the GPU
+2. MULTI-PASS AND FRAME PARALLEL ALGORITHMS OF MOTION ESTIMATION IN H.264/AVC FOR GENERIC GPU
+3. H.264/AVC MOTION ESTIMATION IMPLMENTATION ON COMPUTE UNIFIED DEVICE ARCHITECTURE (CUDA)
+4. Accelerating H.264 Inter Prediction in a GPU by using CUDA
+5. A Parallel H.264 Encoder with CUDA: Mapping and Evaluation
+
+* 1번은 2007년에 나온 논문으로 CUDA가 처음 나왔을 때 이를 이용해 h264를 구현한 논문이다.
+    * github이 2007년 10월에 나왔다.
+* 1번은 너무 오래된 논문이기도 하고 코드를 공개하지도 않아 코드도 없다.
+* 2번은 CPU와 GPU를 모두 사용해 h264를 구현한 논문이기 때문에 이를 사용하려면 CPU코드를 GPU에 다시 포팅해야하는 결과를 초래한다.
+* 코드도 또한 보이지 않는다.
+* 3번은 인용수가 179회로 어마어마한 수치를 가지고 있지만 paper의 쪽수가 4페이지밖에 안되고 2008년에 나온 논문이라 1번과 유사하게 너무 오래되기도 했고 코드도 역시 없다.
+* 4번은 h264의 일부 기능만 GPU에서 구현한 듯하다.
+* 이는 추가적으로 확인이 필요하다.
+* 그런데 이 논문\(?\)은 2페이지다.
+* 5번이 그나마 가장 가능성이 있는데 CUDA를 이용해 h264 encoder를 구현한 논문이다.
+* 이 논문은 encoder밖에 없다는 단점이 있지만 이쪽에 코드가 있다면 찾아볼 가치는 있다.
+* 하지만 전체적으로 코드 공개가 되지 않은 논문이 많고 너무 오래된 논문도 많아 사용할 수 있는 것이 있을지는 미지수이다.
+
+---
+### 결론
+
+* FFmpeg을 사용해서 evaluation을 진행하는데에는 무리가 있어보인다.
+* 가장 많이 사용하는 코덱 알고리즘인 h264나 h265를 이용해 실험을 진행하는 것이 당위성이 있는데, h265는 유료화되어 있고 h264는 위의 이유로 인해 코드의 존재 가능성이 매우 낮다.
+* 확실히 존재하지 않는다는 것을 증명해야하지만 현재로서는 가능성이 매우 낮다.
+
+---
 ## 09/09 현재상황
 
 * 알아낸 정보로는 NVIDIA에서 지원해주는 ffmpeg용 h264 코덱은 nvenc인데 이는 **NVIDIA 드라이버가 관리해주는 하드웨어상에 구현된 디코더**이다.
