@@ -2,9 +2,46 @@
 
 ##  ToDo List
 
-1. ffmpeg 사용해서 transcode server 구현해서 실험해보기
-2. 실험에 사용할 영상 모으기
-3. ffmpeg 코드 확인 후 GPU-Ether와 연결 가능하게 수정하기
+1. DMA 공부하기
+2. network stack 공부하기
+3. network stack open source 찾아보기
+
+---
+## 10/08 현재상황
+
+* DMA를 scatter/gather방식으로 진행하는 함수를 찾았다.
+* dma\_map\_sg함수이다.
+    * /usr/src/linux/include/dma-mappiung.h파일 안에 있다
+
+![Alt_text](./image/10.08_sgtosg_attr.JPG)
+
+* dma\_map\_sg함수는 사실 매크로 함수이고 해당 함수를 호출하면 dma\_map\_sg\_attrs라는 함수가 호출된다.
+
+![Alt_text](./image/10.08_dma_map_sg_attrs.JPG)
+
+* 이때 dma\_map\_sg\_attrs함수 내부에서 호출되는 map\_sg가 실질적으로 dma 주소를 받아와 scatterlist 변수인 sg에 해당 주소를 저장해주는 역할을 한다.
+* 이 map\_sg라는 함수는 사용하는 device나 host의 기기 종류에 따라, dma 정책\(e.g. coherent, direct, etc...\)에 따라 구분되어 함수포인터가 대입된다.
+* 하지만 모든 map\_sg에 대입되는 함수들이 하는 일은 동일하다.
+* **dma할 물리 주소를 찾아와 대입시킨다.**
+* 단지 기기의 종류나 dma 정책에 따라 해야하는 일과 방식이 달라 구분되어 구현되어 있는 것이다.
+* 그렇다면 debug\_dma\_map\_sg 함수가 남는데 이 함수도 map\_sg와 동일하게 기기 종류나 dma 정책에 따라 구분되어 구현되어 있다.
+* 하지만 debug\_dma\_map\_sg 함수에 대입된 함수의 원형을 따라가보면 **몸체가 비어있는 함수**들도 존재한다.
+* 이는 debug\_dma\_map\_sg 함수는 dma에 직접적인 관여를 하지 않는다는 것이다.
+    * 사실 dma 관련 meta data를 수정하거나 하는 일을 하는 함수들도 존재해 직접적인 관여를 하지 않는 것은 아니다.
+    * 하지만 관여를 하지 않는 경우가 존재하고 이는 이 함수가 아닌 다른 부분을 관찰할 필요가 있다는 것을 의미한다.
+    * 그 이유는 현재 찾고자하는 바가 **대입된 dma 주소를 어떠한 방식으로 전해주어야 scatter/gather이 가능한가**이기 때문이다.
+* 이때문에 dma\_map\_sg 함수 몸체에서 호출되는 함수를 따라 call flow를 타고 내려가는 것이 아니라 dma\_map\_sg 함수 자체를 어떻게 운용하는가에 대한 정보도 필요하다.
+* 혹은 dma 주소를 대입해주는 것만으로도 dma가 진행되었던 gdnio의 경우를 생각해봤을때 단순히 대입만해도 dma를 진행해줄 가능성이 존재한다.
+    * 사실 매우 크다.
+* 그렇다면 dma 주소가 대입되는 scatterlist 포인터 변수 sg라는 변수가 어떻게 운용되는지에 대해 알아볼 필요도 있다. 
+* 해당 변수가 어떻게 사용되고 어떻게 세팅되었는가에 따라 이 scatter/gather을 사용할 수 있는지가 결정될 수 있다.
+
+---
+### 참고 사이트
+
+* [문c블로그](http://jake.dothome.co.kr/dma-1/)
+* [dma\_map\_sg 운용 예시](https://cpp.hotexamples.com/examples/-/-/dma_map_sg/cpp-dma_map_sg-function-examples.html)
+* [dma\_linux\_document](https://www.kernel.org/doc/html/latest/driver-api/dmaengine/index.html)
 
 ---
 ## 09/10 현재상황
