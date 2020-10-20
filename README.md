@@ -7,6 +7,18 @@
 3. network stack open source 찾아보기
 
 ---
+## 10/20 현재상황
+* DMA를 이용해 확인해 볼 것이 생겼다.
+* DRAM에 non\-contiguous한 메모리 공간을 두 곳 잡는다.
+* 그 두 곳의 virtual address를 번갈아가며 붙여 누더기 virtual address를 만든다.
+    * e.g.) |M1addr|M2addr|M1addr|M2addr|...
+* 이 누더기 virtual address를 physical address로 mapping한다.
+    * 이 과정은 직접 새로 구현해야한다.
+* 이러한 과정을 통해 발생한 physical address로 DMA를 해본다.
+* 각 메모리 공간에 데이터가 따로따로 저장된다면 이 메모리 공간 중 하나를 device의 메모리 공간으로 바꿔본다.
+    * GDDR의 메모리 공간으로 바꿔본다.
+
+---
 ## 10/08 현재상황
 
 * DMA를 scatter/gather방식으로 진행하는 함수를 찾았다.
