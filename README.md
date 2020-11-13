@@ -103,6 +103,12 @@ X11Forwarding yes
 * 이때 DISPLAY port가 어떻게 설정되었는지 꼭 확인한 뒤 이에 맞게 설정해줘야한다.
 * 하지만 보통 기본으로 세팅된 DISPLAY port에 잘 연결되니 걱정할 필요는 없다.
 
+4. dbind warning
+* 이는 원인을 알 수 없는 오류이다.
+* 다만 현재 문제가 발생한 것은 아니고 잠재적으로 문제가 발생할 가능성이 있어 출력해주는 것이라고 한다.
+
+![Alt_text](./image/11.13_dbind_warning.JPG)
+
 ---
 ### 3. QEMU 실행방법
 
