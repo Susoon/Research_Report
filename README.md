@@ -7,6 +7,155 @@
 3. network stack open source 찾아보기
 
 ---
+## 11/13 현재상황
+* QEMU로 VM을 띄우고 있다.
+* 이 과정을 글로 남겨 후에 다시 QEMU를 사용하기에 편하도록 하고자 한다.
+* 이를 위해서는 2가지 과정이 필요하다.
+    1. WSL GUI 설정
+    2. ssh GUI 설정
+    3. QEMU 사용법
+---
+### 1. WSL GUI 설정
+
+* 이는 사실 매우 간단하다.
+* **xming** 프로그램을 사용하면 GUI로 띄워준다.
+* 다만 이를 세팅해주는 과정이 필요하고 이는 ssh GUI 설정을 확인하면 된다.
+
+---
+### 2. ssh GUI 설정
+
+* 이를 위해서는 필요한 과정이 많다.
+
+1. client 
+* .bashrc 파일에 다음의 내용을 추가한다
+    * 추가한 뒤 꼭 source ~/.bashrc를 해줘서 적용되도록 해준다.
+```
+export DISPLAY=localhost:0
+export NO_AT_BRIDGE=1
+```
+* /etc/ssh/ssh\_config 파일에 다음의 내용을 주석해제 및 추가한다.
+```
+ForwardAgent yes
+ForwardX11 yes
+ForwardX11Trusted yes
+```
+* /etc/ssh/sshd\_config 파일에 다음의 내용을 주석해제 및 추가한다.
+    * 위의 ssh\_config파일과 sshd\_config 파일을 모두 수정한 뒤 `sudo service sshd restart`로 꼭 재실행해서 적용되도록 해준다.
+```
+Port 22
+Protocol 2
+PubkeyAuthentication yes
+X11Forwarding yes
+```
+* 원하는 서버에 ssh로 접속시 **-Y** 혹은 **-X** 옵션을 붙인다.
+    * -Y와 -X의 차이는 크게 없다고 한다.
+    * 자세히는 모르겠으나 -Y 쪽이 보안이 더 강하다고....
+    * stackoverflow에서는 -X로 안되면 -Y로 하라고 했다.
+
+2. server
+* .bashrc 파일에 다음의 내용을 추가한다.
+    * 여기에는 DISPLAY export를 **절대 해주면 안된다**.
+    * 기본으로 세팅되어있는 DISPLAY port가 있는데 세팅을 바꿔버리면 정상적인 port를 찾지 못해 에러가 발생할 수 있다.
+    * 또한 이는 사용하는 계정뿐만 아니라 root 계정에도 동일하게 설정해주어야한다.
+```
+export NO_AT_BRIDGE=1
+```
+* /etc/ssh/ssh\_config 파일에 다음의 내용을 주석해제 및 추가한다.
+```
+ForwardAgent yes
+ForwardX11 yes
+ForwardX11Trusted yes
+```
+* /etc/ssh/sshd\_config 파일에 다음의 내용을 주석해제 및 추가한다.
+    * 위의 ssh\_config파일과 sshd\_config 파일을 모두 수정한 뒤 `sudo service sshd restart`로 꼭 재실행해서 적용되도록 해준다.
+```
+Port 22
+Protocol 2
+PubkeyAuthentication yes
+X11Forwarding yes
+```
+---
+### 2\_1. ssh GUI에 문제 발생시
+
+* 이유는 모르겠으나 재접속시 계속 설정이 바뀐다.
+* 때문에 문제가 발생할 경우가 잦으며, 위의 설정 변경에 의한 문제가 아니더라도 아래의 내용을 확인하면 보통 해결되었다.
+
+1. xming
+* 아주 당연한 사실이지만 xming이 켜져있지 않으면 GUI가 실행되지 않는다.
+* gtk connection failed의 에러가 발생하면 이를 확인해보자.
+* 현재는 시작프로그램에 지정되어있다보니 왠만하면 켜지겠지만 확인해볼 필요는 있다.
+
+2. .Xauthority
+* .Xauthority 파일은 ssh와 Xming간의 세팅을 저장해주는 파일이다.
+* 위에서 서술한 설정이 바뀌는 부분이 이 파일과 관련된 부분이다.
+* 문제가 발생하는 계정은 일반 사용계정이 아닌 **root 계정**이다.
+* 따라서 아래의 내용은 root 계정과 관련된 내용이다.
+* 재접속시 이 파일이 refresh가 되는 듯 하다.
+* 이때는 `xauth merge /home/susoon/.Xauthority`를 command창에 입력하면 해결할 수 있다.
+* 이를 확인하기 위해서는 `xhost +`를 입력해서 정상작동하는지 확인하자.
+    * xhost + failed. Cannot connect to 'localhost:10.0'이란 메세지가 뜨면 에러가 발생한 상태이다.
+    * 'access control disabled, clients can connect from any host'이란 메세지가 떠야 정상작동하는 상태이다.
+
+3. DISPLAY 환경변수
+* 이는 왠만하면 발생할 일이 없는 문제이다.
+* 기본으로 세팅되어있는 DISPLAY port가 변경되었거나 수정된 경우 발생할 수 있는 문제이다.
+* 이는 .bashrc에 추가한 export DISPLAY부분을 변경하면 된다.
+* 이때 DISPLAY port가 어떻게 설정되었는지 꼭 확인한 뒤 이에 맞게 설정해줘야한다.
+* 하지만 보통 기본으로 세팅된 DISPLAY port에 잘 연결되니 걱정할 필요는 없다.
+
+---
+### 3. QEMU 실행방법
+
+* 이는 아직 해결하지 못한 부분이 남아있다.
+* 위의 GUI 세팅이 모두 완료되었다는 가정하에 진행된다.
+
+1. 이미지 생성
+* VM 이미지를 만들고 이를 QEMU에 넘겨주어야 QEMU가 이 이미지 VM과 관련된 데이터를 저장하고 이를 이용해 VM을 실행시킨다.
+* 아래의 명령어를 통해 생성할 수 있다.
+```
+sudo qemu-img create -f <format> <img name> <img size>
+```
+* 이 경우에는 굳이 sudo를 줄 필요는 없다.
+* 위를 적용한 예시는 다음과 같다.
+```
+sudo qemu-img create -f qcow2 ubuntu.qcow2 20G
+```
+* VM 이미지에 사용되는 format은 다양하며 `qcow2`는 QEMU가 제공하는 default 이미지 형식이다.
+* `vdi`를 사용할 경우 virtual Box의 default 이미지 형식에 맞게 생성된다.
+* 간단하게 `img`라는 형식을 사용할 수도 있다.
+
+2. 최초 OS 설치
+* 이 과정은 native OS 설치 시 OS 파일이 담긴 USB를 컴퓨터에 꽂고 BIOS를 이용해 해당 USB로 컴퓨터를 켜는 과정에 해당된다.
+* 아래의 명령어를 통해 실행할 수 있다.
+```
+sudo qemu-system-x86_64 -m <memory size> -boot <boot type> -cdrom <iso file path> -drive file=<img file path> -smp <number of cores> -cpu <'host' or specific cpu name> (-nographic -serial <origin I/O:target I/O)
+```
+* 이 경우에는 sudo를 필수로 주어야한다.
+    * 이 때문에 위에서 ssh GUI 설정을 root 계정에서도 동일하게 해주어야한다.
+* 위를 적용한 예시는 다음과 같다.
+```
+sudo qemu-system-x86_64 -m 2048 -boot menu=on -cdrom ubuntu-20.04.1-desktop-amd64.iso -drive file=ubuntu.qcow2 -smp 2 -cpu host
+```
+* 각 옵션들은 다음을 나타낸다
+
+* `-m` : VM memory size
+* `-boot` : VM boot type
+* `-drive file` : Image file
+* `-smp` : Number of cores
+* '-cpu` : CPU name
+    * 이는 보통 host를 사용하면 된다.
+    * host가 아닌 경우는 모두 목록이 따로 있으며 현재 사용되는 서버는 해당 CPU 종류가 아니니 신경 안써도 된다.
+* `-nographic` : Not using GUI
+    * 이는 GUI 세팅이 되지 않았을 경우 추가해준다.
+* `-serial` : serial mapping
+    * 이도 역시 GUI 세팅이 되지 않았을 경우 추가해준다.
+---
+* 위의 내용들이 현재까지 QEMU에 대해서 알아낸 내용들이다.
+* 현재 상황은 VM이 GUI로 실행되고 설치까지 진행된다.
+* 하지만 설치 중 kill이 뜨면서 종료된다.
+* 혹은 설치 완료 후 실행시 `error : out of memory`라는 에러가 발생하며 실행이 되지 않는다. 
+
+---
 ## 10/20 현재상황
 * DMA를 이용해 확인해 볼 것이 생겼다.
 * DRAM에 non\-contiguous한 메모리 공간을 두 곳 잡는다.
