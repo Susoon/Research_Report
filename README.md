@@ -142,7 +142,7 @@ sudo qemu-system-x86_64 -m 2048 -boot menu=on -cdrom ubuntu-20.04.1-desktop-amd6
 * `-boot` : VM boot type
 * `-drive file` : Image file
 * `-smp` : Number of cores
-* '-cpu` : CPU name
+* `-cpu` : CPU name
     * 이는 보통 host를 사용하면 된다.
     * host가 아닌 경우는 모두 목록이 따로 있으며 현재 사용되는 서버는 해당 CPU 종류가 아니니 신경 안써도 된다.
 * `-nographic` : Not using GUI
