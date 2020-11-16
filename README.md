@@ -10,8 +10,8 @@
 ## 11/13 현재상황
 * QEMU로 VM을 띄우고 있다.
 * 이 과정을 글로 남겨 후에 다시 QEMU를 사용하기에 편하도록 하고자 한다.
-* 이를 위해서는 2가지 과정이 필요하다.
-    1. WSL GUI 설정
+* 이를 위해서는 3가지 과정이 필요하다.
+    1. WSL GUI 설정 및 각 서버에 필요한 앱 설치
     2. ssh GUI 설정
     3. QEMU 사용법
 ---
@@ -20,6 +20,10 @@
 * 이는 사실 매우 간단하다.
 * **xming** 프로그램을 사용하면 GUI로 띄워준다.
 * 다만 이를 세팅해주는 과정이 필요하고 이는 ssh GUI 설정을 확인하면 된다.
+* 설치는 다음의 명령어를 이용해 진행하자.
+```
+sudo apt install -y ubuntu-desktop xorg xrdp xserver-xorg mesa-utils xauth gdm3
+```
 
 ---
 ### 2. ssh GUI 설정
