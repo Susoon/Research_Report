@@ -7,7 +7,87 @@
 3. network stack open source 찾아보기
 
 ---
-## 11/16 현재상황
+## 11/29 현재상황
+
+* GPU Sharing Test를 모두 마쳤다.
+* [실험 결과](https://docs.google.com/spreadsheets/d/18xpMXQNfaElGpn5MdwlzpnkXlgvfptvj8miuvvGgDE4/edit#gid=0)
+* 결과는 ~~아주 마음에 들게도~~ Performance Degradation이 아주 높았다
+
+---
+### 실험 과정
+
+* 실험 환경
+
+1. RTX 3090이 장착된 jooyoung서버에서 실험
+2. cuda 11.1 version 사용
+3. nvidia-smi 455.23.04 사용
+4. Ubuntu 20.04 - 5.4.0 version kernel 사용
+
+* 실험 설계
+
+1. GPU resource를 총 SM 수를 기준으로 분할.
+    * RTX 3090의 총 SM 수가 82여서 나누어떨어지는 수가 부족함
+    * 이로인해 총 SM 수를 80으로 상정하고 4, 8, 16을 분할할 수로 정함
+2. 분할된 Kernel에 사용되는 thread 수는 총 thread 수를 기준으로 분할해 할당
+    * 총 thread 수는 (총 SM 수) X (각 SM별 최대 Thread 수)로 계산
+    * 총 thread 수 : 80 X 1536 = 122880
+    * 위의 계산방식이 정확한지는 확인할 필요가 있음
+3. Memory는 최대한 많이 활용
+    * RTX 3090의 최대 메모리 크기인 24GB를 모두 사용하지는 못했음
+    * 2의 배수로 행렬의 열과 행의 길이를 맞추었는데 이 행렬이 메모리를 애매하게 먹어서 24GB로 못 늘림
+        * 4분할에 사용된 행렬 기준으로 12.5GB 사용
+4. 각 Kernel에서 Matrix Multiplication을 진행
+5. 분할된 Job을 Kernel 하나만 실행했을 때/ 분할된 Job을 각각 분할된 개수만큼의 Kernel이 실행했을 때를 비교
+    * e.g.) 4분할된 resource 중 하나만 사용해서 Matrix Multiplication을 진행하는 Kernel / 4분할된 resource를 각각 사용하는 4개의 Kernel이 Matrix Multiplication을 진행하는 경우
+    * 분할된 개수만큼 실행하는 경우 각 Kernel의 실행시간의 평균으로 비교
+6. 각 Kernel이 Launch된 뒤부터 cudaDeviceSynchronize로 Kernel이 끝난 시점까지의 실행시간을 CPU에서 기록
+7. 각 경우를 5회씩 실행한 후 평균을 통해 performacne degradation을 비교 
+
+---
+### 실험 결과
+
+* 실험을 진행한 결과 눈에 띌 정도의 성능저하가 있었다.
+
+![Alt_text](11.29_gpu_sharing_result.png)
+
+* 위의 결과를 보면 최소 30배에서 최대 115배의 성능 저하가 발생했다.
+    * 시간 단위는 ms이다.
+* Partition의 수가 많아지면 많아질 수록 Degradation이 커지는 이유는 Stream의 한계에 의한 것으로 보인다.
+    * RTX 3090이 지원하는 동시에 접근 가능한 stream의 개수는 2개이다.
+    * cuda\-sample의 deviceQuery를 통해 확인할 수 있다.
+* 1개의 Kernel을 실행시켰을 때의 실행시간이 점점 줄어드는 이유는 memory의 할당의 한계로 인해 matrix의 크기를 점점 줄였기 때문이다.
+* 행렬의 행과 열의 길이를 각각 반으로 줄였기 때문에 1/4씩 줄어드는 것을 확인할 수 있다.
+    * 여기서 궁금한 점은 행렬의 크기를 줄이는 만큼 Kernel당 할당되는 thread의 수도 줄었는데 왜 1/4씩 혹은 그 이상으로 줄어드는가이다.
+    * 1/4보다 더 적은 수치로 줄어들어야하는 것 아닌가?라는 생각이 든다.
+
+---
+### 관찰할 점
+
+1. GPU Resource Partitioning
+
+* 사실 GPU의 resource라는 것은 thread만 있는 것이 아니다.
+* Computing Resource의 측면으로 봤을 때는 thread가 대표적이지만 memory나 cache 등의 다른 요소들 또한 Computing Power에 큰 영향을 미치기 때문이다.
+    * 실질적인 Computing Resource는 SM이나 cuda Core등 많은 요소가 있지만 이 실험에서는 이러한 요소들로 인해 생성되고 관리되는 **thread**를 기준으로 실험을 진행했다.
+* GPU, 특히 RTX 3090의 memory와 L2 cache 등의 메모리 구조나 다른 resource의 구조를 파악한 뒤 해당 부분까지 분할해서 실험을 진행하려면 어떻게 해야할지를 고민해 봐야한다.
+
+2. GPU profiling
+
+* nvidia GPU에서 프로그램이 실행되는 동안 GPU의 resource가 어떻게 사용되는지를 profiling해서 보여주는 nvprof 혹은 nvvp를 사용해서 확인해볼 필요도 있다.
+    * RTX 3090이 속한 computing capability 8.1버전은 nvprof가 지원해주지 않아 RTX 3090으로는 확인할 수 없었다.
+    * P4000이나 K4000으로 실험해 nvvp로 확인하는 것이 좀 더 정확한 결과일 듯 하다.
+
+3. SM Utilization 
+
+* SM을 사용하는 부분에서도 예상과 다른 점이 있었다.
+* 4개의 Kernel을 띄우는 실험에서 Kernel을 4개를 돌리든 1개를 돌리든 GPU Utilization이 100%가 뜨고 82개의 모든 SM을 사용했다.
+    * GPU Utilization은 nvidia-smi를 통해 확인했고, SM 사용은 PTX를 이용한 assembly 코드를 삽입해 확인했다.
+* 8, 16개의 Kernel을 띄우는 실험에서도 Kernel을 1개만 돌려도 GPU Utilization이 100%가 떴다.
+* 8, 16개의 Kernel을 띄우는 실험에서는 SM은 82개를 모두 사용하지 않았다.
+    * 8개의 경우 49개만, 16개의 경우 25개의 SM만 사용했다.
+* 이는 SM을 사용하는 방식이 원래 생각했던 SM을 하나씩 채워가는 방식이 아닌 Idle한 SM부터 하나씩 사용하는 방식이기 때문에 발생한 결과로 보인다.
+* 다만, GPU Utilizaiton이 모두 100%가 뜨는 것은 의아한 점이 많다.
+    * persistent Kernel이 아니긴 하지만 반복문을 사용하고, 반복문의 실행 시간이 짧은 16개 분할 실험의 경우 짧은 시간만 100%의 Utilization을 보이고 그 뒤에는 다시 줄어드는 것을 보면 반복문에 의한 것으로 보이긴한다.
+* 실제로 GPU의 Resource가 어떻게 할당되는 지를 정확히 알아야 해결될 부분으로 보인다.
 
 ---
 
