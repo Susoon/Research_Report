@@ -83,6 +83,17 @@
 
 * GPU\-Ether를 Network I/O로 사용할 경우 GPU에 Network Stack을 구현해야한다.
 * GPU\-Ether의 경우 현재 Network Layer까지만 구현되어 있으므로 TCP\IP Layer까지 GPU에 구현하여야 Mega\-KV를 사용할 수 있다.
+
+3. Data Access
+* Mega\-KV의 경우 GPU에서 key에 matching되는 value의 주소값을 찾아내 CPU로 넘겨주고 CPU가 해당 주소값을 이용해 value를 찾은 뒤 이를 client에게 전송해준다.
+* GPU를 이용해 이 모든과정을 진행하게 되면 Host의 DRAM에 있는 value를 어떻게 access해서 client에게 전달해줄 것인지도 생각해봐야한다.
+* Host의 DRAM에 있는 value를 CPU가 access해서 client에게 전달해주게 되면 GPU\-Ether를 사용해서 GPU에 request를 직접 넘겨주는 의미가 사라진다.
+* 따라서 DRAM에 access하는 과정도 전부 GPU가 수행해야한다.
+* 이를 위해선 GPU에서 Host의 DRAM에 메모리를 할당받고 이 메모리 공간에 value를 저장하는 역할까지 맡아야한다는 것이다.
+* 이를 구현하기 위한 방법을 생각해봐야한다.
+* 간단한 방법으로는 Host의 DRAM에 static한 공간을 미리 잡아놓고 이 공간만을 저장공간으로 사용하면서 GPU에서 찾은 value의 주소값을 이용해 value를 GPU로 DMA해와 보내는 방법이 있다.
+* DRAM을 사용하지 않고 Disk를 사용하는 것은 In\-memory KVS라는 성질을 훼손하는 것이니 DRAM을 사용하는 방법을 고민해볼 필요가 있다.
+
 * 그 외의 부분들은 조사를 진행하면서 그려나가야할 것 같다.
 
 ---
