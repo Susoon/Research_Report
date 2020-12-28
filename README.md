@@ -7,6 +7,127 @@
 3. network stack open source 찾아보기
 
 ---
+## 12/28 현재상황
+
+* 논문 주제를 찾고 있다.
+* GPU\-Ether \+ Mega-KV를 생각하고 있다.
+
+---
+### Motivation
+
+* Memcached와 GPU에 관한 논문들
+
+1. Mega\-KV: a case for GPUs to maximize the throughput of in-memory key-value stores
+    * 2015년도 VLDB에 제출된 논문
+    * GPU\-based in\-memory KVS system을 구현한 논문
+    * VLDB\(Very Large Data Base\)학회 자체의 신뢰도가 매우 높아 중요도가 높은 논문
+    * 후술할 논문 주제의 모티브를 준 논문이다.
+    
+2. Designing High\-Performance In\-Memory Key\-Value Operations with Persistent GPU Kernels and OpenSHMEM
+    * 2018년도 OpenSHMEM학회에 실린 논문이다
+    * persistent GPU kernel로 KVS를 구현하고 OpenSHMEM 라이브러리?를 이용해 CPU에서 GPU로의 데이터 전송을 zero\-copy로 구현한 논문이다.
+    * **GPU\-Ether의 대조군이 된 dpdk 구현과 거의 동일하다.**
+    * 후술할 논문 주제의 가장 강력한 모티브를 준 논문이다.
+    * GPU로 KVS를 구현할 경우 CPU로 request를 받은 뒤 이를 GPU로 **batch**해서 넘겨준다고 한다.
+    * 이는 CPU \-\> GPU의 copy overhead를 생각해봤을때 당연히 필요한 과정이다.
+
+3. MemcachedGPU: Scaling\-up scale\-out key\-value stores
+    * 2015년도 SoCC\(Symposium on Cloud Computing\)에 실린 논문
+    * Nvidia에서 제출한 논문으로 Memcached를 GPU에 offload시킨 논문이다.
+    * 자세한 내용은 읽어볼 필요가 있다.
+
+* 위의 논문들은 GPU에 KVS 혹은 Memcahed를 구현한 논문들이다.
+* CPU\-GPU 간의 Data Communication 특징상 어쩔 수 없이 CPU에서 request를 받아 batch한 뒤 해당 request를 전송하는 방식으로 구현되었다.
+* 이는 GPU\-Ether의 대조군이 된 DPDK\-GPU의 구현과 유사하다.
+* 특히 2번 논문의 경우 내부 설명에도 밝힌 바와 같이 DPDK\-GPU의 구현과 거의 동일하다.
+* 이러한 경우 어쩔 수 없이 latency가 떨어질 수 밖에 없다.
+    * request를 batch하는 시간동안 기다려야하므로
+* 이러한 부분들을 개선하기위해 GPU\-Ether처럼 request를 바로 GPU로 전송한 뒤 이를 GPU에서 모두 처리하고 client에게 결과값을 전송해주는 방식을 택할 수 있을 것 같다.
+
+* 위의 내용들을 이용해 논문을 작성하려면 아래의 의문점들이 해결되어야한다.
+1. GPU를 이용해 KVS나 Memcached를 실행했을 때 성능적 이점이 큰가?
+2. GPU를 이용해 KVS나 Memcached를 많이 작동시키는가?
+3. Network Processing 시간 감소가 전체적인 성능 증가르 이어지는가?
+
+* 1번과 3번에 대한 근거는 Mega\-KV에서 서술하고 있다.
+* 1번의 경우 Mega\-KV와 MemcachedGPU 논문 자체의 목표이자 성과이다.
+* 자세한 수치는 두 논문을 읽어보고 확인해봐야할 것 같다.
+* 3번의 경우 Mega\-KV의 motivation 부분에서 확인할 수 있다.
+
+![Alt_text](20.12.28_KVS_network_overhead_Mega_KV.JPG)
+
+* Network processing과 concurrent data access가 주요한 bottleneck이라고 서술하고 있다.
+* 전체 processing time 중 70%가 Network processing에 사용된다고 한다.
+    * 이러한 부분에 대한 자세한 수치들은 논문을 더 읽어봐야알 것 같다.
+* 이를 해결하기 위해 Mega\-KV 개발자측은 DPDK와 UDP를 사용했다.
+    * 당연히 CPU에서 GPU로의 데이터 전송을 위해 request를 batch해서 사용했다.
+* GPU에 Transport Layer를 올리고 Network I/O로 GPU\-Ether를 사용하면 위에서 발생하는 Network Processing time을 현저하게 줄일 수 있다.
+
+* 남은 의문점은 2번이다.
+* GPU가 KVS와 Memcached의 처리 속도를 높일 수는 있지만 그렇다고 실제로 GPU가 KVS와 Memcached에 사용되는가는 별개의 이야기일 수 있다.
+* 하지만 실제로 구현하고 실험했을 때 성능이 충분히 나와준다면 논문으로 제출하는데에는 무리가 없을 것 같다.
+
+---
+### Design
+
+* 개략적인 Design은 다음과 같다.
+
+1. GPU offloaded KVS
+
+* GPU에 offload된 KVS는 오픈소스로 존재하는 Mega\-KV를 사용한다.
+* Mega\-KV는 Network I/O는 DPDK를 사용하고 이를 통해 받은 request는 GPU에서 처리하는 방식으로 구현되어 있다.
+* 해당 코드를 파악한 뒤 Network I/O를 GPU\-Ether로 변경할 수 있는지 파악해야한다.
+* 혹은 코드의 구조와 볼륨을 파악한 뒤 직접 구현할 수 있을만큼의 분량이라면 직접 개선해 구현하는 것도 좋을 것 같다.
+
+2. Network Stack
+
+* GPU\-Ether를 Network I/O로 사용할 경우 GPU에 Network Stack을 구현해야한다.
+* GPU\-Ether의 경우 현재 Network Layer까지만 구현되어 있으므로 TCP\IP Layer까지 GPU에 구현하여야 Mega\-KV를 사용할 수 있다.
+* 그 외의 부분들은 조사를 진행하면서 그려나가야할 것 같다.
+
+---
+### To Do
+
+* 가장 먼저 조사해볼 부분은 유사한 work이 있는지이다.
+* GPU\-Ether도 GPU\-Direct가 있었듯이 이것도 비슷한 work이 있을 수도 있다.
+* GPU\-KVS/Memcached\-Network간의 명확한 그림을 보기 위해서는 MemcachedGPU와 KV\-Direct도 읽어볼 필요가 있다. 
+* Mega\-KV의 코드도 파악해볼 필요가 있다.
+
+---
+* 그 외의 논문들
+
+1. Spark\-GPU: An accelerated in-memory data processing engine on clusters
+    * 2016년도 Big Data학회에 제출된 논문
+    * Apache Spark를 GPU에 offload시킨 논문
+
+2. Engineering a high-performance GPU B\-Tree
+    * 2019년도 PPoPP\(SIGPlan\)에 제출된 논문
+    * GPU상에 B\-Tree를 구현한 논문
+    * GPU에 구현된 다른 LSM\(Log\-structured Merge\-tree\)보다 빠른 속도를 구현했다고 함.
+    * 일반 CPU를 사용하는 KVS의 경우 LSM이 B\-Tree보다 빠르다고 함.
+
+3. LUDA: Boost LSM Key Value Store Compactions with GPUs
+    * 2020년도 저널\(어딘지 모름\)에 publish된 논문
+    * CUDA로 LSM을 구현한 논문
+    * 2번에서 언급한 LSM과 다른 구현인 듯함.
+    * abstract만 읽어본 상태라 정확한 속도와 성능은 모르겠으나 논문 자체의 신뢰도가 낮아 중요도가 높아보이지 않음
+
+4. DIDO: dynamic pipelines for in\-memory key\-value stores on coupled CPU\-GPU architectures
+    * 2017년도 ICDE\(International conference on Data Engineering\)에 제출된 논문
+    * CPU와 GPU가 on\-chip으로 있는 서버에 대한 논문인듯 하다.
+        * APU를 사용했을 가능성있음
+    * Dynamic Pipeline excution이라는 표현으로 미루어보았을때 CPU와 GPU간의 data synch와 관련있을 가능성이 높다
+
+5. GFlink: An in\-memory computing architecture on heterogeneous CPU\-GPU clusters for big data
+    * 2018년도 TPDS\(Transactions on Parallel and Distributed\)에 제출된 논문
+    * Apache Flink system을 CPU\-GPU cluster로 확장 구현
+    * 1번과 유사하게 Flink를 GPU에 offload시킨 것에 가깝다
+
+* 위의 논문들은 KVS 혹은 Memcached를 사용하는 application을 GPU에 offload시켰거나 Memcached에 필요한 일부 기능을 GPU에 offload시킨것에 그친 논문들이다.
+* KVS 혹은 Memcached 전체를 GPU에 offload시키거나 Memcached가 작동되는 GPU를 포함한 전체 시스템과 관련된 논문들이 아니다.
+* 따라서 위의 논문들의 중요성은 낮다고 판단된다.
+
+---
 ## 11/29 현재상황
 
 * GPU Sharing Test를 모두 마쳤다.
