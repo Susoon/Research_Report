@@ -54,7 +54,7 @@
 * 자세한 수치는 두 논문을 읽어보고 확인해봐야할 것 같다.
 * 3번의 경우 Mega\-KV의 motivation 부분에서 확인할 수 있다.
 
-![Alt_text](20.12.28_KVS_network_overhead_Mega_KV.JPG)
+![Alt_text](./image/20.12.28_KVS_network_overhead_Mega_KV.JPG)
 
 * Network processing과 concurrent data access가 주요한 bottleneck이라고 서술하고 있다.
 * 전체 processing time 중 70%가 Network processing에 사용된다고 한다.
