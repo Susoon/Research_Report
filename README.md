@@ -39,7 +39,7 @@
 ---
 ### 세부사항
 
-1. Memcached의 server selection에 사용되는 hash function 조사
+#### 1. Memcached의 server selection에 사용되는 hash function 조사
 
 ![Alt_text](./image/01.04_memcached_server_hash.JPG)
 
@@ -58,11 +58,15 @@
 
 * 참고 : [Oracle Memcached Server Selection](https://docs.oracle.com/cd/E17952_01/mysql-5.6-en/ha-memcached-using-hashtypes.html)
 
-2. UVM의 성능 관련 issue 및 solution 조사
+<br>
+
+#### 2. UVM의 성능 관련 issue 및 solution 조사
 
 * 이 부분은 아직 조사중에 있다.
 
-3. Memcached에서 사용되는 hash function 조사 혹은 논문 작성을 위해 사용할 새로운 hash function 관련 조사
+<br>
+
+#### 3. Memcached에서 사용되는 hash function 조사 혹은 논문 작성을 위해 사용할 새로운 hash function 관련 조사
 
 * 먼저 현재 Memcached에서 사용되는 hash function에는 어떤 종류가 있는지 살펴보았다.
 * 역시 Memcached C++ library의 코드 중 일부를 참고했다.
@@ -82,14 +86,18 @@
 * 중간 결론인 이유는 새로운 hash function을 만드는 방법에 대해서는 알아보지 않았기 때문이다.
 * 위의 중간 결론을 교수님이랑 같이 얘기해본 뒤 새로운 hash function을 만드는 방식으로 novelty를 채우는 것이 맞는지 확인해볼 필요가 있다.
 
-4. NIC\-GPU 간의 Direct Communication으로 얻을 수 있는 성능적 이점 파악
+<br>
+
+#### 4. NIC\-GPU 간의 Direct Communication으로 얻을 수 있는 성능적 이점 파악
 
 * 이는 논문을 더 찾아볼 필요가 있을 것 같다.
 * 2013년도 이전의 논문들이라 오래된 논문들이긴 하지만 대부분 Network에 Bottleneck이 있다고 서술하고 있는 논문들을 발견했다.
 * 더 자세히 읽어보고 다른 GPU에 KVS를 offload시킨 논문들을 파악할 필요가 있을 것 같다.
     * 특히 Motive가 된 Designing High\-Performance In\-Memory Key\-Value Operations with Persistent GPU Kernels and OpenSHMEM 논문을 읽어볼 필요가 있다.
 
-5. Memcached의 노드당 메모리 크기 조사
+<br>
+
+#### 5. Memcached의 노드당 메모리 크기 조사
 
 ![Alt_text](./image/01.04_aws_memory_size_per_node_memcached.JPG)
 * 위는 AWS에서 제공하는 Memcached 노드의 정보가 기록된 표이다.
@@ -99,7 +107,9 @@
 
 * 참고 : [AWS Nodes Select Size](https://docs.aws.amazon.com/AmazonElastiCache/latest/mem-ug/nodes-select-size.html)
 
-6. Memcached의 real trace or synthetic data 조사
+<br>
+
+#### 6. Memcached의 real trace or synthetic data 조사
 
 * 2개의 Open Source\(?\)를 발견했다.
 * [Twitter Real Trace](https://github.com/twitter/cache-trace)
@@ -111,10 +121,13 @@
 * 위의 두가지 모두 사용이 가능할 것 같으며 특히 **Twitter Real Trace의 경우 2020년 OSDI에 실린 논문 저자들이 정리한 trace이므로 신뢰도가 아주 높아보인다.**
 * 위의 두가지가 각각 Real Trace와 Synthetic Data이다.
 
- 
-7. Memcached / Redis / MICA 파악
+<br> 
 
-    ###### Memcached
+#### 7. Memcached / Redis / MICA 파악
+
+<br>
+
+   ###### Memcached
 * In\-Memory KVS system
 * RAM안에 모든 Data를 저장한 뒤 client가 data를 요청할 경우 KVS를 사용해 data를 찾아주는 시스템이다.
 * Memory\(RAM\)을 Cache처럼 사용하기 때문에 Memcached라고 불리며 RAM에 모든 데이터를 저장하기 때문에 서버가 종료되면 모든 데이터가 사라진다.
@@ -124,7 +137,9 @@
 * 위의 기능들을 포함한 가장 단순한 기능들만 탑재하여 속도가 빠르다.
 * Multi\-Thread를 지원한다.
 
-    ###### Redis
+<br>
+
+###### Redis
 * In\-Memory KVS System
 * Memcached와 동일하게 대부분의 데이터를 Memory에 저장하지만 Disk에도 데이터를 저장한다.
 * Disk와 Memory 간의 데이터 Synchronization을 위해 2가지 기법을 제공한다.
@@ -138,7 +153,9 @@
 * 아래의 링크가 Memcached와 Redis의 비교 분석을 간단하게 잘 요약해두었다.
 * [Memcached vs Redis](https://chrisjune-13837.medium.com/redis-vs-memcached-10e796ddd717) 
 
-    ###### MICA
+<br>
+
+###### MICA
 * MICA는 2014년 NSDI에 실린 논문이다.
 * Memcached를 확장 및 변형시킨 In\-Memory KVS이다.
     * 논문명도 MICA: A Holistic Approach to Fast In\-Memory Key\-Value Storage이고 논문 내부에서도 Storage라는 표현을 사용하지만 In\-Memory라는 표현으로 미루어보았을때 Disk는 사용하지 않을 것 같다.
@@ -150,12 +167,12 @@
     * Mega\-KV에서는 MICA를 이용해 비교하긴 했지만 Mega\-KV도 2015년도 논문이기 때문에 실험 당시에는 Redis가 지원받기 전이었다.
 * MICA가 어느정도의 영향력을 가지고 있고 MICA와 비교하는 것이 타당한 evaluation 방향인지는 조금더 찾아볼 필요가 있다.
 
-* 참고 사이트
-[Redis & Memcached 정리](https://real-dongsoo7.tistory.com/114)
-[Memcached and Persistence](https://www.gosquared.com/blog/memcache-and-persistence)
-[Redis vs. Memcached: In-Memory Data Storage Systems](https://alibaba-cloud.medium.com/redis-vs-memcached-in-memory-data-storage-systems-3395279b0941)
-[\[Cache\] Redis vs. Memcached](https://chrisjune-13837.medium.com/redis-vs-memcached-10e796ddd717)
-[AWS Memcached](https://aws.amazon.com/ko/memcached/)
-[Opendocs](https://myblog.opendocs.co.kr/archives/591)
-[About Redis](https://brownbears.tistory.com/43)
-[MICA github](https://github.com/efficient/mica)
+* 참고 사이트 <br>
+[Redis & Memcached 정리](https://real-dongsoo7.tistory.com/114) <br>
+[Memcached and Persistence](https://www.gosquared.com/blog/memcache-and-persistence) <br>
+[Redis vs. Memcached: In-Memory Data Storage Systems](https://alibaba-cloud.medium.com/redis-vs-memcached-in-memory-data-storage-systems-3395279b0941) <br>
+[\[Cache\] Redis vs. Memcached](https://chrisjune-13837.medium.com/redis-vs-memcached-10e796ddd717) <br>
+[AWS Memcached](https://aws.amazon.com/ko/memcached/) <br>
+[Opendocs](https://myblog.opendocs.co.kr/archives/591) <br>
+[About Redis](https://brownbears.tistory.com/43) <br>
+[MICA github](https://github.com/efficient/mica) <br>
