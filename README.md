@@ -176,3 +176,5 @@
 [Opendocs](https://myblog.opendocs.co.kr/archives/591) <br>
 [About Redis](https://brownbears.tistory.com/43) <br>
 [MICA github](https://github.com/efficient/mica) <br>
+[Oracle Memcached docs](https://docs.oracle.com/cd/E17952_01/mysql-5.6-en/ha-memcached-using-hashtypes.html) <br>
+
