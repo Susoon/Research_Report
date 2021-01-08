@@ -12,6 +12,158 @@
 8. ixgbe & ixgbevf 코드 파악
 
 ---
+## 01/08 현재 상황
+
+* 고장냈던 snow를 고쳤다.
+* 고장난 경위는 아래와 같이 추정된다.
+1. cuda Sample을 build 후 실행
+    * 여기서 cuda Sample은 cuda library 11.1 version이다.
+2. 실행 실패
+3. Nvidia driver에 등록된 cuda library version\(10.1\)과 실제 작동되는 혹은 작동을 시도했던 library version\(11.1\)이 mismatch되어 오류 발생
+4. 3번을 고치기위해 재설치한 nvidia driver의 version이 P4000과 호환되지 않음
+    * P4000과 호환되는 기존에 사용하던 library의 version은 418, 재설치한 nvidia driver의 version은 340
+5. 부팅시 P4000을 호출하고 초기화할 driver가 정상작동하지않아 부팅 실패
+* 이를 고치기 위해 했던 시도와 방법을 남겨 추후에 유사한 상황이 발생했을 경우를 대비한다.
+
+---
+### Nvidia Driver & cuda Library Version Mismatch
+
+* Nvidia driver와 version이 맞지 않은 cuda library를 호출하면 다음과 같은 에러를 만나게 된다.
+```bash
+nvml driver/library version mismatch
+```
+* 이 경우에는 nvidia driver들을 모두 unload시킨 뒤 재부팅 시키면 해결된다.
+* 이는 version이 맞지않은 library와 연결된 driver를 unload한 뒤 nvidia driver가 스스로 version이 맞는 library와 연결하도록 하는 것이다.
+
+1. 가장 먼저 load되어있는 nvidia driver를 확인한다. </br>
+**$ lsmod | grep nvidia**
+```bash
+nvidia_uvm            798720  0
+nvidia_drm             40960  3
+nvidia_modeset       1093632  6 nvidia_drm
+nvidia              17907712  274 nvidia_uvm,ixgbe,nvidia_modeset
+drm_kms_helper        172032  1 nvidia_drm
+drm                   458752  6 drm_kms_helper,nvidia_drm
+ipmi_msghandler       102400  2 ipmi_devintf,nvidia
+```
+
+2. nvidia driver를 unload하기 위해 nvidia에 dependency를 가지고 있는 driver들을 모두 unload해준다. </br>
+<strong>
+$ sudo rmmod nvidia\_drm </br>
+$ sudo rmmod nvidia\_modeset </br>
+$ sudo rmmod nvidia\_uvm </br>
+</strong>
+
+3. nvidia driver를 unload해준다.
+<strong>
+$ sudo rmmod nvidia </br>
+</strong>
+
+4. "rmmod: ERROR: Module nvidia is in use"와 같은 error가 발생할 경우 아래의 명령어로 관련 프로세스를 확인한 다음 kill해준다.</br>
+<strong>
+$ sudo lsof /dev/nvidia*</br>
+$ sudo kill -9 \<PID of nvidia*\> </br>
+</strong>
+
+5. 다시 nvidia driver가 load되어있는지 확인해본다. </br>
+<strong>
+$ lsmod | grep nvidia</br>
+</strong>
+
+* 위의 방법으로도 해결되지 않는 경우가 있고, 이번이 그 경우였다.
+* 이를 해결하기위해 nvidia driver를 삭제 후 재설치하려했고, 그 과정에서 nvidia driver를 잘못 설치해 문제가 생겼다.
+
+* 참고 : [Unload Nvidia Drivers](https://jangjy.tistory.com/300)
+
+---
+### When Nvidia driver is not compatible with GPU
+
+* 이 경우는 상당히 심각하다.
+* 보통 부팅이 안되고 화면이 출력되지 않는다.
+* 일반적인 메인보드를 가진 서버의 경우 GPU를 분리한 다음에도 디스플레이 port가 있어 GPU를 분리한 뒤 부팅해 Nvidia driver를 제거 후 재설치하면 된다.
+* 하지만 snow는 GPU를 분리하면 디스플레이를 연결할 수 없었다.
+* Nvidia driver가 아닌 nouveau driver로 접속한 뒤 nvidia driver를 삭제해 문제를 해결해야했고 그때문에 먼저 부팅에 성공해야했다.
+* 부팅을 하는 방법은 다음과 같다.
+
+1. 부팅할때 <kbd>shift</kbd>와 <kbd>Esc</kbd>를 번갈아가면서 연타해 grub 페이지에 접속한다.
+2. grub command창에 도달한 경우 `normal`을 입력한 후 <kbd>Enter</kbd>를 누르고 바로 <kbd>Esc</kbd>를 눌러 Editing Menu로 접속한다.
+3. Editing Menu에서 Advanced options for Ubuntu로 들어가 원하는 커널 버젼에 커서를 올리고 <kbd>e</kbd>를 눌러 boot command menu로 접속한다.
+4. command 중 linux option으로 가서 마지막에 **nomodeset**을 추가해준다.
+5. <kbd>ctrl</kbd>+<kbd>x</kbd> 혹은 <kbd>F10</kbd>을 눌러 해당 option을 적용한 상태로 부팅한다.
+* 보통 위의 방법으로 부팅하면 정상적으로 부팅에 성공한다고 한다.
+* 하지만 이를 실패할 경우 다음의 방법을 통해 부팅을 시도한다.
+
+1. 위와 같은 방법으로 boot command menu로 접속한다.
+2. nomodset대신 **nouveau.noaccel=1**을 입력한 뒤 <kbd>ctrl</kbd>+<kbd>x</kbd> 혹은 <kbd>F10</kbd>을 눌러 부팅한다.
+3. 위의 방법도 실패하면 다시 boot command menu로 접속해 **quiet splash**를 지우고 **noapic noacpi nosplash irqpoll**를 입력한 뒤 부팅한다.
+* 위의 방법까지 실행하면 보통 정상적으로 부팅에 성공한다고 한다.
+* 하지만 snow의 경우 nvidia driver가 완전히 삭제되지 않고 일부만 삭제된채로 계속 주도권을 가지고 있어 정상부팅에 실패했다.
+* <kbd>ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F2</kbd>~<kbd>F7</kbd>를 눌러 ubuntu desktop이 아닌 ubuntu server로 접속할 경우 command를 입력할 수는 있었다.
+* nvidia driver를 삭제 후 재설치한뒤 실행하려했지만 삭제하는 과정에서 실수가 있어 실패했다.
+* 또한 nvidia driver를 위해 nouveau driver를 blacklist에 올려둔 상태인데다가 network까지 정상작동하지 않아 nouveau로 실행되지도 않았고 재설치에도 실패했다.
+    * network가 정상작동하지 않은 이유는 잘 모르겠다.
+    * 아마 GPU driver를 먼저 실행한 뒤 network driver를 실행하는데 GPU driver가 실패해 network driver도 실패한 것 같다.
+* 아래의 방법으로 nouveau driver를 blacklist에 추가하는 방법이다.
+* 아래의 기술된 파일을 삭제한뒤 커널에 입력시켜주면 blacklist에서 제외된다.
+
+1. 다음의 파일을 찾아간다.
+```
+/etc/modprobe.d/blacklist-nouveau.conf
+```
+2. 다음 내용을 삭제한다.
+```
+blacklist nouveau
+options nouveau modeset=0
+```
+3. 커널에 입력시켜준다. 이때 -k \<사용하는 커널 버젼\>을 옵션으로 추가해 사용중인 커널 버젼의 이미지에 입력시켜준다.
+```
+sudo update-initramfs -u -k 4.18.15
+```
+4. 재부팅한다.
+```
+sudo reboot
+```
+* 위의 방법을 사용하면 nouveau를 blacklist에서 제외한뒤 실행시킬 수 있다.
+* 아래의 방법을 사용하면 network를 다시 살릴 수 있다.
+* 이는 부팅시에 "A start job is running for wait for network to be configured"라는 메세지가 뜨며 부팅이 지연되는 경우 사용하는 방법이다.
+
+1. 아래의 파일을 실행한다.
+```
+/etc/netplan/01-network-manager-all.yaml
+```
+or
+```
+/etc/netplan/01-netcfg.yaml
+```
+2. 연결이 끊긴 ethernet device의 설정에 아래의 내용을 추가한다.
+```
+optional: true
+```
+3. 아래의 명령어를 실행해 적용한다.
+```
+sudo netplan apply
+```
+* 위의 방법을 적용하면 인터넷이 정상작동한다.
+    * ping을 이용해 확인해본다.
+* 이 후 아래의 방법으로 nvidia driver를 삭제한 다음 재실행해주면 정상작동한다.
+```
+sudo apt remove --purge nvidia-*
+```
+* 이때 <strong>nvidia\-\*</strong>로 해야 정상적으로 nvidia driver가 삭제되니 유의하자.
+* 이 후 재부팅하면 nouveau driver를 사용해 부팅되며 이 때 nvidia driver를 재설치한 뒤 nouveau를 blacklist에 추가하고 재부팅하면 원래대로 돌아온다.
+* 만약 "A start job is running for wait for network to be configured"라는 메세지가 부팅시에 계속 뜬다면 아래의 명령어로 방지할 수 있다.
+```
+sudo systemctl disable systemd-networkd-wait-online.service
+sudo systemctl mask systemd-networkd-wait-online.service
+```
+* 이 후 GPU\-Ether를 실행해 정상작동하는지 꼭 확인해주자.
+* 참고
+    * [grub setting](https://itsfoss.com/fix-ubuntu-freezing/)
+    * [Driver reinstall](https://askubuntu.com/questions/1149169/changing-nvidia-drivers-makes-ubuntu-freeze-on-startup)
+    * [network setting](https://askubuntu.com/questions/972215/a-start-job-is-running-for-wait-for-network-to-be-configured-ubuntu-server-17-1)
+
+
+---
 ## 01/04 현재 상황
 
 * ToDo List에 있는 사항들을 조사중에 있다.
