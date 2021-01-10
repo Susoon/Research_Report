@@ -2,14 +2,67 @@
 
 ##  ToDo List
 
-1. Memcached의 server selection에 사용되는 hash function 조사
-2. UVM의 성능 저하와 관련된 issue 및 solution 조사
-3. Memcached에서 사용되는 hash function 조사 혹은 논문 작성을 위해 사용할 새로운 hash function 관련 조사
-4. NIC\-GPU 간의 Direct communication으로 얻을 수 있는 성능적 이점 파악
-5. Memcached의 노드당 메모리 크기 조사
-6. Memcached의 real trace or synthetic data 조사
-7. Memcached / Redis / MICA 파악
-8. ixgbe & ixgbevf 코드 파악
+1. UVM의 성능 저하와 관련된 issue 및 solution 조사
+2. Mega\-KV와 KV\-Direct의 실질적인 Network Throughput 계산
+3. NIC\-GPU 간의 Direct communication으로 얻을 수 있는 성능적 이점 파악
+4. GPU core에 유리한 cluster관련 workload 조사
+5. twiter cache\-trace 분석
+6. request 조사 : request와 data를 호출 빈도수와 data의 크기를 기준으로 정리
+7. ixgbe & ixgbevf 코드 파악
+
+---
+## 01/10 현재 상황
+
+* Mega\-KV와 KV\-Direct의 실질적인 **Network Throughput**을 계산했다.
+* Mega\-KV는 10GbE NIC dual port를 모두 사용한 20Gbps 중 14Gbps, KV\-Direct는 40GbE NIC 중 15Gbps, 40Gbe NIC 10개를 사용할 경우 103Gbps의 Throughput을 보인다.
+
+---
+### Mega\-KV
+
+* Mega\-KV의 경우 key와 value의 크기가 모두 8byte인 경우 client가 하나의 패킷에 최대한 많은 양의 request를 batch해 request를 전송했다.
+* 위의 상황에서 GET request만 보낸 경우 166MOPS의 throughput이 나왔다고 한다.
+* GET request이기 때문에 key값만 전송해 하나의 request data의 크기는 8byte이다.
+* Mega\-KV의 아래의 매크로 코드를 통해 meta data의 크기를 유추할 수 있다.
+
+```
+#define MEGA_MAGIC_NUM_LEN 2 // sizeof(uint16_t)
+#define MEGA_JOB_TYPE_LEN  2 // sizeof(uint16_t)
+#define MEGA_KEY_SIZE_LEN  2 // sizeof(uint16_t)
+#define MEGA_VALUE_SIZE_LEN  4 // sizeof(uint32_t)
+```
+* 여기서 key와 value의 크기는 실제 key와 value의 크기가 아니라 key와 value의 크기를 알려주는 meta data의 크기이다.
+* 각 패킷당 한번 저장되는 값인 magic number와 job type의 크기를 패킷 길이에서 제외해주어야한다.
+* MTU size인 1514byte에서 ethernet crc인 4byte를 빼고 모든 헤더의 크기인 42byte를 빼주면 다음과 같은 값이 나온다.
+* 1514\(MTU\) - 4\(Ethernet CRC\) - 14\(Ethernet Header\) - 20\(IP Header\) - 8\(UDP Header\) = 1468Byte
+* 여기에서 meta data의 크기를 빼주면 다음과 같은 값이 나온다.
+* 1468 - 2\(Magic Number\) - 2\(Job Type\) = 1464Byte
+* 이 값을 Key size를 알려주는 metadata\(2Byte\)와 Key size\(8Byte\)의 합인 10Byte로 나누어주면 하나의 패킷당 batch가능한 최대 GET request의 수는 146개가 된다.
+* 166MOPS를 146으로 나누면 실제로 초당 전송된 패킷의 수인 1,136,986이 나온다.
+* 이 값으로 초당 전송된 데이터 수를 계산해주면 다음과 같은 값이 나온다.
+* \(1,514\(Pkt Size\) + 20\(IFG\)\) * 1,136,986\(PPS\) * 8\(Bit per Byte\) = 13,953,092,192 = 13.95Gbps
+* Mega\-KV는 10GbE NIC을 사용했으니 대략 14Gbps의 수치는 이상한 값이다.
+* 하지만 논문에 언급된 다음의 문장을 보면 생각이 달라진다. </br>
+```latex
+Each socket is installed with an Intel 82599 dual port 10 GbE card
+```
+
+* 각각의 socket이 dual port에 설치되었다는 표현으로 미루어보았을때 10GbE NIC의 모든 port를 사용한 듯하다.
+* 그렇다면 필요한 것은 현재 snow\-ckjung 서버간의 10GbE NIC의 모든 포트를 사용했을때의 throughput이 얼마인가이다.
+
+---
+### KV\-Direct
+
+* **KV\-Direct는 논문 전체를 읽은 것이 아닌 Evaluation 중 필요한 부분만 차용한 것이므로 실험 환경에 대한 이해도가 부족할 수 있음.**
+* KV\-Direct의 경우 총 8개의 server를 사용했으며, 40GbE SNIC을 사용하였고, 0번째 server에 NIC을 설치하였다.
+* server를 8개나 사용한 이유는 사용하는 memory의 크기를 크게하기 위함으로 보이며 이로 인해 총 64GB의 RAM이 사용되었다.
+* KV\-Direct는 open source를 제공하지 않아 정확한 meta data의 크기를 확인할 수 없었으나, Mega\-KV와의 비교가 담긴 표의 제목으로 미루어보았을때 하나의 GET request의 크기는 10Byte로 보인다.
+* 그 외의 meta data의 크기는 Mega\-KV와 동일하다고 가정했다.
+* 위의 환경에서 KV\-Direct는 180MOPS의 throughput을 보였으니 초당 전송된 패킷 수는 1,232,876개이다.
+* 이 값으로 초당 전송된 데이터 수를 계산해주면 다음과 같은 값이 나온다.
+* \(1,514\(Pkt Size\) + 20\(IFG\)\) * 1,232,876\(PPS\) * 8\(Bit per Byte\) = 15,129,854,272 = 15.13Gbps
+* 40GbE NIC을 사용한 것 치고는 처참한 성능이 나왔다.
+* 논문에서 밝힌 10개의 SNIC을 사용한 경우의 성능을 계산하면 102.55Gbps이 나온다
+* 이는 모든 NIC의 최대 throughput을 합한 값인 400Gbps에 비하면 한참 낮은 수치이다.
 
 ---
 ## 01/08 현재 상황
@@ -54,7 +107,7 @@ $ sudo rmmod nvidia\_modeset </br>
 $ sudo rmmod nvidia\_uvm </br>
 </strong>
 
-3. nvidia driver를 unload해준다.
+3. nvidia driver를 unload해준다. </br>
 <strong>
 $ sudo rmmod nvidia </br>
 </strong>
@@ -62,7 +115,7 @@ $ sudo rmmod nvidia </br>
 4. "rmmod: ERROR: Module nvidia is in use"와 같은 error가 발생할 경우 아래의 명령어로 관련 프로세스를 확인한 다음 kill해준다.</br>
 <strong>
 $ sudo lsof /dev/nvidia*</br>
-$ sudo kill -9 \<PID of nvidia*\> </br>
+$ sudo kill -9 \<PID of nvidia*> </br>
 </strong>
 
 5. 다시 nvidia driver가 load되어있는지 확인해본다. </br>
@@ -125,7 +178,7 @@ sudo reboot
 ```
 * 위의 방법을 사용하면 nouveau를 blacklist에서 제외한뒤 실행시킬 수 있다.
 * 아래의 방법을 사용하면 network를 다시 살릴 수 있다.
-* 이는 부팅시에 "A start job is running for wait for network to be configured"라는 메세지가 뜨며 부팅이 지연되는 경우 사용하는 방법이다.
+* 이는 원래 부팅시에 "A start job is running for wait for network to be configured"라는 메세지가 뜨며 부팅이 지연되는 경우 사용하는 방법이다.
 
 1. 아래의 파일을 실행한다.
 ```
