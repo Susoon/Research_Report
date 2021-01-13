@@ -109,9 +109,23 @@ cd ~/Pktgen-DPDK/
 make && sudo make install
 ```
 * Pktgen을 build하고 난 뒤 실행시킬 때에는 아래의 명령어를 사용한다.
-
-
-
+```bash
+sudo ./usr/local/bin/pktgen -l 0-10 -n 2 -- -T -P -m "[1-3:4-5].0, [6-8:9-10].1" -f./rain.pkt
+```
+* `-l`: lcore로 사용할 core의 번호를 지정해준다. DPDK는 master lcore에 core를 하나 사용하므로 이를 포함해서 core의 개수를 지정해줘야한다.
+* `-n`: 사용할 memory channel의 개수를 지정해준다. 성능과 관련있는 듯하나 필요없어 보인다.
+* `-T`: Pktgen page에 color를 사용할 것인지 지정해준다.
+* `-P`: 모든 port에 Promiscuous mode를 사용할 것인지 지정해준다.
+* `-m`: 사용할 port와 core를 mapping해준다.
+    * "[1-3:4-5].0, [6-8:9-10].1"이 의미하는 바는 1-3번 core를 0번 port의 rx에, 4-5번 core를 0번 port의 tx에, 6-8번 core를 1번 port의 rx에, 9-10번 core를 1번 port의 tx에 사용하겠다는 의미이다.
+* `-f`: Pktgen 실행시 자동으로 입력해줄 Pktgen command의 파일 위치를 지정해준다.
+* rain과 sunny의 ip와 mac은 아래와 같다.
+* rain
+    * Port 0 : 10.0.0.3 / 38:ea:a7:10:81:94
+    * Port 1 : 20.0.0.3 / 38:ea:a7:10:81:95
+* sunny
+    * Port 0 : 10.0.0.4 / 38:ea:a7:17:b6:8c
+    * Port 1 : 20.0.0.4 / 38:ea:a7:17:b6:8d
 
 ---
 ## 01/10 현재 상황
