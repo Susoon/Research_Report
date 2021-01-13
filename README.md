@@ -11,6 +11,109 @@
 7. ixgbe & ixgbevf 코드 파악
 
 ---
+## 01/13 현재 상황
+
+* rain과 sunny 서버에 DPDK와 Pktgen을 설치해 실행해보았다.
+* DPDK가 20.11버젼으로 업데이트되면서 dpdk\-setup.sh 파일이 사라지고 일반 gmake로 build를 할 수 없게 되었다.
+* DPDK 20.X버젼이 아니면 현재 rain과 sunny의 커널버젼인 5.8.0\-36\-generic과 호환되지 않아 이 기회에 meson과 ninja를 이용한 build 및 setup을 시도해보았다.
+* 실행 결과로는 1514byte packet을 기준으로 10GbE dual port NIC에서 20Gbps의 성능을 보였다.
+* Mega\-KV는 KVS를 포함한 성능이 13Gbps정도 되니 Network Throughput를 line rate으로 보여준 것은아니다.
+* 다만 DPDK \+ GPU 코드를 사용해 DPDK를 사용하였을 경우 GPU까지 도달하는 rate을 확인해볼 필요는 있을 것 같다.
+    * 10GbE dual port NIC의 Network Throughput이 20Gbps인 것을 미루어보았을 때, 이전에 측정한 DPDK의 성능에 2배일 것 같다.
+
+---
+### DPDK build
+
+* 해당 내용은 rain과 sunny 서버에 build\_dpdk.sh 파일로 만들어져있다.
+* 가장 먼저 해야할 일은 DPDK와 Pktgen, libbpf 코드를 github에서 다운로드 받는 것이다.
+* 그 다음에 libbpf를 build해주어야한다.
+```bash
+cd ~/libbpf/src/
+make && sudo make install
+```
+* build 과정은 단순하다.
+* 하지만 위의 방법으로 설치할 경우 `/usr/lib64/`에 shared library가 설치된다.
+* DPDK는 `/usr/lib`에서 library를 검색하기 때문에 다음의 명령어를 이용해 복사해주어야한다.
+```bash
+sudo cp /usr/lib64/libbpf* /usr/lib/
+```
+
+* DPDK의 build 과정은 DPDK 개발자의 서버 상황에 맞게 설정되어 있어 우리 서버의 상황을 변경시켜줄 필요가 있다.
+* 하지만 kernel과 관련된 설정들을 함부로 바꿨다가는 무슨 일이 일어날지 모르기 때문에 DPDK만의 설정을 만들어 준다.
+* 구체적으로 설명하자면 DPDK는 `/lib/modules/<kernel version>/`의 위치에 build라는 폴더가 있고 그 안에 kernel의 header들이 존재한다고 가정하고 build를 진행한다.
+* 하지만 우리 서버의 경우 `/usr/src/linux-headers-<kernel version>`에 kernel의 header들이 존재하므로 아래의 명령어를 이용해 symbolic link를 만들어준다.
+```bash
+sudo ln -s /usr/src/linux-headers-$(uname -r) ~/build
+```
+* 굳이 build라는 폴더로 만들어 준 이유는 meson으로 configure를 진행할때 kernel\_dir을 option으로 넘겨주는데 이 위치를 홈 디렉토리로 줄 것이기 때문이다.
+* 위에서 설명한 것처럼 DPDK는 build라는 폴더가 있다고 가정하고 build를 진행하기 때문에 홈 디렉토리에 build라는 이름으로 symbolic link를 만들어 주는 것이다.
+* 그 후 dpdk를 meson과 ninja를 이용해 build해주면 된다.
+```bash
+meson -Denable_kmods=true -Dkernel_dir=/home/susoon/ build
+cd ./build/
+ninja && sudo ninja install && sudo ldconfig
+```
+
+---
+### DPDK Setup
+
+* DPDK build를 마쳤다면 이제 setup을 해줄 차례이다.
+* DPDK를 위한 setup은 1\)hugepage setup과 2\)igb\_uio module load, 3\) Ethernet binding으로 이루어진다.
+* 첫번째 hugepage setup은 아래의 명령어로 간단하게 설정할 수 있다.
+```bash
+echo 1024 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepage
+```
+* 만약 permision과 관련된 에러가 뜬다면 직접 vi로 해당 파일에 접속해 값을 1024로 변경해주자
+```bash
+sudo vi /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
+```
+* 두번째로 igb\_uio 모듈을 load하기 위해서는 원래 `modprobe`를 사용한다고 한다.
+```bash
+modprobe igb_uio
+```
+* 하지만 우리 서버에서는 kernel이 igb\_uio를 모듈로 인식하지 못하고 있기 때문에 직접 load해주어야한다.
+* 이때, igb\_uio는 uio 모듈이 load되어 있어야 사용 가능하기 때문에 아래의 명령어로 uio를 먼저 load 후 igb\_uio를 load해준다.
+```bash
+cd ~/dpdk/build/kernel/linux/igb_uio/
+sudo modprobe uio
+sudo insmod ./igb_uio.ko
+```
+* 위의 과정까지 끝나면 이제 ethernet을 igb\_uio에 bind해주면 된다.
+* 먼저 ifconfig를 이용해 해당 ethernet들을 down시켜주는 과정이 필요하다.
+    * 이 과정은 쉬우니 생략한다.
+* 아래의 명령어로 ethernet들의 상황을 파악한다.
+```bash
+cd ~/dpdk/usertools/
+sudo ./dpdk-devbind.py --status
+```
+* 그 뒤에 아래의 명령어로 해당 ethernet들을 bind 혹은 unbind해주면 된다.
+```bash
+sudo ./dpdk-devbind.py -b (ixgbe or igb_uio) (ethernet pci id) (ethernet pci id)
+sudo ./dpdk-devbind.py -u (ALL ethernet pci id)
+```
+* 여기서 bind을 할 때에는 여러개의 ethernet을 한번에 진행할 수 있지만, unbind을 할 때에는 한 번에 한 개의 ethernet만 진행가능하다.
+* ALL ethernet pci id란 앞의 0000까지 입력하라는 의미이다.
+    * e.g.) 0000:17:00.1
+* 위의 과정까지 거치게 되면 DPDK의 setup은 끝이 난다.
+
+---
+### Pktgen Set up
+
+* Pktgen은 pcap library를 사용하므로 먼저 설치해주자.
+```bash
+sudo apt install libpcap-dev
+```
+* Pktgen은 기존의 gmake를 이용한 build가 가능하므로 간단하게 build를 할 수 있다.
+```bash
+cd ~/Pktgen-DPDK/
+make && sudo make install
+```
+* Pktgen을 build하고 난 뒤 실행시킬 때에는 아래의 명령어를 사용한다.
+
+
+
+
+---
 ## 01/10 현재 상황
 
 * Mega\-KV와 KV\-Direct의 실질적인 **Network Throughput**을 계산했다.
