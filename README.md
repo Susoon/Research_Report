@@ -2,13 +2,36 @@
 
 ##  ToDo List
 
-1. UVM의 성능 저하와 관련된 issue 및 solution 조사
-2. Mega\-KV와 KV\-Direct의 실질적인 Network Throughput 계산
-3. NIC\-GPU 간의 Direct communication으로 얻을 수 있는 성능적 이점 파악
-4. GPU core에 유리한 cluster관련 workload 조사
-5. twiter cache\-trace 분석
-6. request 조사 : request와 data를 호출 빈도수와 data의 크기를 기준으로 정리
-7. ixgbe & ixgbevf 코드 파악
+1. Memcached 네트워크 구조 파악
+2. Search\-Update Kernel 구현 구조 작성
+
+---
+## 02/26 현재 상황
+
+1. YCSB를 봤으나 YCSB는 말그대로 generator만 해주는 코드이고 그 외에 인터넷 연결이나 서버 구성같은 것은 사용자가 모두 진행해야한다.
+    * 서버 구성과 관련된 부분은 **Fast RDMA-based Ordered Key-Value Store using Remote Learned Cache\(OSDI/2020)**의 appendix를 참고하자
+2. 네트워크를 통해 DB query를 날리는 부분을 확인하기 위해서 Memcached의 코드를 확인할 필요가 생겼다.
+    * 네트워크 관련된 부분만 빠르게 파악하자
+3. RX\-Search\-Update\-TX간의 Kernel 구성의 큰 그림을 그렸다.
+
+---
+### Kernel 구성
+
+* RX가 status\_idx를 변경하면 이 전의 NF들로 패킷의 권한이 넘어간 듯이 이를 이용해 각 Kernel들로 권한을 넘겨준다.
+* 이때, Search와 Update를 하는 Kernel은 동일한 Kernel을 사용한다.
+* Search와 Update를 모두 할 수 있는 Kernel을 N개 띄워둔 뒤, Update의 빈도에 따라 Kernel 내부 로직을 변경해 Search를 하던 Kernel이 Update를 진행하도록 변경시킨다.
+* 이를 이용해 Dynamic한 Workload에 대응할 수 있게 된다.
+* 한 Kernel 내에서 1\)패킷을 받고, 2\)패킷의 job\(e.g. Get, Set, and etc..\)을 확인한 뒤, 3\)해당 패킷의 job에 맞는 일을 진행한다.
+* 이때 Search를 담당하는 Kernel이 Update 패킷을 만날 경우 해당 패킷의 status\_idx를 Update Kernel의 인덱스로 변경해주는 일만 한다.
+    * Update를 담당하는 Kernel이 Search 패킷을 만날 경우도 유사하다.
+* 본인 담당이 아닌 패킷의 status\_idx를 변경해주면 해당 패킷의 job을 담당하는 Kernel이 status\_idx를 확인한 뒤 해당 패킷을 집어가서 일을 수행할 것이기 때문에 잘 이어질 것 같다.
+* 다만 여기서 걸리는 부분은 위의 방식으로 구현할 경우 **패킷을 까서 어떤 job의 패킷인지 확인하는 과정이 중복된다**는 것이다.
+* 이로 인해 발생하는 overhead가 얼마나 되는지 확인한 뒤 overhead가 크다면 이를 방지할 방법도 구현해주는 것이 필요하다.
+    * 단순히 status\_idx를 분리하는 방식으로 해결할 수도 있다.
+    * 예를 들어, KVS용 status\_idx를 Search, Update 뿐만이 아닌 Divide라는 인덱스도 가지게 해 처음에는 Divide라는 인덱스로 패킷을 받아 분류하는 것으로 할 수 있다.
+    * 이 경우, Divide로 받은 패킷은 패킷의 job을 확인하고, 이와 달리 Search나 Update의 인덱스로 받은 패킷은 패킷의 job을 확인하는 절차 없이 바로 일을 진행해도 된다.
+* 이는 직접 구현하면서 자세한 issue를 확인해봐야할 것 같다.
+
 
 ---
 ## 01/13 현재 상황
