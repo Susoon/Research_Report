@@ -6,6 +6,109 @@
 2. Search\-Update Kernel 구현 구조 작성
 
 ---
+## 03/12 현재 상황
+
+* 요약
+1. GPU\-Ether의 정상작동에 실패한 이유는 ixgbe 드라이버 컴파일 및 install 당시 잘못된 kernel header를 참조했기 때문이다.
+    * DPDK와 유사하게 build라는 이름의 symbolic link를 생성한 뒤 해결되었다.
+2. GPU\-Ether의 성능이 저하되는 현상이 발생했다.
+    * 이는 Bad TLP와 관련되어 메인보드의 PCIe 칩셋에 의한 것으로 추정된다.
+* rain에서 GPU-Ether가 실행되지 않던 현상을 해결했다.
+* 이와 관련된 이슈를 정리해 남겨둔다.
+
+---
+### GPU-Ether 실행 오류
+
+* rain의 kernel 버전이 4.18.15임에도 불구하고 ixgbe의 install이 실패하고, GPU-Ether가 정상작동하지 않는 오류가 발생했다.
+* sunny에 DPDK Pktgen을 실행시키고, rain에서 GPU\-Ether\(RX와 TX만 하는 가장 기본 형태\)를 실행시켰을 때 GPU\-Ether가 패킷을 하나도 받지 못하는 상황이 발생했다.
+
+![Alt_text](./image/03.12_gpu_ether_no_pkts.JPG)
+* 위의 형태로 pps가 변하지도 않았고 sunny의 pktgen에서도 패킷이 탐지되지 않았다.
+* 이를 해결하기 위해 시도했던 것들을 아래에 남긴다.
+
+1. ixgbe 버전 Miss Match
+
+* rain과 sunny에 4.18.15의 kernel 버전을 설치한 뒤에 ixgbe를 추가적으로 설치해주지 않았다.
+* 이로 인해 GPU\-Ether를 위한 customed ixgbe를 실행시키지 않은 normal 상태에서도 ifconfig에 packet이 감지되지 않았다.
+
+![Alt_text](./image/03.12_ens4f1_ifconfig_no_pkts.JPG)
+* 위는 ens4f1의 상태를 ifconfig로 확인한 것이다.
+    * 문제가 해결된 뒤 캡쳐한 사진이기 때문에 ens4f1이다.
+    * 원래는 ens4f0으로 시도했었다.
+
+* GPU\-Ether에서 사용한 ixgbe의 버전은 5.5.3으로 이와 동일한 버전의 ixgbe를 인텔 홈페이지에서 다운로드 후 설치해주니 normal 상태에서는 정상작동을 했다.
+    * 사실 정상작동은 아니다.
+    * 후술하겠지만 Packet을 받는 것만 정상작동한 것이다.
+* 하지만 GPU\-Ether는 customed ixgbe를 사용하므로 이 일로 GPU\-Ether의 실행에 변한 것은 없었다.
+
+2. NIC Port Miss Match
+
+* rain과 sunny는 10G NIC의 2개의 port가 모두 연결된 상태였다.
+* 이는 Mega\-KV와 동일한 환경에서 실험을 진행하기 위함이었다.
+* 하지만 GPU\-Ether를 위해 변형된 customed ixgbe는 1개의 port만을 위해 변경된 상태였다.
+* 이 때문에 오류가 발생할 가능성을 위해 1개의 link를 제거했다.
+* ens4f0을 사용하기 위해 0번 port를 연결하고 1번 port의 link를 제거해서 실행했다.
+* 이 때는 위와 달리 GPU\-Ether가 정상실행조차 하지 못했다.
+* doorbell과 descriptor 세팅을 완료하지 못하고 프로그램이 멈춘다.
+* 이때 dmesg를 확인해보면 `Null pointer handling`이라는 에러 문구가 보인다.
+    * 모든 과정이 해결된 뒤 작성하는 문서라 사진이 없다...
+* 이는 GPU\-Ether를 위해 custom된 ixgbe 코드 중 ixgbe\_main.c에서 tx ring을 세팅해주는 부분에서 에러가 발생한다.
+* 1번 port에 맞게 ring을 다 세팅해주려는데 1번 port는 link가 끊겨 있어 세팅이 불가하고 세팅이 되지 않은 0번 port가 ring을 요구하니 Null pointer handling 에러가 발생하는 것이다.
+* ixgbe 코드를 수정하기 전까지 1번 Port만 사용해야한다.
+
+3. Kernel header Miss Match
+
+* snow에서는 GPU\-Ether가 정상작동한다는 사실을 확인 후 이와 비교하며 다른 점을 확인했다.
+* 이때 ixgbe 코드를 make install할 때 에러가 발생해왔었다는 것을 발견했다.
+```
+- SSL error:02001002:system library:fopen:No such file or directory: ../crypto/bio/bss_file.c:69
+```
+* 위의 에러가 발생했으나 install이 실패하지는 않았다.
+* 이 때문에 여태껏 ixgbe 드라이버가 **정상작동한다고 착각**했던 것이다.
+* 이를 고치기 위해서 ixgbe 드라이버가 make를 통해 컴파일 되는 과정과 make install을 통해 install 되는 과정의 log를 지켜보았다.
+* rain에서는 `/usr/src/linux-4.18.15`와 `/usr/src/linux-headers-4.18.15` 폴더를 참조해 linux kernel의 헤더파일을 불러왔고, snow에서는 `/usr/src/linux-4.18.15` 폴더만 참조해 헤더파일을 참조했다.
+* 같은 코드를 컴파일했지만 다른 헤더파일을 불러온 이유는 다음과 같다.
+
+![Alt_text](./image/03.12_build_sym_link.JPG)
+* 위는 `/lib/modules/4.18.15` 폴더 내부의 파일들을 보여준 것이다.
+* 이때 **build**라는 symbolic link를 확인할 수 있다.
+* **이것이 rain에는 없고 snow에는 있던 link이다.**
+* 이 link의 유무로 인해 kernel header 파일을 참조하는 위치가 달라졌던 것이다.
+* snow에서는 이 build라는 link가 없다보니 직접 header 파일 참조 위치를 지정해줘야해 linux\-headers\-4.18.15 폴더를 찾아갔던 것이다.
+    * 이는 DPDK\-20.08 설치를 진행할때도 발생했던 일이다.
+    * **Kernel header file을 참조할때 꼭 확인해볼 것.**
+* 위의 사진처럼 build라는 이름의 link를 세팅해 준 뒤에는 ixgbe 드라이버를 컴파일 및 install할때 snow처럼 `/usr/src/linux-4.18.15`에서만 헤더파일을 참조해 진행했다.
+* 그 결과 위의 에러가 발생하지 않고 정상적으로 컴파일 및 install이 완료되었다.
+* 이는 GPU\-Ether의 ixgbe도 동일했다.
+* 이 이후 GPU\-Ether가 작동했다.
+
+---
+### GPU\-Ether의 성능 저하
+
+* 위의 방법을 통해 GPU\-Ether가 작동하게 되었으나, 성능에 저하가 생겼다.
+
+![Alt_text](./image/03.12_gpu_ether_performance.JPG)
+* 원래는 88% 근방의 속도를 내지만 64B 패킷 기준으로 78% 근방의 속도 이상 올라가지 않은 것.
+* 이는 **메인 보드 PCIe의 성능의 한계**로 보인다.
+    * 좀 더 정확하게는 메인보드 PCIe 칩셋의 한계이다.
+* snow의 경우 rain보다 더 좋은 성능의 PCIe 칩셋을 메인 보드에 탑재했을 것으로 추측된다.
+    * 이는 확인해볼 필요가 있다.
+* 이러한 추측을 하게된 계기는 **Bad TLP**때문이다.
+* snow에서 GPU\-Ether를 실험할 경우 최고 속도로 작동을 함에도 불구하고 dmesg에는 빨간색으로 에러 메세지가 뜬다.
+    * 찬규형 Report 참고
+* Bad TLP와 관련된 에러로 이는 우분투 버그로 알려져 있다.
+* 이 때문에 snow에서도 GPU\-Ether가 불안정한 속도를 보여주는 경우가 있다.
+* 오랜시간동안 돌리지 않다가 다시 GPU\-Ether를 돌리게 되면 64B 패킷 기준으로 50%~80%의 성능을 보이는 현상이 있었다.
+    * 이 경우 GPU\-Ether를 종료했다가 다시 실행하면 정상 속도\(88%\)로 돌아왔다.
+* Black\-White 노드를 이용해 실험했을때는 현재 rain\-sunny 노드와 유사하게 낮은 성능을 보여주었다.
+    * 이 때는 심지어 DPDK도 64B 패킷 기준으로 13.8Mpps의 낮은 성능을 보였다.
+* 이러한 현상을 만드는 원인이 Bad TLP로 추측하고 있었는데, rain\-sunny 노드에서는 **Bad TLP 에러가 발생하지 않는다.**
+* 대신 성능이 저하된 것이다.
+* snow 노드와 Black\-White 노드, rain\-sunny 노드에서의 GPU\-Ether 속도가 각각 다른것과, Bad TLP 에러가 발생하는 경우도 있고 그렇지 않은 경우도 있다는 것을 미루어보았을 때 **메인보드가 무엇이냐에 따라** GPU\-Ether의 성능이 달라진다는 것을 알 수 있다.
+    * 물론 이것 말고 이전부터 PCIe에 대한 의심과 추측이 있었기 때문에 메인보드가 주 원인일 것이라고 판단한 것이다.
+* 결과적으로 Bad TLP에 대해 더 조사해볼 필요가 생겼다.
+
+---
 ## 02/26 현재 상황
 
 1. YCSB를 봤으나 YCSB는 말그대로 generator만 해주는 코드이고 그 외에 인터넷 연결이나 서버 구성같은 것은 사용자가 모두 진행해야한다.
