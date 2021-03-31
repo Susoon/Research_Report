@@ -6,6 +6,55 @@
 2. Search\-Update Kernel 구현 구조 작성
 
 ---
+## 03/31 현재 상황
+
+* KV\-Direct의 Design을 참고해 논문 구현의 디자인을 변형했다.
+* 그 이유는 KV\-Direct\(2018\)와 Learned Cache\(2020\)과 같은 최신 동향을 봤을때 **DRAM을 사용하지 않는 것은 불가**하다는 판단이 들었기 때문이다.
+    * 사실 최신 동향이라기엔 표본이 너무 적긴하다.
+    * 하지만 아래의 문제점을 해결하기 위해서 DRAM의 사용은 필수적으로 보인다.
+* PIM\(Process In Memory\)의 컨셉이 포함된다.
+    * 이 부분은 더 조사해보자.
+* ~~논문 제목은 GaaChe : GPU as a caChe~~
+* GPU를 Host DRAM의 Cache로 사용하겠다는 의미이다.
+    * 사실 정확하게는 PIM로 사용한다는 것이 더 옳은 의미이다.
+* 기존 디자인의 문제는 모든 데이터가 GPU내에 있어야하고, static한 크기의 value만 사용가능하다는 것에 있었다.
+* 이를 해결하기 위해서는 DRAM을 사용하지 않을 수가 없었다.
+* 하지만 DRAM을 사용하면 다음의 문제가 발생한다.
+    1. 장점으로 주장한 CPU의 비사용을 깨고 CPU를 사용해 DRAM을 처리해주어야한다.
+    2. Mega\-kv의 단점이자 우리 논문의 Motivation인 cudaMemcpy 삭제를 못하게 된다.
+* 위의 문제점들은 아래의 근거로 무효화시킬 수 있다.
+
+1. KVS를 사용하는 Storage Server가 굳이 CPU를 사용하지 않을 이유가 없다.
+    * CPU 사용량이 적다 정도로만 넘어가도 무관하다.
+    * 그 이유는 Storage Server에서 KVS 대신 다른 application을 굳이 돌릴 필요가 없기 때문.
+    * 대신 CPU 사용량이 적어 Storage Server의 CPU가 굳이 고사양일 필요가 없다고 주장할 수 있다.
+2. cudaMemcpy가 아닌 다른 방식으로 copy를 진행하거나 DRAM을 사용하면서도 copy 자체를 생략할 수 있다.
+    1. cudaMemcpy대신 GPU Direct RDMA API를 사용해 DMA로 직접 전송하면 훨씬 적은 overhead로 H\-to\-D 혹은 D\-to\-H copy가 가능하다.
+        * 이 방식은 GPU가 모든 Network I/O를 담당할 때 사용 가능하다.
+    2. 위의 PIM 컨셉을 이용해 GPU가 Memory의 Processor 역할을 하게 하고, DRAM은 Storage의 형태로 사용하면 된다.
+        * 이는 아래에 Design 부분에서 자세히 서술한다.
+* 위의 근거들을 기반으로 논문의 구현 방식을 변경해나가기로 했다.
+
+---
+### 논문 구현 디자인
+
+* 기존 디자인인 GPU\-Ether \+ Mega\-KV는 그대로 유지한 채로 디자인은 추가하는 형태로 진행된다.
+    * GPU\-Ether를 이용해 GPU로 Network packet을 받아와 Mega\-KV의 GPU KVS 코드를 Persistent Kernel로 구현해 KVS를 진행.
+* 여기에서 DRAM 사용을 위해 CPU에도 데이터 관리를 위한 Daemon을 추가로 운용해야한다.
+* client가 보낸 query의 흐름은 다음과 같이 진행된다.
+```
+NIC - GPU(RX Kernel) - KVS Kernel -  GPU(TX Kernel) - NIC
+                                  |
+                                  -  CPU(Daemon)    - NIC
+```
+* 위의 query 흐름 중 위의 흐름은 기존 디자인의 흐름이다.
+* 아래의 흐름은 **GPU에 캐싱해 저장할 수 없는 크기의 value를 호출해야할 경우**에 발생하는 흐름이다.
+* 위의 흐름은 기존 디자인과 동일하니 자세한 설명은 생략한다.
+* GPU에 캐싱할 수 없는 크기의 value가 Insert되어 Update, Search 
+* 만약 GPU에 캐싱할 수 없는 크기의 value 호출이 발생했을 경우 
+
+
+---
 ## 03/12 현재 상황
 
 * 요약
