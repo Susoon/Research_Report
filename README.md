@@ -2,14 +2,27 @@
 
 ##  ToDo List
 
-1. Memcached 네트워크 구조 파악
-2. Search\-Update Kernel 구현 구조 작성
+1. CPU의 Storage Thread 구현
+2. GPU \- CPU간의 queue 구현
+3. GPU \- CPU간의 communication을 위한 Protocol 구현
+4. CPU와 communication을 진행할 GPU의 Kernel 구현
 
 ---
 ## 03/31 현재 상황
 
 * KV\-Direct의 Design을 참고해 논문 구현의 디자인을 변형했다.
-* 그 이유는 KV\-Direct\(2018\)와 Learned Cache\(2020\)과 같은 최신 동향을 봤을때 **DRAM을 사용하지 않는 것은 불가**하다는 판단이 들었기 때문이다.
+* 변형한 이유는 Host DRAM의 사용이 필수불가결해졌기때문이다.
+* 이를 위해 CPU에도 구현해야할 사항이 추가되었다.
+* 현재 필요한 구현 내용은 다음과 같다.
+1. CPU의 Storage Thread
+2. GPU \- CPU간의 queue
+3. GPU \- CPU간의 communication을 위한 Protocol
+4. CPU와 communication을 진행할 GPU의 Kernel
+
+---
+### 디자인 변경 이유
+
+* KV\-Direct\(2018\)와 Learned Cache\(2020\)과 같은 최신 동향을 봤을때 **DRAM을 사용하지 않는 것은 불가**하다는 판단이 들었기 때문이다.
     * 사실 최신 동향이라기엔 표본이 너무 적긴하다.
     * 하지만 아래의 문제점을 해결하기 위해서 DRAM의 사용은 필수적으로 보인다.
 * PIM\(Process In Memory\)의 컨셉이 포함된다.
@@ -40,19 +53,59 @@
 
 * 기존 디자인인 GPU\-Ether \+ Mega\-KV는 그대로 유지한 채로 디자인은 추가하는 형태로 진행된다.
     * GPU\-Ether를 이용해 GPU로 Network packet을 받아와 Mega\-KV의 GPU KVS 코드를 Persistent Kernel로 구현해 KVS를 진행.
-* 여기에서 DRAM 사용을 위해 CPU에도 데이터 관리를 위한 Daemon을 추가로 운용해야한다.
+* 여기에서 DRAM 사용을 위해 CPU에도 데이터 관리를 위한 Storage Thread를 추가로 운용해야한다.
 * client가 보낸 query의 흐름은 다음과 같이 진행된다.
 ```
-NIC - GPU(RX Kernel) - KVS Kernel -  GPU(TX Kernel) - NIC
+NIC - GPU(RX Kernel) - KVS Kernel -  GPU(TX Kernel)      - NIC
                                   |
-                                  -  CPU(Daemon)    - NIC
+                                  -  CPU(Storage Thread) - NIC
 ```
 * 위의 query 흐름 중 위의 흐름은 기존 디자인의 흐름이다.
 * 아래의 흐름은 **GPU에 캐싱해 저장할 수 없는 크기의 value를 호출해야할 경우**에 발생하는 흐름이다.
 * 위의 흐름은 기존 디자인과 동일하니 자세한 설명은 생략한다.
-* GPU에 캐싱할 수 없는 크기의 value가 Insert되어 Update, Search 
-* 만약 GPU에 캐싱할 수 없는 크기의 value 호출이 발생했을 경우 
+* GPU에 캐싱할 수 없는 크기의 value\(Hvalue\)가 Insert되어 Update, Search 그리고 Delete되는 과정은 다음과 같다.
 
+#### Insert
+1. Hvalue의 Insert가 요청됨.
+2. Hvalue의 key값을 hashing해 적절한 자리에 key값을 대입.
+3. Hvalue값과 key값, 해당 value를 요청한 packet의 metadata를 GPU \- CPU간의 queue에 push.
+    * 이후 KVS Kernel이 CPU가 Hvalue를 저장한 DRAM의 주소값\(VA or PA\)를 넘겨줄때까지 대기할지, 다른 Kernel이 이를 관리할지는 정해진바 없음.
+    * 다른 Kernel이 관리하는게 더 효율적으로 보임.
+4. CPU의 Storage Thread가 queue를 polling하다가 Hvalue 저장 요청이 오면 메모리를 할당받아 Hvalue와 metadata를 저장.
+5. CPU에서 Insert Success or Fail을 queue의 metadata로 패킷을 만들어 전송.
+
+#### Update
+1. Hvalue의 Update가 요청됨.
+2. Hvalue의 key값을 hashing해 GDDR 내부의 hash table에서 Hvalue의 위치를 찾음.
+3. value가 저장되어야하는 위치에 주소값이 저장되어 있다면 이를 GPU \- CPU간의 queue에 push.
+    * 해당 위치에 저장된 값이 주소값인지 value인지는 bit하나를 따로 두어 이를 통해 확인.
+    * Insert에서 value와 metadata만 queue에 push했던 것과 달리 주소값도 같이 push.
+    * queue에도 bit를 이용해서 update임을 표기
+4. CPU에서 Hvalue를 update
+5. CPU에서 Insert Success or Fail을 queue의 metadata로 패킷을 만들어 전송.
+
+#### Search
+1. Hvalue의 Search가 요청됨.
+2. Hvalue의 key값을 hashing해 GDDR 내부의 hash table에서 Hvalue의 위치를 찾음.
+3. value가 저장되어야하는 위치에 주소값이 저장되어 있다면 이를 GPU \- CPU간의 queue에 push.
+    * queue에 key값과 metadata만 push
+    * Protocol의 일관성을 위해 Update와 유사하게 bit로 Search임을 알려도 됨.
+4. CPU에서 해당 주소값에서 Hvalue를 찾아와 queue에서 받은 metadata로 packet으로 만든 뒤 전송.
+
+#### Delete
+1. Hvalue의 Search가 요청됨.
+2. Hvalue의 key값을 hashing해 GDDR 내부의 hash table에서 Hvalue의 위치를 찾음.
+3. value가 저장되어야하는 위치에 주소값이 저장되어 있다면 이를 GPU \- CPU간의 queue에 push.
+4. CPU에서 해당 주소를 deallocation함.
+5. CPU에서 Insert Success or Fail을 queue의 metadata로 패킷을 만들어 전송.
+
+* 위의 과정을 통해 Hvalue의 query가 진행된다.
+* 이를 위해 필요한 추가 구현 내용은 다음과 같다.
+1. CPU의 Storage Thread
+2. GPU \- CPU간의 queue
+3. GPU \- CPU간의 communication을 위한 Protocol
+4. CPU와 communication을 진행할 GPU의 Kernel
+    * 만약 필요하다면
 
 ---
 ## 03/12 현재 상황
