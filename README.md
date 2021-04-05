@@ -8,6 +8,15 @@
 4. CPU와 communication을 진행할 GPU의 Kernel 구현
 
 ---
+## 04/05 현재 상황
+
+* 현재 slab allocator를 구현 중에 있다.
+* slab merge 구현 방법에 대해 조금 더 고민해볼 필요가 있다.
+* slab list의 경우 slab allocator쪽에 end를 하나, storage thread쪽에 end를 하나 각각 따로 두어 운용할 필요가 있어보인다.
+    * KV\-Direct의 방법을 사용하는 것이다.
+    * race problem을 방지할 수 있다.
+
+---
 ## 04/04 현재 상황
 
 * 논문 디자인에 추가하면 좋을 것 같은 내용을 발견했다.
