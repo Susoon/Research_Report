@@ -8,6 +8,31 @@
 4. CPU와 communication을 진행할 GPU의 Kernel 구현
 
 ---
+## 04/08 현재 상황
+
+* 아래의 부분들은 구현이 완료되었다.
+    * Slab Allocator
+    * Storage Thread\(Network 부분 제외\)
+* 아래의 부분들은 구현이 필요하다.
+    * CPU에서의 Network 구현
+        * ixgbe 드라이버를 수정해 tx queue를 하나 더 할당
+        * 추가된 tx queue와 Storage Thread간의 연결
+        * 이를 위한 DMA와 Descriptor, Doorbell
+        * netmap과 ixy 코드 확인
+    * GPU KVS의 opertion의 Atomicity 보장
+        * version number 혹은 reservation station을 이용
+    * GPU job handler와 balancer, pkt\_maker 간의 data pipelining 구현
+    * ixgbe 드라이버를 수정해 2 port 사용
+    * CPU와 GPU간의 data pipelining 구현
+        * value의 크기가 64B보다 크면 CPU로 전달
+        * GPU의 hash table에 빈 칸이 없을때 insert가 오면 가장 호출 빈도가 적은 데이터를 CPU로 밀어내고 저장
+        * cgQ에 GPU가 데이터를 다 담은 뒤 cgQ의 head값을 변경
+        * CPU는 head값만 polling하다가 값이 변경되면 cgQ를 이용해 데이터를 관리
+        * 교수님의 말씀으로는 event driven으로 구현하는 것이 좋다고 함.
+        * CPU가 메모리 공간을 polling\(access\)하고 있을때 GPU에서 해당 메모리 공간에 write하는 게 가능한지 확인 필요
+        * gdr copy를 참고
+
+---
 ## 04/05 현재 상황
 
 * 현재 slab allocator를 구현 중에 있다.
