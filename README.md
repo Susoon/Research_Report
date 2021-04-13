@@ -8,8 +8,45 @@
 4. CPU와 communication을 진행할 GPU의 Kernel 구현
 
 ---
-##04/13 현재 상황
+## 04/13 현재 상황
 
+* CPU에서 polling 중인 메모리 공간에 GPU가 접근해 데이터를 쓸 수 있는지 실험해보았다.
+
+---
+### cudaHostAlloc과 cudaHostGetDevicePointer을 사용한 접근
+
+* cudaHostAlloc으로 host memory에 pinning해둔 메모리 공간을 할당.
+* 해당 메모리 공간을 cudaHostGetDevicePointer을 사용해 GPU에서 접근 가능한 VA의 형태로 변경
+* GPU에서 해당 VA를 사용해 접근함과 동시에 CPU에서 해당 host memory 공간을 polling
+
+![Alt_text](./image/04.13_hostalloc_fail.JPG)
+
+* arr\_h배열이 위에서 설명한 host memory 공간이다.
+* GPU에서 해당 배열 공간에 접근해 값을 1씩 증가시켰다.
+* arr\_h배열에서는 GPU가 접근할 수 있는 타이밍을 주기위해서 sleep함수를 이용해 1초에 한번씩 접근하였다.
+* 하지만 위의 캡쳐를 확인하면 값이 변하지 않고 있음을 확인할 수 있다.
+* 만약 GPU에서 printf를 통해 해당 메모리 공간을 출력하고자 한다면 정상적으로 작동을 한다.
+
+![Alt_text](./image/04.13_hostalloc_with_printf.JPG)
+
+* 가능성이 아예 없는 것 같진 않지만 좀 어려워보이긴 한다.
+* 좀 더 알아볼 필요가 있다.
+
+---
+### gdrcopy를 사용한 접근
+
+* gdrcopy에서 제공한 copylat이라는 test를 이용했다.
+* 내부에서 copylat에 구현된 memcpy를 그대로 진행시키되 pthread를 하나 더 파서 해당 thread에서 memcpy되는 공간을 polling하도록 했다.
+* 결과는 다음과 같다.
+
+![Alt_text](./image/04.13_dma_fail.JPG)
+* segfault가 발생한다.
+* pthread에서 해당 공간을 접근하는 순간 바로 에러가 발생하는 것 같다.
+* dma를 사용한 접근은 어려워 보인다.
+* 이는 더 정확한 실험으로 더 자세히 알아볼 필요가 있어보인다.
+    * ~~하지만 안될 것 같다~~
+
+---
 * gdrcopy의 구현을 공부하다가 \_mm\_mfence라는 함수를 발견했다.
 * 해당 함수의 역할을 검색하다 **Memory Visibility**와 **Memory Barrier**에 대한 내용을 발견했다.
     * [Memory Visibility and Memory Barrier](https://m.blog.naver.com/jjoommnn/130037479493)
