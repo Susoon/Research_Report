@@ -8,6 +8,21 @@
 4. CPU와 communication을 진행할 GPU의 Kernel 구현
 
 ---
+##04/13 현재 상황
+
+* gdrcopy의 구현을 공부하다가 \_mm\_mfence라는 함수를 발견했다.
+* 해당 함수의 역할을 검색하다 **Memory Visibility**와 **Memory Barrier**에 대한 내용을 발견했다.
+    * [Memory Visibility and Memory Barrier](https://m.blog.naver.com/jjoommnn/130037479493)
+* 간단히 요약하면 다음과 같다.
+```
+Memory Visibility : 하나의 Thread가 변경한 메모리의 데이터가 다른 Thread에서도 정상적으로 READ할 수 있는가
+Memory Barrier    : 각 core가 cache와 register에 저장하고 있는 데이터를 메모리에 반영하는 지점
+```
+* 이는 complier의 **Memory Ordering**과도 관련이 있다.
+* complier가 코드를 build할때 Memory Reordering 최적화를 진행하는데, 이때 Memory Barrier 내부의 데이터에 대한 operation만 ordering을 한다.
+* 따라서 Multi Thread 혹은 Multi Core Programming을 할때에는 Memory Barrier을 잘 지정해주어야 적절한 Memory Visibility를 확보할 수 있게 되는 것이다.
+
+---
 ## 04/08 현재 상황
 
 * 아래의 부분들은 구현이 완료되었다.
