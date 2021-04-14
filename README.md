@@ -8,6 +8,37 @@
 4. CPU와 communication을 진행할 GPU의 Kernel 구현
 
 ---
+## 04/14 현재 상황
+
+* CPU polling GPU access 실험을 다시 진행해보았다.
+* 결과는 어제의 실험이 잘못되었던 것이었다
+
+---
+### cudaHostAlloc과 cudaHostGetDevicePointer을 사용한 접근
+
+* 이전과 실험 과정은 동일하게 진행하였다.
+* 이전 실험에서 사용된 GPU 코드에 synchthread를 추가하니 정상작동하였다.
+* CPU\-GPU의 문제가 아니라 무한 루프 내부에서 thread 간의 scheduling에 문제가 있었던 것이다.
+
+![Alt_text](./image/04.14_hostalloc_success.JPG)
+
+* arr\_h 배열 내부의 값이 정상적으로 증가하고 있음을 확인할 수 있다.
+
+---
+### gdrcopy를 사용한 접근
+
+* 이전과 실험 과정은 동일하게 진행하였다.
+* 다만 이전 실험에서 사용한 코드에 오류가 있어 이를 수정 후 적용하였다.
+    * 해당 오류는 thread에 parameter를 넘겨주는 과정에서의 문제였다.
+* 그 결과 CPU에서 polling 중인 메모리에 GPU가 정상적으로 접근이 가능했다.
+
+![Alt_text](./image/04.14_gdrcopy_to.JPG)
+
+![Alt_text](./image/04.14_gdrcopy_from.JPG)
+
+* GPU의 메모리에 write를 하는 *gdr\_copy\_to\_mapping*과 read를 하는 *gdr\_copy\_from\_mapping*함수 모두 정상적으로 작동하고 있는 것을 확인할 수 있다.
+
+---
 ## 04/13 현재 상황
 
 * CPU에서 polling 중인 메모리 공간에 GPU가 접근해 데이터를 쓸 수 있는지 실험해보았다.
