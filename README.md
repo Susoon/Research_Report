@@ -13,6 +13,23 @@
 * 남은 구현 상황을 남긴다.
 * 추후에 구현할 때 잊지 않기 위해서이다.
 
+* 추가내용을 첨부한다.
+
+* cgQ의 Q의 경우에는 dma를 통해 직접 전송하는 방식으로 구현하고자했다.
+* 하지만 어려움이 있다.
+* gdrcopy의 경우에는 CPU측에서 GPU의 메모리 공간의 physical address를 가져와 CPU에서 접근이 가능하게 VA를 mapping한 다음 page table에 등록시켜주는 방식으로 진행된다.
+    * 실제로 PA를 가져오는 건 아닌 듯하나 이건 좀 더 공부가 필요하다.
+    * nvidia\_p2p\_get\_pages 함수를 사용한다.
+    * 도도의 설명을 들어 얼추 그림을 그렸으니 잊기 전에 page와 page table 운용방식을 공부하자.
+* GPU\-Ether의 경우 NIC의 정보가 담긴 `/dev/ixgbe`파일에서 dma 관련 세팅에 대한 정보를 가져온 다음 gdrcopy처럼 GPU의 메모리 공간을 page table에 등록시키고 ixgbe의 정보와 GPU의 정보를 연결시켜주는 방식으로 진행된다.
+    * 이 부분도 좀 더 공부가 필요하다.
+* 위의 내용들을 완벽하게 이해한 것은 아니지만, 이해한 내용까지로 생각해봤을때 **GPU쪽에서 CPU로 DMA를 하는 것은 불가능**해보인다.
+* 그 이유는 gdrcopy와 GPU\-Ether 모두 GPU의 메모리 공간의 PA를 가져와 DMA가 가능하도록 CPU의 page table에 등록하는 방식을 사용하기 때문이다.
+* GPU에서 CPU의 메모리 공간을 가져와야하기 때문에 CPU의 메모리 공간을 GPU의 page table에 등록해야하는데 이 방식은 알기가 어렵다....
+    * 그렇다고 없진 않을수도 있으니 찾아는 보자.
+* 일단 HostAlloc을 이용해서 빠르게 구현한 다음 실험은 먼저 해보는게 좋을 것 같다.
+
+---
 1. CPU\-GPU간의 Q인 cgQ를 어디서 할당할 것 인가.
     * initialize\_kvs에서 해도 되고 initialize\_storage\_server에서 해도 됨.
     * 주의할 것은 cgQ의 Q는 일반 cpu dram 메모리 공간에 할당한 다음 dma에 가능하게 주소값을 받아두는 것.
