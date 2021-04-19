@@ -8,6 +8,30 @@
 4. CPU와 communication을 진행할 GPU의 Kernel 구현
 
 ---
+## 04/19 현재 상황
+
+* 남은 구현 상황을 남긴다.
+* 추후에 구현할 때 잊지 않기 위해서이다.
+
+1. CPU\-GPU간의 Q인 cgQ를 어디서 할당할 것 인가.
+    * initialize\_kvs에서 해도 되고 initialize\_storage\_server에서 해도 됨.
+    * 주의할 것은 cgQ의 Q는 일반 cpu dram 메모리 공간에 할당한 다음 dma에 가능하게 주소값을 받아두는 것.
+    * 두번째는 cgQ의 head는 cudaHostAlloc을 이용한 할당을 한뒤 head의 주소값을 받아두는 것.
+    * tail의 경우에는 cpu thread에서만 사용할 것 같으니 크게 문제 없을 듯 하다.
+2. cgQ에 dma하는 함수 구현
+    * 이는 gdrcopy와 GPU\-Ether의 ixgbe코드를 참고해야한다.
+3. ixgbe코드 변경
+    * 아래의 명령어를 사용하면 rx와 tx의 큐를 따로 잡을 수 있다.
+    ```
+     ethtool -L|--set-channels devname [rx N] [tx N] [other N] [combined N]
+    ```
+    * 이를 이용해 rx 큐는 1개, tx 큐는 2개를 잡은 다음, 하나의 tx 큐는 CPU로, 다른 tx 큐는 GPU로 binding시켜주는 코드를 ixgbe에 심어야한다.
+    * 또한 GPU\-Ether처럼 CPU에서 NIC의 tx 큐에 바로 dma로 채워넣은 다음 packet을 전송시키게끔 구현해야한다.
+
+* 현재 기억나는 상황은 여기까지다.
+* 추가적으로 필요하면 서술하는 것으로.
+
+---
 ## 04/14 현재 상황
 
 * CPU polling GPU access 실험을 다시 진행해보았다.
