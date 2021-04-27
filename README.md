@@ -8,6 +8,26 @@
 4. CPU와 communication을 진행할 GPU의 Kernel 구현
 
 ---
+## 04/27 현재 상황
+
+* Mellanox ConnectX\-5 Ex 40Gbps NIC을 설치 중에 있다.
+* 현재 rain과 sunny 서버 모두 NIC을 부착했고, driver도 설치했다.
+* mlx5 driver를 설치하는 과정은 간단하다.
+* mlx5 driver를 검색하면 Mellanox 홈페이지가 나오는데 거기서 다운로드 받고 설치하면 된다.
+    * [Driver Download](https://www.mellanox.com/products/ethernet-drivers/linux/mlnx_en)
+* 다만 설치할때 다음의 option들을 추가해줘야한다.
+```
+sudo ./install --add-kernel-support --dpdk
+```
+* `-add-kernel-support`옵션은 해당 드라이버가 자동으로 지원하는 Kernel 버젼과 rain, sunny의 커널버젼이 호환되지 않기 때문에 줘야한다.
+    * 4.18.15라는 커널 버젼을 옵션으로 따로 주지 않아도 알아서 인식해서 설치해준다.
+* `--dpdk` 옵션은 해당 NIC을 dpdk로 사용하려면 줘야하는 옵션이다.
+* 이 옵션을 줘서 설치를 해야지 mlx5 library가 설치가 되고, 그래야 dpdk를 build할때 mlx5 library도 같이 가져가서 build한다.
+    * dpdk를 build하는 과정은 이 전과 동일하게 그대로 진행하면 된다.
+* dpdk를 사용할때 주의할 점은 10G NIC을 사용할때와 달리 igb\_uio 드라이버가 아닌 mlx5\_core 드라이버, 즉, Mellanox의 드라이버를 사용해야한다는 점이다.
+    * 따로 interface를 DPDK 전용 드라이버에 binding 시킬 필요가 없어진다.
+
+---
 ## 04/19 현재 상황
 
 * 남은 구현 상황을 남긴다.
