@@ -26,6 +26,13 @@ sudo ./install --add-kernel-support --dpdk
     * dpdk를 build하는 과정은 이 전과 동일하게 그대로 진행하면 된다.
 * dpdk를 사용할때 주의할 점은 10G NIC을 사용할때와 달리 igb\_uio 드라이버가 아닌 mlx5\_core 드라이버, 즉, Mellanox의 드라이버를 사용해야한다는 점이다.
     * 따로 interface를 DPDK 전용 드라이버에 binding 시킬 필요가 없어진다.
+* pktgen을 쓸때에는 좀 주의해야하는데, 그 이유는 dpdk 전용 드라이버를 사용하지 않아 어떤 interface를 사용해야할지 지정해줘야하기 때문이다.
+* 아래의 명령어를 사용하자
+```
+sudo ./build/app/pktgen -l 0-4 -n 2 -w b3:00.0,txq_inline=256,txqs_min_inline=4 -- -T -P -m "[1-2:3-4].0" -f./default.pkt
+```
+* 여기서 `b3:00.0`은 사용하고자 하는 interface의 PCIe 번호이다.
+* txq\_inline과 txqs\_min\_inline은 Mellanox NIC을 위한 옵션인데 성능과 관련이 있다고하니 Document를 자세히 보자
 
 ---
 ## 04/19 현재 상황
