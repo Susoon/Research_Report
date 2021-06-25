@@ -8,6 +8,14 @@
 4. CPU와 communication을 진행할 GPU의 Kernel 구현
 
 ---
+## 06/25
+
+* ubuntu의 커널 자동 업데이트를 막는 명령어를 찾았다
+```
+sudo apt-mark hold linux-image-generic linux-headers-generic
+```
+
+---
 ## 04/27 현재 상황
 
 * Mellanox ConnectX\-5 Ex 40Gbps NIC을 설치 중에 있다.
