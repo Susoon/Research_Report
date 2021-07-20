@@ -7,6 +7,200 @@
 3. GPU \- CPU간의 communication을 위한 Protocol 구현
 4. CPU와 communication을 진행할 GPU의 Kernel 구현
 
+## Evaluations
+1. Key와 Value의 크기에 따른 KVS 성능
+    * Key와 Value의 크기는 Mega\-KV와 KV\-Direct를 참고
+    * Workload를 어떤 것으로 할 것인가도 위의 논문들 참고
+        * e.g.) R100 / R95 W05 등등...
+    * Distribution은 Uniform으로
+2. Workload의 종류에 따른 KVS 성능
+    * Key와 Value의 크기를 고정해둔 채로 실험
+    * YCSB의 모든 Workload를 실험하면 될듯
+    * Distribution은 Uniform으로
+3. Distribution에 따른 KVS 성능
+    * Zipf와 Uniform Distribution으로 실험
+    * Key/Value의 크기와 Workload의 종류는 타 논문 참고.
+4. GPU hash table에 저장되는 데이터 크기의 Limit에 따른 성능
+    * KV\-Direct에서 hash table에 inline으로 저장해두는 것을 참고한 실험
+    * 현재는 주소값 변수의 크기인 64B로 되어 있음
+    * 이를 실험하기 위해서 코드 수정이 필요함
+5. Dynamic한 상황에서의 성능 비교
+    * Read\(Search\)와 Write\(Update\)의 비율이 Dynamic하게 변하는 상황에서의 성능 실험
+    * Key와 Value의 크기는 고정
+    * Distribution은 uniform으로
+6. 가장 Basic한 상황에서의 전력소모 측정
+    * GPU로 KVS 처리했을 때의 강력한 장점 중 하나이다.
+    * 이는 Mega\-KV와 KV\-Direct에서 중요하게 다루는 점 중 하나
+7. Latency 측정
+    * KVS가 Service와 밀접한 관련이 있다보니 Latency도 중요하게 여긴다.
+    * CPU를 거치는 경우와 거치지 않는 경우 모두 측정 필요
+
+---
+## 07/20 현재 상황
+
+* ~~오랜만에 써보는 일지~~
+    * ~~앞으로는 늦어도 일주일에 한번은 써야할듯... 자꾸 까먹네...~~
+* 일지의 공백기간 동안 진행된 사항을 아래에 나열해두었다.
+1. Mellanox NIC에서 Intel NIC으로 변경
+2. 대부분의 구조들 구현 완료
+3. \(gpu\_balancer\) \- \(gpu\_job\_handler\) \- \(gpu\_pkt\_maker or cpu\_storage\_server\)간의 데이터 전달을 위한 queuing에 문제가 있어 디버깅 중
+4. CPU에서 패킷을 전송하기위해 수정한 ixgbe 드라이버와 이를 활용한 패킷 전송 과정에 문제가 있어 디버깅 중
+5. 논문에 추가될 실험 종류 선정
+
+---
+### 1. Mellanox NIC에서 Intel NIC으로 변경
+
+* Mellanox NIC에서 Intel 40G NIC으로 target HW를 변경했다.
+    * ~~이게 언제적인데....~~
+* 그 이유는 **Mellanox NIC Driver에 대한 이해도 부족**때문이다.
+* Mellanox NIC Driver의 경우 RDMA에 대한 내용도 코드에 담겨있어 코드의 양이 훨씬 방대하다.
+* 또한 이를 사용하는 방법도 Intel NIC Driver에 비해 훨씬 복잡하다.
+    * dpkg로 코드를 패키지화시켜서 Kernel에 등록시켜주는 방식을 사용한다.
+    * DPDK나 Nvidia Driver를 사용할때처럼 여기서도 버젼관리가 매우 중요하다.
+    * 그런데 버젼관리가 DPDK와 Nvidia Driver에 비해 훨씬 어렵다...
+    * 혹시 필요한 상황이 생기면 수기형한테 물어볼 것.
+* Mellanox NIC으로 결정한 이유는 일단 성능이다.
+    * Mellanox NIC의 스펙시트를 확인해보면 64B 패킷에서도 40G Line Rate을 뽑아준다.
+        * 특정 조건 아래에서만.
+        * 자세한 조건은 스펙시트 확인 필요
+    * 하지만 Intel NIC은 64B 패킷에서 40G Line Rate을 못 보여준다.
+* 성능에서 격차를 보이기 때문에 성능에 초점을 맞춘 최신 논문들은 굳이 RDMA를 사용하지 않더라도 Mellanox RDMA NIC을 사용한다.
+    * RDMA NIC으로 RDMA없이 RDMA의 성능을 보여주는 논문이 있다고 한다.
+    * 이 논문은 찬규형이 알고 있다.
+* 따라서 Mellanox NIC을 사용해 성능을 더 끌어올리면서 혹시 모를 NIC 선정 이유에 대한 질문을 사전 차단하고자 했었다.
+* 하지만 GPU\-KVS에서 사용하는 패킷은 MTU사이즈에 가깝고, 배치를 최대한 해서 패킷 사이즈는 크면 클수록 좋다.
+* 이러한 상황에서 굳이 시간을 더 들여서 복잡하고 어려운 Mellanox NIC 드라이버를 까보는 것보다 조금 더 익숙하고 10G NIC에 대한 경험이 ~~찬규형한테~~ 있는 Intel NIC이 더 좋은 선택으로 보였다.
+    * ~~결국 밀렸지만...~~
+* 이 때문에 Intel NIC으로 변경했다.
+
+---
+### 2. 대부분의 구조들 구현 완료
+
+* 제목과 같다. 일단 구현은 완료했다.
+* 하지만 아래에 서술할 내용들을 확인하면 알 수 있듯이 디버깅에서 시간이 매우 많이 소모되었다.
+* 일단 세부구조는 다음과 같다.
+
+```
+NIC - GPU(RX Kernel) - KVS Kernel -  GPU(TX Kernel)      - NIC
+                                  |
+                                  -  CPU(Storage Thread) - NIC
+```
+* 이 전에 사용했던 구조와 동일하다.
+* 이를 더 자세히 설명하자면 아래의 구조가 된다.
+
+```
+NIC - RX Kernel - GPU Balancer - GPU Job Handler - GPU Pkt Maker      - TX Kernel       - NIC
+                                                 |
+                                                 - CPU Storage Thread - CPU Network I/O - NIC
+```
+
+* 위의 구조가 되도록 구현은 일단 완료된 상태이다.
+* 구현이 필요한 부분들은 다음과 같다.
+1. Version Number 관리
+2. 패킷의 Header 관리
+3. CPU에 저장 후 CPU에 저장된 메모리 공간의 주소를 다시 GPU로 넘겨주는 것
+
+#### Version Number 관리
+* Version Number 관리의 경우 GPU가 동시에 여러개의 데이터를 처리하다보니 각 Thread가 어떠한 종류의 데이터를 전달받았냐에 따라 먼저 들어온 데이터가 나중에 들어온 데이터보다 늦게 처리될 수 있다.
+* 이를 관리하기 위해서 **Version Number를 구현할 계획**이다.
+* 기본 아이디어는 각 데이터들이 Version Number를 가지고 있고 Thread들이 해당 데이터를 읽거나 쓰기를 할 때 Version Number를 비교해 요청된 시점의 version에 맞는 데이터를 전달시켜주는 방식으로 진행된다.
+* 여기에는 고민해봐야할 부분이 2가지가 있다.
+1. 각 Thread들은 해당 데이터의 Version Number를 어떻게 확인할 것인가.
+    * hash table에 있는 데이터의 경우 Version Number가 함께 저장되어있기 때문에 확인이 가능하다.
+    * 하지만 Thread들이 가지고 있는 데이터는 패킷에서 막 뽑아낸 데이터이기 때문에 패킷에 Time Stamp라도 찍혀있지 않는 한 Version Number를 확인할 수 없다.
+2. 꼭 Version Number가 필요한가?
+    * Version Number가 아니면 데이터의 sequential한 처리를 보장해줄 수가 없는지 고민해볼 필요가 있다.   
+    * KV\-Direct에서 사용한 것처럼 각 query를 바로 처리하지않고 배치를 해서 Write Operation이 오면 그 전의 Read를 다 처리하는  reservation station방식도 고려해볼 필요가 있을 것 같다.
+
+#### 패킷의 Header 관리
+* 패킷의 Header의 경우 현재는 SEARCH를 담당하는 GPU Job Handler의 Thread 중 하나가 맡아서 담당하게끔 구현되어 있다.
+* 사실 실험 세팅 상 Direct하게 서로 연결되어 있어 헤더를 따로 관리해줄 필요가 없음에도 구현하고 있는 이유는 Generality때문이다.
+* 현재의 구조상 패킷 헤더를 처리하면 그냥 queue에 넣는 방식이기 때문에 헤더와 데이터가 정확하게 매칭되지 않는다.
+* 이 부분은 DB 서버의 구조상 Client와 Server 모두 데이터 센터 내부에 존재하는 서버 중 하나이기 때문에 각 Node가 direct하게 연결되어 있다고 가정해도 되지 않나 싶긴하다.
+* 이 부분은 교수님과 얘기해보는 걸로.
+
+#### CPU에 저장 후 CPU에 저장된 메모리 공간의 주소를 다시 GPU로 넘겨주는 것
+* 이 부분은 좀 critical하다.
+* 위의 두가지는 사실 없어도 모른척할 수 있다고 쳐도 이 부분은 구조에 필수적으로 있어야하는 부분이다.
+* 기본 아이디어는 GPU hash table의 주소도 CPU에 넘겨주어 CPU가 slab에 데이터를 저장한 다음 해당 주소값에 slab의 주소값을 넣어주는 방식이다.
+* 이 부분이 성능저하를 일으키지는 않을지 걱정이다...
+
+---
+### 3. queueing에 문제 디버깅
+
+* GPU Kernel들 간의, GPU Kernel과 CPU Thread 간의 Queueing을 하는 과정에 문제가 발생했다.
+* 문제의 원인은 모두 같은데 Queue의 head와 tail이 하나라는 점이다.
+* 이게 문제를 일으키는 이유는 GPU의 Thread가 매우 많기 때문.
+* GPU의 Thread 수는 최소 512개인데 이를 하나의 Queue에 넣고자하다보니 각 Thread들이 서로의 데이터를 덮어씌운다거나 Queue의 head 관리가 잘 안된다.
+* 이를 해결하기 위해 모든 Thread들은 각 Thread들이 담당하는 Queue에서 자신들에게 할당된 공간에만 데이터를 넣는다.
+    * 2번째 Kernel의 35번째 Thread는 2 \* 512 \+ 35번째 자리에만 데이터를 넣는다.
+    * 이 공간의 크기는 변경해볼 가치가 있을듯
+* CPU \- GPU 간의 queueing에서는 GPU가 담당하는 모든 공간을 CPU가 traverse하면서 확인하는 게 overhead가 매우 클 것으로 예상되어 \_\_ballot\_sync와 bit operation을 활용했다.
+* 각 GPU Thread들이 데이터를 넣고 난 다음 각자에게 할당된 변수의 bit를 toggle한다.
+    * \_\_ballot\_sync가 warp단위로 sync를 지원해 32bit int 변수를 사용한다.
+* CPU는 해당 변수들을 traverse하면서 polling하다가 0이 아닌 변수를 발견하면 processing을 진행한다.
+    * 0이 아니라는 것은 어떠한 GPU Thread 중 하나가 자신에게 할당된 bit를 1로 toggle했다는 것.
+* 이러한 방식을 통해 CPU의 traverse 범위를 줄이고 GPU Thread들에게 queue의 head를 넓혀줄 수 있었다.
+
+---
+### 4. CPU에서 패킷을 전송 과정 디버깅
+
+* 드디어 CPU 코드와 ixgbe 드라이버 코드 디버깅으로 왔는데 여기서도 당연히 문제가 있다.
+    * index를 증가해주지 않아 에러가 떴다던가하는 시덥지않은 실수들은 생략한다.
+* 일단 패킷은 전송되지 않는다.
+* 아래의 부분에서 코드가 멈춘채로 돌아가지 않는다.
+
+![Alt_text](./image/21.07.20_cpu_statdd_stop.jpg) 
+* 이 말은 NIC이 패킷을 보내지 않았다는 이야기이다.
+* 이 후에 재실행을 위해 ixgbe를 내리면 dmesg에 다음과 같은 에러를 보이며 해당 인터페이스가 존재하지 않는다면서 preconf도 멈춘다.
+![Alt_text](./image/21.07.20_txdctl_clear_dmesg_err.jpg)
+* 해당 에러 내용을 코드에서 찾아보니 `ixgbe_disable_tx_queue`라는 함수에서 출력하는 에러 내용이다.
+* ixgbe 드라이버가 사용된 tx queue들에게 disable 요청을 보낸 뒤, wait\_loop라는 값이 0이 될 때까지\(일정 시간동안\) disable이 안되면 뱉어내는 에러이다.
+* 추측상 CPU쪽에서 queue를 물고 놔주지 않아 발생하는 에러로 보인다.
+    * 그 이유는 위에서 NIC이 패킷을 보내지 않은것처럼 보이는 현상때문.
+* 여기서 CPU가 왜 queue를 놔주지 않는지 확인해본 결과 가장 높은 확률로 doorbell에 문제가 있어보인다.
+* 왜냐하면 doorbell이 GPU\-Ether에서 사용된 코드를 그대로 가져와 사용하기 때문이다.
+* CPU쪽에서는 1번 ring을 사용해야하므로 GPU\-Ether와 달리 1번 ring을 사용하도록 강제해줘야한다.
+* 당연히 ixgbe 드라이버쪽에서도 조치가 필요할 수 있다.
+* 현재 ixgbe 드라이버에서 doorbell을 mmap으로 mapping할때 메모리 공간의 크기를 기존의 두배로 설정해두고 CPU쪽에서 doorbell을 mapping할때 mmap으로 받은 다음 0x1000\*8만큼 이동해서 사용하게한 상태이다.
+* 이 경우에 dmesg에 다음과 같은 에러를 뱉어낸다.
+![Alt_text](./image/21.07.20_doorbell_dmesg_memory_error.jpg)
+* 이는 보통 메모리 Access 관련 에러라고 한다.
+* 모든 ring들의 Doorbell Register들이 contiguous한 공간에 mapping되어있지는 않은 것 같다.
+* 이 부분은 내일 바로 확인 예정
+---
+### 5. 논문에 추가될 실험 종류 선정
+
+* 논문에 추가할 실험 종류를 미리 기록해둘 필요성이 있어보여 남긴다.
+
+1. Key와 Value의 크기에 따른 KVS 성능
+    * Key와 Value의 크기는 Mega\-KV와 KV\-Direct를 참고
+    * Workload를 어떤 것으로 할 것인가도 위의 논문들 참고
+        * e.g.) R100 / R95 W05 등등...
+    * Distribution은 Uniform으로
+2. Workload의 종류에 따른 KVS 성능
+    * Key와 Value의 크기를 고정해둔 채로 실험
+    * YCSB의 모든 Workload를 실험하면 될듯
+    * Distribution은 Uniform으로
+3. Distribution에 따른 KVS 성능
+    * Zipf와 Uniform Distribution으로 실험
+    * Key/Value의 크기와 Workload의 종류는 타 논문 참고.
+4. GPU hash table에 저장되는 데이터 크기의 Limit에 따른 성능
+    * KV\-Direct에서 hash table에 inline으로 저장해두는 것을 참고한 실험
+    * 현재는 주소값 변수의 크기인 64B로 되어 있음
+    * 이를 실험하기 위해서 코드 수정이 필요함
+5. Dynamic한 상황에서의 성능 비교
+    * Read\(Search\)와 Write\(Update\)의 비율이 Dynamic하게 변하는 상황에서의 성능 실험
+    * Key와 Value의 크기는 고정
+    * Distribution은 uniform으로
+6. 가장 Basic한 상황에서의 전력소모 측정
+    * GPU로 KVS 처리했을 때의 강력한 장점 중 하나이다.
+    * 이는 Mega\-KV와 KV\-Direct에서 중요하게 다루는 점 중 하나
+7. Latency 측정
+    * KVS가 Service와 밀접한 관련이 있다보니 Latency도 중요하게 여긴다.
+    * CPU를 거치는 경우와 거치지 않는 경우 모두 측정 필요
+    * ~~Mega\-KV보다 느리면....큰일나....~~
+
 ---
 ## 06/25
 
