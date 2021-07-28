@@ -2,10 +2,10 @@
 
 ##  ToDo List
 
-1. CPU의 Storage Thread 구현
-2. GPU \- CPU간의 queue 구현
-3. GPU \- CPU간의 communication을 위한 Protocol 구현
-4. CPU와 communication을 진행할 GPU의 Kernel 구현
+1. Version Number 관리 구현
+2. 패킷의 Header 관리 구현
+3. CPU에 저장 후 CPU에 저장된 메모리 공간의 주소를 다시 GPU로 넘겨주는 것 구현
+4. GPU Kernel과 Thread 수를 고려한 pipelining 구현
 
 ## Evaluations
 1. Key와 Value의 크기에 따른 KVS 성능
@@ -34,6 +34,45 @@
 7. Latency 측정
     * KVS가 Service와 밀접한 관련이 있다보니 Latency도 중요하게 여긴다.
     * CPU를 거치는 경우와 거치지 않는 경우 모두 측정 필요
+8. Mega\-KV와의 기본 성능 비교
+    * Mega\-KV를 까고 우리 KVS의 성능을 돋보이게하기 위해서 필요하다.
+    * Mega\-KV의 코드가 있으니 돌리기 쉬울듯.
+
+---
+## 07/28 현재 상황
+
+* CPU TX에 성공했다.
+* 계속 TX에 실패한 이유는 다음과 같다.
+
+![Alt_text](./image/07.28_paset_bad_order.png)
+* 위의 사진을 보면 Set 1th Tx\_ring이 출력된 다음 SHKIM\_\_\_\_cpu\_dma\_desc\_set\_\_이 출력된다.
+* 이 뜻은 **TX를 위한 Physical Address를 NIC에 적어준 다음 TX를 위한 Physical Address를 받아온다**라는 것이다.
+* 더 자세히 서술하자면, dma\_tx\_desc\_from\_dram과 dma\_addr\_to\_dram이란 변수를 이용해 NIC에게 Physical Address를 넘겨준다.
+* 그런데 이 변수들에게 값을 대입시켜주지 않은 상태로 이 변수들에 들어있는 값을 NIC에게 전달해준다는 것이다.
+* 그렇게 되면 쓰레기값을 DMA할 주소로 넘겨주는 것이 되므로 NIC에서 패킷을 보내려고 DMA를 할때 문제가 발생한다.
+* 이 때문에 ixgbe driver를 내렸다가 올릴때 에러가 발생하는 것이다.
+    * NIC 입장에서는 TX하려고 DMA를 시도하는 중에 에러가 떠있는 상태인데 드라이버를 내릴려고하니 충돌이 발생한 것.
+* 이를 위해 코드의 구조를 살짝 수정했다.
+* 큰 변화는 없고, GPU\-Ether처럼 main함수에서 Packet Buffer와 Descriptor를 미리 다 할당한 뒤 ioctl로 ixgbe driver에게 넘겨준 다음 *set\_desc\_doorbell* 함수를 호출해 PA를 NIC에게 넘겨준 것이다.
+* 그 결과 드라이버 코드 순서가 아름답게 진행된다.
+
+![Alt_text](./image/07.28_paset_good_order.jpg)
+
+* 위의 캡쳐를 보면 아름다운 순서로 진행된 것을 확인할 수 있다.
+
+* 이 상태에서 KVS 코드에 에러가 없게 한 다음 실행시키면 패킷이 잘 전송된다.
+![Alt_text](./image/07.28_cpu_tx_success.png)
+* 현재 코드가 Dummy Packet을 이용해 무한 루프를 돌면서 계속 패킷을 보내야하는데 gpu\_job\_handler의 kernel 수와 thread 수가 고려되지 않은 pipelining에 의해 패킷이 2개밖에 안 갔다.
+
+![Alt_text](./image/07.28_cpu_tx_success_dump.png)
+* 하지만 pktgen을 통해 packet dump를 해보면 오른쪽 패킷 내용에 수많은 Success가 찍혀있는 것을 확인할 수 있다.
+    * Success 하나가 query 응답 하나이다.
+* KVS 코드가 보낸 패킷이 정상적으로 도착했음을 확인할 수 있다.
+* 이제 코드만 완성하면 된다.
+
+
+
+
 
 ---
 ## 07/20 현재 상황
