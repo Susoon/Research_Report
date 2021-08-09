@@ -39,6 +39,102 @@
     * Mega\-KV의 코드가 있으니 돌리기 쉬울듯.
 
 ---
+## 08/09 현재 상황
+
+* 완벽히 해결되지 못했던 1번 rx ring setting을 해결했다.
+* 이 전에 확인했을때는 운좋게 0번 ring으로 모든 패킷이 전송되어 실행이 가능했던 것 같다.
+* 40G NIC을 빼고 reboot하는 과정을 거치면서 ~~뭔지 모를~~ 세팅이 바뀌어 이번에는 1번 ring으로 패킷이 모두 전송되었다.
+    * 이는 driver의 코드를 수정해서 확인했다.
+    * 아래의 if문에서 `ringnum == 0`에서 `ringnum == 1`로 바꿔가면서 실행을 했을때, 0일때는 패킷을 아예 받지 못했고 1일때 511개의 패킷을 겨우 받을 수 있었다.
+    * 이를 통해 **적어도 0번 queue에는 패킷이 들어가지 않는다**라는 것을 확인할 수 있었다.
+    * 그렇다면 어떻게 패킷을 받을 수 있었는가에 대해서 추정해보자면, 다음과 같다.
+    * 기존 코드는 0번 ring과 1번 ring 모두 하나의 공간에 descriptor를 mapping해 사용하다보니 mapping은 일단 꼬였다.
+     하지만 찬규형의 경험으로는 mapping이 잘못된 경우 512개정도의 패킷은 한번 받는다고 한다.
+    * 나의 경우도 유사하게 mapping이 꼬였지만 한번정도는 패킷을 받은것이 아닌가 추정된다.
+
+![Alt_text](./image/08.09_check_what_queue_running.jpg)
+* 이 때문에 descriptor mapping이 꼬여 511개의 패킷만 받은 뒤 GPU\-Ether가 멈춰버리는 현상이 발생했다.
+    * KVS를 붙이지 않은 상태
+* 결론부터 얘기하자면 이러한 현상의 원인은 RSS 때문이었다.
+    * 이 전에 건들때 확실하게 보고 잘 해결했으면...
+    * 하루만에 해결 가능한 일인데...
+* 해결하기 위해 시도했던 일들은 3가지이다.
+    1. 1번 rx queue disabling
+    2. RSS parameter 조작
+    3. RSS Hash function disable
+* 문제를 해결한 방법은 마지막 3번이다.
+
+---
+###  1번 rx queue disabling
+
+* 이 방법은 결과적으로 아무런 효과를 얻지 못했다.
+* 아래의 사진은 공식 ixgbe specsheet에서 발췌한 내용이다.
+
+![Alt_text](./image/08.09_ixgbe_spec_disable_queue.jpg)
+
+* RXDCTL.ENABLE bit를 변형해 rx queue를 enable 혹은 disable시킬 수 있다고 되어 있다.
+* 1번 rx queue만 disable시키기위해 driver 코드에 `ixgbe_disable_rx_queue`함수 내부의 코드를 옮겨와 적용시켰다.
+
+![Alt_text](./image/08.09_rx_queue_disabling.jpg)
+* adapter의 hw를 가져와 IXGBE\_RXDCTL매크로를 이용해 control register를 가져온 뒤 IXGBE\_RXDCTL\_ENABLE bit를 0으로 바꾼뒤 저장하는 코드이다.
+* 원래는 do while이 없었는데 do while문 없이 코드를 실행시키면 IXGBE\_RXDCTL\_ENABLE bit가 적용되지 않는다.
+
+![Alt_text](./image/08.09_rx_queue_disabling_dmesg_not_apply.jpg)
+* 아래에 보면 1st Rx\_ring disable의 값이 0이 아닌 이상한 값이 적용되어있음을 확인할 수 있다.
+* specsheet를 확인해보면 적용되지 않은 이유를 추측할 수 있다.
+
+![Alt_text](./image/08.09_ixgbe_spec_wait_disable_queue.jpg)
+* RXDCTL.ENABLE bit를 clear한 다음 100ms 정도의 시간을 기다려야 제대로 적용이 된다고 한다.
+* 이러한 이유때문에 do while문을 통해 될때까지 계속 적용시키고나니 다음과 같이 disable됨을 확인할 수 있었다.
+
+![Alt_text](./image/08.09_rx_queue_disabling_dmesg_apply.jpg)
+* 그래도 여전히 1번 queue로 패킷이 전달되어 511개의 패킷만 받고 끝나는 현상이 유지되었다.
+* disable이 잘 되지 않았을 것으로 추측된다.
+
+---
+### 2. RSS parameter 조작
+
+* 1번 rx queue를 disabling시킬 수 없다면 패킷이 1번 rx queue로 안 가도록하면 되지 않을까라는 생각에 RSS를 disable시키기로 했다.
+* 아래의 사진은 공식 ixgbe specsheet에서 발췌한 내용이다.
+
+![Alt_text](./image/08.09_ixgbe_spec_rss_disable.jpg)
+* 이것저것 검색해봤을때 RSS를 parameter를 통해서 disable시키는 방법은 보이지 않았다.
+* 하지만 specsheet에서는 된다고하고 disable된 경우 RSS output index가 0으로 세팅된다는 것에 유혹되어 코드 내부에서 RSS를 disable시키기로 했다.
+* parameter를 통해서 disable시키는게 안된다면 parameter를 받는 부분의 코드를 수정해서 disable시킬 수 있지 않을까라는 생각이 들어 진행되었다.
+
+![Alt_text](./image/08.09_rss_disabling.jpg)
+* 위의 함수는 ixgbe adapter의 종류에 따라 RSS index의 max치를 지정해주는 함수이다.
+* 이 함수에 들어가자마자 0을 return하도록 하여 RSS의 max치를 0으로 세팅해주었다.
+* 적용된 코드를 이용해 실행하면 `ethtool -l ens6f1 combined 2` command에서 다음과 같은 에러를 뱉으며 종료된다.
+
+```
+Cannot set device channel parameters: Invalid argument
+```
+* 이는 RSS가 disable되어있는데 Multiqueue를 사용하고자하여 발생한 에러이다.
+* 따라서 RSS 자체를 disable 시키면 코드를 실행시킬 수 없다.
+
+---
+### 3. RSS Hash function disable
+
+* RSS를 disable시킬 수 없다면 RSS Hash function을 disable시킬 수는 없을까라는 생각이 들어 진행되었다.
+* 사실 우리가 원하는 것은 RSS output이 0으로 세팅되는 것이기 때문에 RSS Hash function만 조작해줘도 된다.
+
+![Alt_text](./image/08.09_rss_hash_fct_disabling.jpg)
+
+* reta가 뭔지는 정확하게 모르지만 코드의 내용을 통해 추측해보았을때 RSS logic을 adapter에 저장하는 코드로 보인다.
+* 이 함수에 들어가자마자 return시켜버리면 **driver는 RSS가 켜져있는 줄 알지만 NIC은 꺼져있는줄 안다.**
+* 그렇게 되면 위의 specsheet에서 본 것처럼 NIC은 RSS output을 무조건 0으로 내뱉을 것이다.
+* 그러면 driver는 0번 queue에 패킷을 넣게 되는 것이다.
+* 그 결과 잘 실행된다.
+
+![Alt_text](./image/08.09_solution_result.jpg)
+
+* 64B 패킷을 이용해 확인해도 잘 실행됨을 확인할 수 있다.
+    * 성능이 78%정도밖에 나오지 않는 것은 서버의 문제인 것 같다.
+    * snow의 GPU\-Ether를 가져와서 실행시켜도 성능은 똑같이 나온다.
+* 수정한 driver의 함수가 어떠한 역할을 하는지만 완벽하게 이해하고 나면 rx queue 관련 이슈는 해결될 것 같다.
+
+---
 ## 07/28 현재 상황
 
 * CPU TX에 성공했다.
