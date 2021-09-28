@@ -39,6 +39,64 @@
     * Mega\-KV의 코드가 있으니 돌리기 쉬울듯.
 
 ---
+## 09/28 현재 상황
+
+* Global memory의 연산 및 memcpy를 Shared memory를 활용해서 진행했을 때의 성능차이를 모듈 구현을 이용해 확인해보고 있다.
+* 코드의 내용은 다음과 같다.
+1. Global memory에 TERM 크기만큼 각 thread에게 공간을 할당한다.
+2. 각 thread는 TERM 크기의 공간에서 KVS와 유사한 연산인 pseudo KVS를 진행한다.
+3. TERM 크기의 공간 중 TOKEN만큼의 크기를 또다른 Global memory에 memcpy한다.
+* 위의 작업을 Global memory에서 진행했을 때와 Shared memory에서 진행했을 때, Shared memory에서 진행하면서 memcpy만 batch를 통해 각 TB당 하나의 thread가 담당했을 때의 성능을 비교해본다.
+* 여기서 TERM의 크기는 TOKEN보다 항상 크거나 같다.
+* TERM : TOKEN은 32 : 32부터 96 : 96까지 다양화해서 실험을 진행했으나 양상이 모두 동일해 64 : 32의 비율로 실험한 결과만 남긴다.
+* CPU와 GPU에서 각각 실행 시간을 측정했으나 CPU에서의 시간은 GPU에서의 시간에 kernel launch와 기타 initialize를 위한 시간이 포함된 수준이어서 GPU에서의 실행시간으로 비교했다.
+    * CPU에서의 실행 시간은 kernel launch 전과 후에 시간을 측정한 값이다.
+    * GPU에서의 실행 시간은 pseudo KVS 연산과 memcpy 혹은 memcpy의 시간만 GPU kernel 내부에서 측정한 값이다.
+* [Evaluation Result Sheet](https://docs.google.com/spreadsheets/d/1Id9W26Ub5E2JRZdqV_K-9ahvASmVSdq_G_1HiF_bkks/edit#gid=212753122)
+
+---
+### Global vs Shared vs Shared with Batch
+
+* pseudo KVS연산의 경우 Global memory 코드는 모든 연산을 Global memory에서 진행하였고, Shared memory 코드는 hash table까지 shared memory로 memcpy해서 모든 연산을 진행하였다.
+* [Evaluation Code](https://github.com/Susoon/Memory_Test.git)
+
+* 실험 결과는 다음과 같다.
+
+![Alt_text](./image/09.28_memcpy_vs_pseudo_kvs.png)
+* Only Memcpy는 pseudo KVS 연산 없이 Global\-Global 혹은 Global\-Shared\-Global로 memcpy만 진행한 코드이다.
+* 그래프를 보면 Global의 경우가 Shared보다 조금 더 빠르고 Shared memory에 batch\-memcpy를 진행하면 성능이 현저히 떨어지는 것을 확인할 수 있다.
+* 원래 가설은 정확히 반대로 Shared with Batch쪽이 훨씬 빨라질 것 같았으나 압도적으로 오래걸리게 되었다.
+* Shared with Batch쪽에서 병목이 되는 부분은 아래에서 서술하겠지만 **Batch 그 자체**이다.
+
+---
+### Batch Memcpy
+
+* Shared with Batch의 성능 병목을 알아보기위해 가장 먼저 syncthreads를 삭제해보았지만 성능 차이가 전혀 없었다.
+* 오히려 반대로 memcpy가 끝난 후에 syncthreads를 추가해보았지만 역시 성능 차이가 없었다.
+* 성능에 변화를 준 요인은 **Memcpy하는 공간의 크기**였다.
+
+![Alt_text](./image/09.28_batch_performance.png)
+
+* Shared with Batch는 batch를 사용하는 코드의 기본형태이고, with TOKEN은 Shared\-Global로의 memcpy하는 데이터 크기를 TOKEN만큼만 한 것이고 with half는 기존의 절반만 한 것이다.
+    * 기존의 memcpy 크기는 THREAD\_NUM\(512\) \* TOKEN\(32\)이다.
+* 그래프를 보면 성능차이가 memcpy하는 데이터의 크기에 비례하는 듯한 모습을 보인다.
+* 그렇다면 왜 이런 차이를 보이는 것인가가 중요한데 지금 알고 있는 정보의 선에서는 **Bank Conflicts**와 관련있어보인다.
+* bank란 각 thread들이 parallel하게 isolate된 공간에 접근할 수 있도록 해주기 위해 shared memory를 일정 구간으로 자른 칸이다.
+* NVIDIA쪽 블로그에서 언급한 내용으로 shared memory를 쓰면 더 빠른건 맞지만 bank까지 고려해서 구현을 잘 해줘야 성능이 잘 나올거다라는 말이 있다.
+* 그 이유는 bank conflicts때문인데 bank conflicts란 여러개의 thread가 하나의 bank에 동시에 접근을 시도하는 상황을 의미한다.
+* 이 경우 각 thread들 사이에 synchronize가 발생한다고 한다.
+* [Bank Conflicts NVIDIA Blog](https://developer.nvidia.com/blog/using-shared-memory-cuda-cc/)
+    * 위의 링크에서 Shared memory bank conflicts 단락 참고
+* 사실 맞는 지는 모르겠다.
+* 조금 더 조사가 필요해보인다.
+* global memory는 batch를 해서 memcpy를 하면 성능이 더 좋아진다.
+    * 이는 GPU\-Ether에서 IPSec을 할때도 확인을 했고, 간단하게 코드를 수정해서도 확인을 했다.
+    * 하지만 우리 코드에서는 batch를 할 수가 없다.
+    * 그 이유는 각 데이터들이 contiguous한 공간에 모여있다고 확신할 수 없기 때문이다.
+
+
+
+---
 ## 08/09 현재 상황
 
 * 완벽히 해결되지 못했던 1번 rx ring setting을 해결했다.
