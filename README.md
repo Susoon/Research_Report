@@ -39,6 +39,50 @@
     * Mega\-KV의 코드가 있으니 돌리기 쉬울듯.
 
 ---
+## 11/25 현재 상황
+
+* gpu\_job\_handler가 packet making까지 완료하고 gpu\_pkt\_maker는 header만 채우고 tx\_kernel에 넘기는 방향으로 구현을 진행하였다.
+* 결과적으로 작동까지 확인했다.
+* 다만 성능이 낮다.
+
+![Alt_text](./image/21.11.25_kvs_ether_performance_half.jpg)
+
+* printf 옵션?때문에 잡다한 것이 많지만 자세히 보면 5.7Gbps정도의 성능을 보이는 것을 확인할 수 있다.
+* 이러한 성능 저하가 어디서 발생하는가에 대해서 확인하기 위해 여러 부분들을 주석처리해보았다.
+
+1. Waiting app\_idx 
+* 원래는  아래의 Memcpy부터 확인을 해봤겠지만 사실 app\_idx를 기다리는 이 부분을 주석처리하지 않으면 작동하지 않는다.
+
+![Alt_text](./image/21.11.25_commentize_waiting_app_idx.jpg)
+
+* 원래했던 구조상으로는 tx\_kernel이 패킷을 전송하고 buffer를 free까지 해줘야 다시 사용할 수 있기 때문에 free할때 app\_idx가 0으로 바뀌는 것을 이용해 재접근 시점을 정하려하였다.
+* 하지만 app\_idx가 0이 되는 것을 기다리면 초기에 설정된 버퍼를 한번씩 모두 사용한 뒤 멈춘다.
+* 따라서 app\_idx를 기다리는 부분은 주석처리되어야 작동된다.
+* 아래의 모든 경우의 수들 모두 보기 편하기 위해 캡쳐에는 주석처리되어 있지 않으나 app\_idx부분이 주석처리된 채로 실행되었다.
+
+2. Memcpy
+* 기본적으로 memcpy의 overhead가 큰 것으로 알고 있기 때문에 kvs 처리한 데이터를 memcpy해 넣는 부분을 주석처리해보았다.
+* 이는 빈 패킷에 헤더만 붙여서 보냈다는 의미이다.
+
+![Alt_text](./image/21.11.25_commentize_memcpy_kvs_data.jpg) 
+* 위처럼 kvs data를 packet buffer에 담는 과정을 주석처리했지만 성능은 변화가 없었다.
+
+3. Filling header
+* 원래는 pkt\_maker에서 각 패킷에 헤더를 담아주었다.
+* 하지만 이를 주석처리하고 set\_dummy\_pkt 함수를 활용해 커널 호출 전 미리 패킷 버퍼에 헤더를 static하게 저장하는 방식으로 변경해 실행해 보았다.
+
+![Alt_text](./image/21.11.25_commentize_fill_header.jpg)
+* 하지만 이 방법도 성능을 변화시키진 않았다.
+
+4. Waiting idxQ
+* 1번 방법에서 변화를 주어 gpu\_job\_handler와 gpu\_pkt\_maker가 서로 communication하기 위해 사용하는 idxQ를 대기하는 부분도 주석처리해보았다.
+
+![Alt_text](./image/21.11.25_commentize_waiting_idxQ.jpg)
+* 하지만 이 부분도 성능에 영향을 주진 못했다.
+
+* 위의 부분들은 결국 해결책이 되지 못했지만 memcpy와 커널간의 synch를 위한 대기시간이 성능에 크게 영향을 주지 않는다는 사실을 확인할 수 있었다.
+
+---
 ## 09/28 현재 상황
 
 * Global memory의 연산 및 memcpy를 Shared memory를 활용해서 진행했을 때의 성능차이를 모듈 구현을 이용해 확인해보고 있다.
