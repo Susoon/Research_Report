@@ -39,6 +39,43 @@
     * Mega\-KV의 코드가 있으니 돌리기 쉬울듯.
 
 ---
+## 05/08 현재 상황
+
+* 졸업 논문 관련 구현
+* 코드 구조
+    1. network는 제거됨
+    2. Data Generator (CPU) -> Data Transmitter (CPU / CPU -> GPU) -> Job Handler (GPU) -> Data Receiver (CPU / GPU -> CPU)
+    3. CPU 모듈들은 모두 하나의 thread에서 작동
+    4. 기존 GPU 커널로 운용되던 balancer와 packet maker는 제거됨
+
+
+* 현재 이슈
+
+1. memory copy부분 gdrcopy로 미구현
+    * 현재는 cudaMemcpy와 일반 memcpy 사용중
+2. Search로 들어온 request에 대한 응답으로 value를 내보낼때 value의 size를 저장해두지 않았기때문에 size를 알 수 없음
+    * megakv는 GPU에서 table lookup만 진행하고 데이터는 CPU에 저장하기 때문에 CPU에서 저장한 곳에 찾아가 size 확인이 가능
+    * 이는 원본 코드에도 size를 저장할 수 있도록 변형해야할듯
+3. Data Generator의 속도가 너무 느림
+    * 현재 CPU의 모든 작업들이 하나의 thread에서 sequential하게 진행됨에 따라 다른 작업들의 속도까지 떨어뜨림
+    * 대략 200배차이가 발생한다
+
+**Throughput with Data Generation**
+
+![Alt_text](./image/22.05.08_gen_ops.jpg)
+
+**Throughput without Data Generation**
+
+![Alt_text](./image/22.05.08_no_gen_ops.jpg)
+
+4. 전체적인 속도가 자체가 느림
+    * 위의 사진을 보면 Data Generation을 제외하고 보더라도 4,787,000ops (4.9Mops)정도의 성능을 보임을 알 수 있다.
+    * key size : 16B, value size : 64B임을 고려하여 계산하였을때 1514B 패킷 하나에 17개량의 response query가 담긴다.
+    * 이를 활용해 계산해보면 대략 288,235pps (288kpps) 정도의 pps가 나온다.
+    * 1514B 패킷으로 10Gbps를 보낼때의 pps가 대략 814kpps이므로 3.5Gbps 정도의 Network Throughput을 보이는 셈이다.
+    * 이에 대한 정확한 원인이 memcpy에 의한 것인지 혹은 다른 구조적 문제에 의한 것인지 확인이 필요하다.
+
+---
 ## 11/25 현재 상황
 
 * gpu\_job\_handler가 packet making까지 완료하고 gpu\_pkt\_maker는 header만 채우고 tx\_kernel에 넘기는 방향으로 구현을 진행하였다.
