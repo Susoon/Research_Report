@@ -39,6 +39,34 @@
     * Mega\-KV의 코드가 있으니 돌리기 쉬울듯.
 
 ---
+## 05/09 현재 상황
+* 졸업 논문 관련 구현
+
+* 기존 구현에서 각 CPU 모듈들을 각각의 thread에서 작동하도록 변경하였다.
+* GPU에서 작업을 마친 데이터들이 최종적으로 CPU에 도달하였을 때의 성능을 추가로 측정하였다.
+* 기존 사용하던 batch size를 10배 100배까지 늘려서 실험해보았다.
+
+**Performance with seperated threads**
+![Alt_text](./image/22.05.09_seperated_thread.jpg)
+
+* 위의 사진을 보면 알 수 있듯이 성능이 반토막났다.
+* batch size와 실시간 data generation 여부와는 별개로 성능이 동일했다.
+    * 이를 통해 data generation을 분리하면서 generation에 걸리는 overhead를 hiding시키는 데에 성공했음을 확인할 수 있다.
+* 자세한 원인은 파악하지 못하였다.
+    * GPU 코드는 사실상 바뀐 부분이 거의 없기 때문이다.
+    * 바뀐 부분은 다음과 같다.
+        * job 개수 counting 1회 증가
+            * shared memory를 활용하는 등 optimization을 시도해보았으나 효과 없음.
+        * CPU thread와의 communication을 위한 CPU 메모리에 있는 job의 개수, 완료 여부 flag에 access
+            * polling하지 않는다.
+            * 이 부분이 큰 가능성을 가지고 있다.
+    * CPU 코드를 분리하면서 각 thread간의 communication에 의한 overhead도 가능성에 놓고 있다.
+* 위의 내용에서 언급되어있듯이 data generation의 overhead는 hiding된 것으로 보여 file read를 활용한 방식은 채택하지 않았다.
+    * megakv와 유사한 구조를 가지게 하기 위해서.
+* gdrcopy를 활용한 성능향상이 필수적으로 보이며 가능성도 보인다.
+    * batch size를 키우면서 한번에 copy되는 데이터의 크기가 커지게 되었다.
+
+---
 ## 05/08 현재 상황
 
 * 졸업 논문 관련 구현
