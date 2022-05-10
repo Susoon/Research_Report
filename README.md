@@ -39,6 +39,38 @@
     * Mega\-KV의 코드가 있으니 돌리기 쉬울듯.
 
 ---
+## 05/10 현재 상황
+
+* 각 module별 performance와 megakv의 performance를 측정해보았다.
+
+**1. Megakv performance**
+
+![Alt_text](./image/22.05.10_mega_kv_performance.jpg)
+
+**2. Only for GPU Processing performance**
+
+![Alt_text](./image/22.05.10_only_gpu_performance.jpg)
+
+**3. Only for Data Generation performance**
+
+![Alt_text](./image/22.05.10_only_data_generation_performance.jpg)
+
+**4. Only for Data Transmition performance**
+
+![Alt_text](./image/22.05.10_only_transmition_performance.jpg)
+
+**5. Only for Data Reception performance**
+
+![Alt_text](./image/22.05.10_only_reception_performance.jpg)
+
+* 위의 내용을 확인하면 bottleneck은 data generation에 있었던 것으로 추측된다.
+* megakv의 data generation 방식을 확인할 필요가 있어보인다.
+* 가장 중요한 문제는 GPU 자체의 성능이 megakv 전체 성능의 절반정도 나온다는 것이다.
+* megakv의 parallel한 구현이 성능에 영향을 미쳤을 가능성이 커보인다.
+
+* **결론적으로 megakv의 구현을 확인할 필요성이 있다.**
+
+---
 ## 05/09 현재 상황
 * 졸업 논문 관련 구현
 
