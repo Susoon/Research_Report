@@ -39,6 +39,41 @@
     * Mega\-KV의 코드가 있으니 돌리기 쉬울듯.
 
 ---
+## 05/11 현재 상황
+
+1. 사용되는 kernel의 개수와 각 kernel당 thread의 수 max치로 변경해서 실행해보기
+    * 아래의 사진이 GPU를 full로 사용했을때 GPU KVS Processing만 확인한 성능이다.
+
+     ![Alt_text](./image/22.05.11_only_gpu_performance_with_full.jpg)
+    * 대략 246Mops정도의 성능이 나온다.
+    * megakv 성능보다 훨씬 높다.
+
+2. megakv에서 data generation 속도 ops로 측정
+    * 아래의 내용을 확인하자.
+    ![Alt_text](./image/22.05.11_megakv_data_gen_performance.jpg)
+    * 평균이 대략 584Mops(583,597,889ops)정도 나온다.
+    * megakv 자체의 성능보다 훨씬 높다.
+    
+3. GPU가 job processing을 하는 동안 CPU가 GPU로 data copy를 할 수 있도록 data copy time hiding 구현
+    * 구현중에 있다.
+
+4. megakv hit ratio가 0인 것에 대한 추가 조사
+    * megakv의 이런저런 세팅을 확인해보니 여태껏 Key matching 옵션을 끄고 실행하고 있었다.
+    * 아래의 사진들은 Key matching 옵션을 설정한 성능이다.
+    * uniform distribution
+    ![Alt_text](./image/22.05.11_megakv_unif_key_match.jpg)
+    * zipf distribution
+    ![Alt_text](./image/22.05.11_megakv_zipf_key_match.jpg)
+    * uniform dist의 경우 대략 129Mops, zipf dist의 경우 84Mops 정도의 성능이 나온다.
+    * key matching을 설정하지 않았을때의 50~70%의 성능만 나온다.
+    * 심지어 모든 query가 miss인데도 불구하고 낮은 성능을 보인다.
+        * 내용을 확인해보니 직접 hit이 뜨도록 변경하는 것은 구현되어 있지 않아 보인다.
+        * 코드 수정을 통해 확인해봐야할 것 같다.
+
+5. data generation의 속도가 2M인 것에 대한 추가 조사 및 속도 향상 구현 (성민이가 구현한 generator 활용)
+    * 3번 사항 다음에 구현할 예정이다.
+
+---
 ## 05/10 현재 상황
 
 * 각 module별 performance와 megakv의 performance를 측정해보았다.
