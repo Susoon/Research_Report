@@ -61,7 +61,7 @@
     * zipf dist performance
     ![Alt_text](./image/22.05.12_megakv_2choice_zipf_result.jpg)
     * uniform dist : 54Mops / zipf dist : 72Mops정도 나온다.
-    * zipf dist에 최적화시켰던 megakv의 구조를 고려해보면 정상적인 속도인듯하다.
+    * zipf dist에서 더 높은 성능을 보였던 megakv의 evaluation을 고려하면 정상적 성능인듯하다.
 
 ---
 ## 05/11 현재 상황
