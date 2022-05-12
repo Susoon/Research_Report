@@ -39,6 +39,31 @@
     * Mega\-KV의 코드가 있으니 돌리기 쉬울듯.
 
 ---
+## 05/12 현재 상황
+* megakv의 hit ratio가 0인 이유에 대해 확인했다.
+* megakv가 사용하는 insert 함수는 2가지가 있다.
+    1. hash\_insert\_cuckoo
+    2. hash\_insert\_2choice
+* 2가지 중 hash\_insert\_cuckoo함수는 out of resource로 인해 실행되지 않는다.
+    * hash\_insert\_cuckoo preload errorr 출력 화면
+    ![Alt_text](./image/22.05.12_megakv_cuckoo_out_of_resouce.jpg)
+* 하지만 이상한 부분은 preload에서만 작동하지 않고 그 후에 insert를 시도하면 정상작동한다.
+    * hash\_insert\_cuckoo를 활용한 SET100 실행시 nvidia\-smi
+    ![Alt_text](./image/22.05.12_megakv_cuckoo_insert_nvidia_smi.jpg)
+* nvcc-gdb를 활용해 각 함수들이 사용하는 resource를 출력해보았다.
+    * cuckoo 함수 resource
+    ![Alt_text](./image/22.05.12_megakv_cuckoo_insert_resource.jpg)
+    * 2choice 함수 resource
+    ![Alt_text](./image/22.05.12_megakv_2choice_insert_resource.jpg)
+* 2choice를 통해 hit / miss가 정상작동하는 성능을 출력해보았다.
+    * uniform dist performance
+    ![Alt_text](./image/22.05.12_megakv_2choice_uniform_result.jpg)
+    * zipf dist performance
+    ![Alt_text](./image/22.05.12_megakv_2choice_zipf_result.jpg)
+    * uniform dist : 54Mops / zipf dist : 72Mops정도 나온다.
+    * zipf dist에 최적화시켰던 megakv의 구조를 고려해보면 정상적인 속도인듯하다.
+
+---
 ## 05/11 현재 상황
 
 1. 사용되는 kernel의 개수와 각 kernel당 thread의 수 max치로 변경해서 실행해보기
