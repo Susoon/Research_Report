@@ -39,6 +39,65 @@
     * Mega\-KV의 코드가 있으니 돌리기 쉬울듯.
 
 ---
+## 05/13 현재 상황
+---
+### **\[ToDo List\]**
+1. cuckoo hash와 2choice함수 성능 차이 재확인
+2. preload에 있는 대기시간 (k값) 늘려보기
+3. megakv에 기존 코드 포팅 가능한지 확인
+4. data generation 성능 향상
+5. data copy overhead hiding -> cudaMemcpyAsynch 사용
+---
+### Check ToDo List
+1. cuckoo hash와 2choice함수 성능 차이 재확인
+    * 성능은 동일하다.
+    * 2choice insert performance with zipf dist
+
+    ![Alt_text](./image/22.05.13_2choice_insert_zipf_high.jpg)
+    * cuckoo insert performance with zipf dist
+
+    ![Alt_Text](./image/22.05.13_cuckoo_insert_zipf_high.jpg)
+2. preload에 있는 대기시간 (k값) 늘려보기
+    * k값을 늘려도 preload는 여전히 작동하지 않았다.
+3. megakv에 기존 코드 포팅 가능한지 확인
+    * 확인중
+4. data generation 성능 향상
+    * 구현중
+5. data copy overhead hiding -> cudaMemcpyAsynch 사용
+    * cudaMemcpyAsynch를 사용해도 차이는 없었다.
+    * 대신 gdrcopy를 활용하는 방향으로 코드를 수정중이다.
+---
+### 발견된 이슈들
+
+1. cuckoo hash를 활용한 preload의 outofresource 에러를 수정했다.
+    * 하지만 여전히 작동하지 않는다.
+    * 에러에 대한 설명
+
+    ![Alt_text](./image/22.05.13_out_of_resource_stackoverflow.jpg)
+    * 에러 해결 사진
+
+    ![Alt_text](./image/22.05.13_cuckoo_hash_success.jpg)
+    * hit가 없음을 보여주는 사진
+
+    ![Alt_text](./image/22.05.13_cuckoo_hash_no_hit.jpg)
+
+2. megakv의 insert 성능이 memory가 가득차는 시점을 기준으로 3배 이상 증가한다.
+    * 성능이 동일하여 2choice의 사진만 채용한다.
+    * Before memory full
+    ![Alt_text](./image/22.05.13_2choice_insert_zipf_low.jpg)
+    * After memory full
+    ![Alt_text](./image/22.05.13_2choice_insert_zipf_high.jpg)
+
+3. 현재 코드가 실행 도중 멈춘다.
+    * 12초 가량 작동하다가 멈춘다.
+    * CPU와 GPU의 성능이 크게 차이나는 것이 힌트일 것으로 추측된다.
+    * 원래 8초 가량만 작동하다가 debuging용으로 사용하던 cudaMemcpy를 제거하자 12초로 늘었다.
+        * 이러한 이유로 gdrcopy 코드를 삽입중이다.
+    * 아래는 성능을 보여주는 사진이다.
+
+    ![Alt_text](./image/22.05.13_current_performance.jpg)
+
+---
 ## 05/12 현재 상황
 * megakv의 hit ratio가 0인 이유에 대해 확인했다.
 * megakv가 사용하는 insert 함수는 2가지가 있다.
