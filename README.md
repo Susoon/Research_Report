@@ -39,6 +39,61 @@
     * Mega\-KV의 코드가 있으니 돌리기 쉬울듯.
 
 ---
+## 05/14 현재 상황
+---
+### **\[ToDo List\]**
+1. megakv에 기존 코드 포팅 가능한지 확인
+2. data generation 성능 향상
+3. gdrcopy 사용 확인
+---
+### Check ToDo List
+1. megakv에 기존 코드 포팅 가능한지 확인
+    * 확인중
+2. data generation 성능 향상
+    * megakv의 방식을 일부 차용해 성능을 높였다.
+    * 하지만 여전히 한참 부족하다.
+    * 아래의 Issue Check에서 자세히 설명하겠다.
+3. gdrcopy 사용 확인
+    * gdrcopy를 사용 가능할 것 같다.
+    * 다만 gdrcopy를 포함시켜 make하는 법을 조금 더 알아봐야할 것 같다.
+    * 찬규형에게 물어본 상태이다.
+    * gdrcopy를 앞당겨 확인한 이유도 아래의 Issue Check에서 자세히 설명하겠다.
+---
+### Issue Check
+1. data generation 방식 변경
+    * 기존에는 batch size만큼 데이터를 만든 다음 넘겨주고 다음 batch size를 처리하러 가는 방식이었다.
+    * 중요한 부분은 generator가 데이터를 **넘겨준다**라는 것이다.
+    * megakv에서 generator는 사실상 데이터를 만들기만한다.
+    * 이를 다음 module로 넘겨주는 것은 mega\_scheduler라는 별개의 모듈이 처리해준다.
+    * **즉, communication overhead가 generator에게는 거의 없다는 것이다.**
+    * 이 방식을 채택하여 성능을 확인해보았다.
+    * **Performance of Persistent Generator**
+
+    ![Alt_text](./image/22.05.14_persistent_gen_performance.jpg)
+    * **Performance of Batched Generator**
+
+    ![Alt_text](./image/22.05.14_batch_gen_performance.jpg)
+    * 기존 성능에서 대략 30배 가량 증가했다.
+    * 하지만 megakv의 generator 속도에 비하면 여전히 한참 부족하다.
+    * 또한 persistent 방식으로 바꾸게 되면서 communication에 문제가 생겨 transmitter에게 데이터가 제대로 전달되지 않는다.
+        * 이는 구현의 문제이니 조금 더 수정해보면 될 것 같다.
+
+2. gdrcopy 사용 확인
+    * 어제 github에 남긴 freeze 현상에 대한 해결책을 찾기위해 시작했다.
+    * cudaMemcpy의 과도하게 빈번한 호출로 인한 freeze라는 가설을 세운 뒤 gdrcopy로의 변경을 시도한 것이다.
+    * gdrcopy의 함수를 호출하여 memcpy를 진행하도록 코드를 변경하였으나 gdrcopy의 make 방식이 shared library를 활용한 방식이어서 이 부분을 확인할 필요가 있어보인다.
+    * 이는 찬규형에게 물어본 상태이다.
+
+3. communication 문제
+    * batch의 크기를 늘리고, data generation 방식을 persistent로 바꾸고, GPU job\_handler 내부 코드 최적화를 진행하니 communication에 문제가 생겼다.
+    * generator가 만든 데이터를 transmitter에서 정상적으로 확인을 하지 못한다.
+        * 이는 data generation 방식이 persistent로 바꾼 뒤 발생한 이슈이다.
+    * transmitter가 보낸 데이터를 GPU job\_handler에서 정상적으로 확인하지 못한다. 
+        * 이는 GPU job\_handler 내부 코드 최적화 후 발생한 이슈이다.
+        * 최적화 내용은 동일한 thread의 중복된 job counting으로 인하여 정확한 job handling이 되지 않는 경우를 방지하는 작업이었다.
+        * 기존 코드 구조를 다시 확인한 뒤, 위의 상황이 발생하지 않는다는 보장이 생기면 롤백할 예정이다.
+
+---
 ## 05/13 현재 상황
 ---
 ### **\[ToDo List\]**
