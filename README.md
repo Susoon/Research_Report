@@ -39,6 +39,58 @@
     * Mega\-KV의 코드가 있으니 돌리기 쉬울듯.
 
 ---
+## 05/15 현재 상황
+---
+### **\[ToDo List\]**
+1. megakv에 기존 코드 포팅 가능한지 확인
+2. data generation 성능 향상
+3. gdrcopy 사용 확인
+4. communication 문제 해결
+---
+### Check ToDo List
+1. megakv에 기존 코드 포팅 가능한지 확인
+    * 확인중
+    * 사실 필요성이 낮다고 생각되어 미루고 있었으나 사용해야할 가능성이 높아졌다.
+    * 이유는 아래의 communication 문제 해결을 확인
+2. data generation 성능 향상
+    * persistent방식이 확실히 성능이 높으나 더 성능을 높일 필요가 있어보인다.
+    * 이 역시 communication관련 문제로 추측됨
+3. gdrcopy 사용 확인
+    * 현재 가장 필요해보이는 구현
+    * 최대한 빨리 구현해야함
+4. communication 문제 해결
+    * transmitter와 GPU간의 communication 문제는 해결되었다.
+    * 코드 수정 중 발생한 실수에 의한 문제였다....
+    * 또한 아래에 언급되어 있는 최적화 내용은 필요가 없어보여 삭제했다.
+        * 동일한 thread의 중복된 job counting으로 인하여 정확한 job handling이 되지 않는 경우를 방지하는 작업이었다.
+    * generator와 transmitter 간의 communication 문제만 남은 상태이다.
+    * 이는 Issue Check에서 자세히 설명하겠다.
+--
+### Issue Check
+
+1. communication 문제
+    * 현재 파악된 원인은 간단하다.
+    * **transmitter의 성능이 너무 낮다.**
+    * 현재 파악된 바로는 generator의 성능을 transmitter가 따라가지 못하고, 이로 인해 persistent로 돌고 있는 generator가 데이터를 덮어 씌우는 등의 상황이 발생하게 된다.
+    * **Communication Issue between transmitter and generator**
+    
+    ![Alt_Text](./image/22.05.15_too_slow_transmitter.jpg)
+    * 위의 사진의 값들은 순서대로 다음과 같다.
+        * \<generator의 index, generation이 완료된 job의 개수, generation이 완료된 job의 크기, 미리 지정해둔 batch size\>
+    * 중요한 부분은 뒤의 두 값들 \(generation이 완료된 job의 크기, 미리 지정해둔 batch size\)이 동일함에도 불구하고 job의 개수는 다르다는 것이다.
+        * 완료된 job의 크기가 미리 지정해둔 batch size에 도달했다는 것은 미리 지정해둔 batch의 job 개수만큼 처리를 했다는 것이다.
+            * 이 부분은 generator에서 초기화해준다.
+        * 그럼에도 불구하고 job의 개수가 비정상적으로 많이 나온다.
+            * 정상값은 143360.
+            * 이 부분은 transmitter에서 초기화해준다.
+        * 이 뜻은 generator는 정상적으로 작동하면서 값 초기화까지 잘 작동하지만, transmitter가 너무 느려 초기화를 해주지 않았다는 뜻이다.
+    * 이를 통해 persistent generator의 속도가 transmitter의 속도보다 훨씬 빠르고 transmitter의 속도 또한 bottleneck이었다는 것을 알 수 있다.
+        * transmitter와 generator 모두 bottleneck이었는지 transmitter만 bottleneck이었는지는 확인할 수 없다.
+        * transmitter 단독으로 실행시 성능 측정이 안되기 때문이다.
+    * 이로 인해 gdrcopy를 사용하든가 megakv에 해당 코드를 porting하든가 양자택일을 해야하는 순간이 찾아오게되었다.
+    * 현재는 기존에 구현하고 있던 gdrcopy를 사용하는 방식으로 구현중에 있다.
+
+---
 ## 05/14 현재 상황
 ---
 ### **\[ToDo List\]**
