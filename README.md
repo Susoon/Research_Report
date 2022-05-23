@@ -39,6 +39,82 @@
     * Mega\-KV의 코드가 있으니 돌리기 쉬울듯.
 
 ---
+## 05/23 현재 상황
+
+* nvprof를 사용하여 측정한 kernel launch 시간을 남긴다.
+
+### Computation \# : 10
+1. 20KB
+    * Kernel Launch
+
+    ![Alt_text](./image/22.05.23_launch_20KB_10.jpg)
+    * Persistent Kernel
+
+    ![Alt_text](./image/22.05.23_persist_20KB_10.jpg)
+
+2. 200KB
+    * Kernel Launch
+
+    ![Alt_text](./image/22.05.23_launch_200KB_10.jpg)
+
+    * Persistent Kernel
+
+    ![Alt_text](./image/22.05.23_persist_200KB_10.jpg)
+
+3. 2MB
+    * Kernel Launch
+
+    ![Alt_text](./image/22.05.23_launch_2MB_10.jpg)
+    * Persistent Kernel
+
+    ![Alt_text](./image/22.05.23_persist_2MB_10.jpg)
+
+4. 20MB
+    * Kernel Launch
+
+    ![Alt_text](./image/22.05.23_launch_20MB_10.jpg)
+    * Persistent Kernel
+    ![Alt_text](./image/22.05.23_persist_20MB_10.jpg)
+
+### Computation \# : 1000
+1. 20KB 
+    * Kernel Launch
+    
+    ![Alt_text](./image/22.05.23_launch_20KB_1000.jpg)
+
+    * Persistent Kernel
+
+    ![Alt_text](./image/22.05.23_persist_20KB_1000.jpg)
+
+2. 200KB
+    * Kernel Launch
+    
+    ![Alt_text](./image/22.05.23_launch_200KB_1000.jpg)
+
+    * Persistent Kernel
+
+    ![Alt_text](./image/22.05.23_persist_200KB_1000.jpg)
+
+3. 2MB
+    * Kernel Launch
+    
+    ![Alt_text](./image/22.05.23_launch_2MB_1000.jpg)
+
+    * Persistent Kernel
+
+    ![Alt_text](./image/22.05.23_persist_2MB_1000.jpg)
+
+4. 20MB
+    * Kernel Launch
+    
+    ![Alt_text](./image/22.05.23_launch_20MB_1000.jpg)
+
+    * Persistent Kernel
+
+    ![Alt_text](./image/22.05.23_persist_20MB_1000.jpg)
+
+
+---
 ## 05/15 현재 상황
 ---
 ### **\[ToDo List\]**
