@@ -41,6 +41,16 @@
 ---
 ## 07/05 현재 상황
 
+* exponential moving average 적용 관련 조사 내용
+    1. read/write ratio는 zipf distribution과 유사한 형태를 띈다.
+        * 하지만 zipf distribution라는 확신은 없다.
+        * 출처 : [A large scale analysis of hundreds of in-memory cache clusters at Twitter](https://www.usenix.org/conference/osdi20/presentation/yang)
+    2. smoothing factor는 exponential moving average의 정의상 constant값이어야한다.
+        * 하지만 이전 값들을 토대로 최적의 smoothing factor 값을 구하는 방법은 있어보인다.
+        * 출처 : [Exponential Smoothing in Excel (Find a)](https://www.youtube.com/watch?v=C5J_QSR7ST0)
+
+
+---
 * flush 관련 이슈를 해결했다. \(사실 7/4에 해결\)
     * flush 관련 이슈는 balancer가 조절한 top에 반응하는 job handler가 top에 반응하여 담당하는 job의 종류를 바꾸었을때 queue에 남아있는 job들을 flush하지 못해 발생한 이슈이다.
     * 원인은 job handler가 아닌 balancer에 있었다.
