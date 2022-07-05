@@ -42,32 +42,42 @@
 ---
 ## 07/05 현재 상황
 
-* exponential moving average 적용 관련 조사 내용
-    1. read/write ratio는 zipf distribution과 유사한 형태를 띈다.
-        * 하지만 zipf distribution라는 확신은 없다.
-        * 출처 : [A large scale analysis of hundreds of in-memory cache clusters at Twitter](https://www.usenix.org/conference/osdi20/presentation/yang)
-    2. smoothing factor는 exponential moving average의 정의상 constant값이어야한다.
-        * 하지만 이전 값들을 토대로 최적의 smoothing factor 값을 구하는 방법은 있어보인다.
-        * 출처 : [Exponential Smoothing in Excel (Find a)](https://www.youtube.com/watch?v=C5J_QSR7ST0)
-    3. 최적의 smoothing factor값을 구하는 방식은 여러가지가 있다.
-        1. MAD\(Mean Absolute Deviation\)을 사용하는 방법
-            * |forecast\(이전에 계산된 exponential moving average값\) - actual value\(현재 측정된 값\)|
-        2. MSE\(Mean Squarred Error\)을 사용하는 방법
-            * \(forecast - actual value\)^2
-        3. MAPE\(Mean Absolute Percentage Error\)를 사용하는 방법
-            * \(MAD / actual value\) * 100
-    4. 3의 방법들은 사실 모두 기준점을 어디에 두냐에 따라 달라지는 것뿐이고 실제로 계산하는 방식은 동일하다.
-        * GRG Linear 혹은 GRG NonLinear를 사용
-            * [GRG Linear](https://m.blog.naver.com/missinulove/220690498553)
-        * GRG Linear를 활용한 방식을 간단히 요약하자면 다음과 같다.
-            1. 기준점\(MAD, MSE or MAPE\)을 잡음
-            2. 조건식을 세움 \(0 <= a <= 1\)
-            3. 기준점을 구하는 식\(e.g. error 평균\)을 편미분하고 적당히 정리해 조건식의 변수와 기준식간의 관계를 확인
-            4. 최소값을 구함
-        * 위의 내용으로 생각해봤을때 코드에 GRG Linear를 심는 것이 가능한가에 대한 생각을 해볼 필요가 있어보임.
-        * 조사한 내용에서는 전부 excel을 사용함
+### exponential moving average 적용 관련 조사 내용
 
-
+1. read/write ratio는 zipf distribution과 유사한 형태를 띈다.
+    * 하지만 zipf distribution라는 확신은 없다.
+    * 출처 : [A large scale analysis of hundreds of in-memory cache clusters at Twitter](https://www.usenix.org/conference/osdi20/presentation/yang)
+    * distribution을 토대로 smoothing factor를 추측하는 것은 옳은 방법이 아닐 것 같다.
+        1. 실제 query들이 distribution을 기반으로 write/read ratio가 계산된다는 보장이 없음.
+        2. distribution을 따른다할지라도 해당 상황에서만 유효한 계산이고 specific한 상황을 커버할 수 없음.
+2. smoothing factor는 exponential moving average의 정의상 constant값이어야한다.
+    * 하지만 이전 값들을 토대로 최적의 smoothing factor 값을 구하는 방법은 있어보인다.
+    * 출처 : [Exponential Smoothing in Excel (Find a)](https://www.youtube.com/watch?v=C5J_QSR7ST0)
+3. 최적의 smoothing factor값을 구하는 방식은 여러가지가 있다.
+    1. MAD\(Mean Absolute Deviation\)을 사용하는 방법
+        * |forecast\(이전에 계산된 exponential moving average값\) - actual value\(현재 측정된 값\)|
+    2. MSE\(Mean Squarred Error\)을 사용하는 방법
+        * \(forecast - actual value\)^2
+    3. MAPE\(Mean Absolute Percentage Error\)를 사용하는 방법
+        * \(MAD / actual value\) * 100
+4. 3의 방법들은 사실 모두 기준점을 어디에 두냐에 따라 달라지는 것뿐이고 실제로 계산하는 방식은 동일하다.
+    * GRG Linear 혹은 GRG NonLinear를 사용
+        * [GRG Linear](https://m.blog.naver.com/missinulove/220690498553)
+    * GRG Linear를 활용한 방식을 간단히 요약하자면 다음과 같다.
+        1. 기준점\(MAD, MSE or MAPE\)을 잡음
+        2. 조건식을 세움 \(0 <= a <= 1\)
+        3. 기준점을 구하는 식\(e.g. error 평균\)을 편미분하고 적당히 정리해 조건식의 변수와 기준식간의 관계를 확인
+        4. 최소값을 구함
+    * 위의 내용으로 생각해봤을때 코드에 GRG Linear를 심는 것이 가능한가에 대한 생각을 해볼 필요가 있어보임.
+    * 조사한 내용에서는 전부 excel을 사용함
+5. GRG Linear 코드 구현 관련
+    * C++로 구현한 코드를 발견했다.
+        * [C++ GRG Linear](https://stackoverflow.com/questions/14783639/generalized-reduced-gradient-algorithm-in-c)
+    * 해당 코드는 alglib라는 C++라이브러리를 사용했다.
+    * alglib라이브러리 의존도가 높지 않다면 cuda로 구현해보려했으나 단 2줄의 코드로 구현이 끝나버렸다...
+        * alglib::minlmoptimize(state, fn_vec);
+        * alglib::minlmresults(state, x, report);
+    * 일단 더 조사해보겠지만 cuda로 구현하는 데에 어려움이 있을 것으로 예상된다.
 
 ---
 * flush 관련 이슈를 해결했다. \(사실 7/4에 해결\)
