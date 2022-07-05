@@ -39,6 +39,25 @@
     * Mega\-KV의 코드가 있으니 돌리기 쉬울듯.
 
 ---
+## 07/05 현재 상황
+
+* flush 관련 이슈를 해결했다. \(사실 7/4에 해결\)
+    * flush 관련 이슈는 balancer가 조절한 top에 반응하는 job handler가 top에 반응하여 담당하는 job의 종류를 바꾸었을때 queue에 남아있는 job들을 flush하지 못해 발생한 이슈이다.
+    * 원인은 job handler가 아닌 balancer에 있었다.
+    * balancer가 top을 움직인 후에 top의 변화로 인해 search\(혹은 update\)를 담당하는 kernel에 다른 종류의 job을 할당한 것이 문제였다.
+    * 이와 관련된 이슈는 balancer 코드 수정을 통해 해결했다.
+        * top값 초기화, queue에 access하는 index min/max 값 조정 등
+* exponential moving average에 사용할 smoothing factor값에 대한 조사를 진행중이다.
+    * exponential moving average는 이미 구현된 상태이다.
+* exponential moving average 적용과 관련해 현재까지 조사한 내용은 다음과 같다.
+    1. read/write ratio는 zipf distribution과 유사한 형태를 띈다.
+        * 하지만 zipf distribution라는 확신은 없다.
+        * 출처 : [A large scale analysis of hundreds of in-memory cache clusters at Twitter](https://www.usenix.org/conference/osdi20/presentation/yang)
+    2. smoothing factor는 exponential moving average의 정의상 constant값이어야한다.
+* 추가 조사를 진행해 최적의 smoothing factor를 구하고 증명할 방법을 확인할 필요가 있다.
+* CPU\-GPU간의 communication 부분은 명수씨의 실험 결과를 확인한 뒤 구현할 예정이다.
+
+---
 ## 05/23 현재 상황
 
 * nvprof를 사용하여 측정한 kernel launch 시간을 남긴다.
