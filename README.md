@@ -1,6 +1,7 @@
 # Daily Report
 
 ##  ToDo List
+    3. smoothing factor
 
 1. Version Number 관리 구현
 2. 패킷의 Header 관리 구현
@@ -48,6 +49,24 @@
     2. smoothing factor는 exponential moving average의 정의상 constant값이어야한다.
         * 하지만 이전 값들을 토대로 최적의 smoothing factor 값을 구하는 방법은 있어보인다.
         * 출처 : [Exponential Smoothing in Excel (Find a)](https://www.youtube.com/watch?v=C5J_QSR7ST0)
+    3. 최적의 smoothing factor값을 구하는 방식은 여러가지가 있다.
+        1. MAD\(Mean Absolute Deviation\)을 사용하는 방법
+            * |forecast\(이전에 계산된 exponential moving average값\) - actual value\(현재 측정된 값\)|
+        2. MSE\(Mean Squarred Error\)을 사용하는 방법
+            * \(forecast - actual value\)^2
+        3. MAPE\(Mean Absolute Percentage Error\)를 사용하는 방법
+            * \(MAD / actual value\) * 100
+    4. 3의 방법들은 사실 모두 기준점을 어디에 두냐에 따라 달라지는 것뿐이고 실제로 계산하는 방식은 동일하다.
+        * GRG Linear 혹은 GRG NonLinear를 사용
+            * [GRG Linear](https://m.blog.naver.com/missinulove/220690498553)
+        * GRG Linear를 활용한 방식을 간단히 요약하자면 다음과 같다.
+            1. 기준점\(MAD, MSE or MAPE\)을 잡음
+            2. 조건식을 세움 \(0 <= a <= 1\)
+            3. 기준점을 구하는 식\(e.g. error 평균\)을 편미분하고 적당히 정리해 조건식의 변수와 기준식간의 관계를 확인
+            4. 최소값을 구함
+        * 위의 내용으로 생각해봤을때 코드에 GRG Linear를 심는 것이 가능한가에 대한 생각을 해볼 필요가 있어보임.
+        * 조사한 내용에서는 전부 excel을 사용함
+
 
 
 ---
