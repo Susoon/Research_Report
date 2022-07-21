@@ -40,6 +40,42 @@
     * Mega\-KV의 코드가 있으니 돌리기 쉬울듯.
 
 ---
+## 07/21 현재 상황
+
+1. memory address 확인
+    * d\_buf\_space: 0x7f4285400000 / 0x7f465f400000
+    * balance\_idxQ : 0x7f4281ec4e00 / 0x7f465bec4e00
+    * 두 memory의 address 차이 : 55,816,704 
+    * memory가 가깝게 위치하지 않는다.
+
+2. index Queue의 값이 이상한 값일때 주변 값도 같이 변하는가
+     ![Alt_text](./image/22.07.21_log_balance_idxQ.jpg)
+    * 주변값은 영향받지 않는다.
+
+3. 작동 단위를 줄여 log 확인
+    * job\_handler kernel 수 : 1
+    * job\_handler kernel의 thread 수 : 512
+    * cudaMemcpy 단위 : 512 * 2048
+    * 위의 단위보다 줄여서 실행할 경우 정상작동되지 않는다.
+        * 각 모듈 간의 communication이 안됨
+    * log 확인 결과 job\_handler kernel이 processing하기 전에 error가 발생할 수 있음을 확인했다.
+        * processing을 하지 않아도 에러가 발생하는 경우가 있었다.
+    * log의 경우 정상작동하는 것처럼 보였다.
+        * data\_index가 정상적으로 store/load되고 있었다.
+
+4. CPU \- GPU communication 방식 구현
+    * 수정해 단순한 버전으로 변경했다.
+    * 작동 확인은 아직 하지 않은 상태이다.
+
+5. LRU \+ hash 방식 조사
+    * 검색할 경우 LRU Cache를 HashMap 혹은 double linked list로 구현한다는 내용이 나온다.
+        * 이는 원하는 정보가 아니었다.
+    * 추가 조사 결과 Memcached에서 LRU 방식을 채택하여 구현하였다는 것을 확인할 수 있었다.
+    * [Memcached LRU](https://d2.naver.com/helloworld/151047)
+    * double linked list \+ hash table의 방식을 채택하였다.
+    * 결론적으로 linked list를 사용하는 것인데 GPU에서 linked list의 비효율성을 고려하면 좋은 방식이 아닐 수도 있을 것 같다.
+
+---
 ## 07/05 현재 상황
 
 ### exponential moving average 적용 관련 조사 내용
