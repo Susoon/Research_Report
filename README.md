@@ -46,12 +46,20 @@
 
 ---
 
-* ice\_setup\_tx\_ring
-    * 40g NIC에서 i40e\_configure\_tx\_ring과 유사한 역할을 하는 것으로 추정된다.
-    * tx\_ring을 세팅해주는 역할을 하는 것으로 보인다.
+* ice\_tx\_descriptor
+    * 40g NIC에서 i40e\_tx\_descriptor와 동일한 역할을 하는 것으로 추정된다.
+    * 동일한 field를 가지고 있다.
 
-![Alt_text](./image/2022.11.04_ice_setup_tx_ring.jpg)
+![Alt_text](./image/2022.11.04_ice_tx_desc.jpg)
 
+---
+
+* ice\_32b\_rx\_flex\_desc
+    * 40G NIC에서 i40e\_rx\_descriptor와 동일한 역할을 하는 것으로 추정된다.
+    * 유사한 field를 가지고 있다.
+    * i40e에서 status_error_len이 status_error0일 것으로 예상된다.
+
+![Alt_text](./image/2022.11.04_ice_rx_desc.jpg)
 
 ---
 ## 07/21 현재 상황
