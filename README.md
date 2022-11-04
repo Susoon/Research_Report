@@ -40,6 +40,20 @@
     * Mega\-KV의 코드가 있으니 돌리기 쉬울듯.
 
 ---
+## 11/04 현재 상황
+
+* 100g NIC에 GPU\-Ether를 포팅하기 위해 ice driver 코드를 확인중이다.
+
+---
+
+* ice\_setup\_tx\_ring
+    * 40g NIC에서 i40e\_configure\_tx\_ring과 유사한 역할을 하는 것으로 추정된다.
+    * tx\_ring을 세팅해주는 역할을 하는 것으로 보인다.
+
+![Alt_text](./image/2022.11.04_ice_setup_tx_ring.jpg)
+
+
+---
 ## 07/21 현재 상황
 
 1. memory address 확인
